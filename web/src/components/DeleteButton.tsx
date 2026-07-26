@@ -1,12 +1,13 @@
 import { Trash } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/Button";
+import { useI18n } from "@/lib/i18n";
 
 export type DeleteButtonProps = {
   readonly onClick: () => void;
   readonly loading?: boolean;
   readonly disabled?: boolean;
-  /** Visible label; defaults to 删除. */
+  /** Visible label; defaults to common.delete. */
   readonly children?: ReactNode;
   readonly "aria-label"?: string;
   readonly className?: string;
@@ -19,10 +20,11 @@ export function DeleteButton({
   onClick,
   loading,
   disabled,
-  children = "删除",
+  children,
   "aria-label": ariaLabel,
   className,
 }: DeleteButtonProps) {
+  const { t } = useI18n();
   return (
     <Button
       variant="secondary"
@@ -34,7 +36,7 @@ export function DeleteButton({
       {...(className !== undefined ? { className } : {})}
     >
       <Trash size={14} className="mr-1" weight="regular" aria-hidden />
-      {children}
+      {children ?? t("common.delete")}
     </Button>
   );
 }

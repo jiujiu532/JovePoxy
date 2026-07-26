@@ -1,5 +1,6 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { FilterSelect } from "@/components/ListSelectBar";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 /** Shared across every list table. */
@@ -14,6 +15,7 @@ function PageSizeSelect({
   readonly options: ReadonlyArray<number>;
   readonly onChange: (size: number) => void;
 }) {
+  const { t } = useI18n();
   // Prefer opening upward — pagination sits at card bottom and was clipped.
   const sizes = options.length > 0 ? [...options] : [...DEFAULT_PAGE_SIZES];
   const safeValue = sizes.includes(value)
@@ -24,7 +26,7 @@ function PageSizeSelect({
 
   return (
     <FilterSelect
-      label="每页"
+      label={t("pagination.perPage")}
       value={String(safeValue)}
       onChange={(v) => onChange(Number(v))}
       placement="top"
@@ -67,6 +69,7 @@ export function Pagination({
   pageSizeOptions = DEFAULT_PAGE_SIZES,
   className,
 }: PaginationProps) {
+  const { t } = useI18n();
   if (total <= 0) return null;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -82,17 +85,15 @@ export function Pagination({
         className,
       )}
     >
-      <p>
-        显示第 {from} 条 - 第 {to} 条，共 {total} 条
-      </p>
+      <p>{t("pagination.range", { from, to, total })}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="tabular-nums">总页数: {totalPages}</span>
+        <span className="tabular-nums">{t("pagination.pages", { pages: totalPages })}</span>
         <div className="inline-flex items-center gap-0.5">
           <button
             type="button"
             className="inline-flex h-8 w-8 items-center justify-center rounded-none border border-border bg-paper-0 text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
             disabled={safePage <= 1}
-            aria-label="上一页"
+            aria-label={t("pagination.prev")}
             onClick={() => onPageChange(safePage - 1)}
           >
             <CaretLeft size={14} weight="bold" />
@@ -123,7 +124,7 @@ export function Pagination({
             type="button"
             className="inline-flex h-8 w-8 items-center justify-center rounded-none border border-border bg-paper-0 text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
             disabled={safePage >= totalPages}
-            aria-label="下一页"
+            aria-label={t("pagination.next")}
             onClick={() => onPageChange(safePage + 1)}
           >
             <CaretRight size={14} weight="bold" />

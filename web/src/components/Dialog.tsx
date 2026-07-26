@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/Button";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 export type DialogProps = {
@@ -26,6 +27,7 @@ export function Dialog({
   onClose,
   className,
 }: DialogProps) {
+  const { t } = useI18n();
   const titleId = useId();
   const descId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export function Dialog({
       <button
         type="button"
         className="absolute inset-0 bg-black/50 transition-opacity duration-200"
-        aria-label="关闭对话框"
+        aria-label={t("dialog.closeAria")}
         onClick={onClose}
       />
       <div
@@ -90,7 +92,7 @@ export function Dialog({
             variant="ghost"
             size="sm"
             className="!h-8 !w-8 !px-0"
-            aria-label="关闭"
+            aria-label={t("dialog.close")}
             onClick={onClose}
           >
             <X size={18} />

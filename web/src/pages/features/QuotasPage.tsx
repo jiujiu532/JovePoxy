@@ -17,6 +17,7 @@ import {
 } from "@/components";
 import { api, ApiError, type AccountQuotaDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n, type Translate } from "@/lib/i18n";
 import { isProviderTab, type ProviderTab } from "@/lib/routes";
 import { useViewMode } from "@/lib/view-mode";
 
@@ -36,14 +37,17 @@ type OllamaQuotaItem = {
   }>;
 };
 
-function formatReset(sec: number): string {
-  if (sec <= 0) return "即将重置";
-  if (sec < 3600) return `${Math.ceil(sec / 60)} 分钟后`;
-  if (sec < 86400) return `${(sec / 3600).toFixed(1)} 小时后`;
-  return `${(sec / 86400).toFixed(1)} 天后`;
+function formatReset(t: Translate, sec: number): string {
+  if (sec <= 0) return t("quotas.resetSoon");
+  if (sec < 3600) return t("quotas.resetMinutes", { n: Math.ceil(sec / 60) });
+  if (sec < 86400) return t("quotas.resetHours", { n: (sec / 3600).toFixed(1) });
+  return t("quotas.resetDays", { n: (sec / 86400).toFixed(1) });
 }
 
-function toOpenCodeViews(quotas: ReadonlyArray<AccountQuotaDTO>): QuotaAccountView[] {
+function toOpenCodeViews(
+  t: Translate,
+  quotas: ReadonlyArray<AccountQuotaDTO>,
+): QuotaAccountView[] {
   return quotas.map((item) => {
     const base: QuotaAccountView = {
       id: item.account_id,
@@ -59,7 +63,11 @@ function toOpenCodeViews(quotas: ReadonlyArray<AccountQuotaDTO>): QuotaAccountVi
           label: window.label,
           percent: pct,
           primaryText: `${window.remaining.toFixed(0)}${window.unit}`,
-          hint: `已用 ${window.used.toFixed(1)}${window.unit} · ${formatReset(window.reset_in_sec)}`,
+          hint: t("quotas.usedHint", {
+            used: window.used.toFixed(1),
+            unit: window.unit,
+            reset: formatReset(t, window.reset_in_sec),
+          }),
         };
       }),
     };
@@ -70,7 +78,10 @@ function toOpenCodeViews(quotas: ReadonlyArray<AccountQuotaDTO>): QuotaAccountVi
   });
 }
 
-function toOllamaViews(quotas: ReadonlyArray<OllamaQuotaItem>): QuotaAccountView[] {
+function toOllamaViews(
+  t: Translate,
+  quotas: ReadonlyArray<OllamaQuotaItem>,
+): QuotaAccountView[] {
   return quotas.map((item) => {
     const models =
       item.windows?.flatMap((w) => w.models ?? []).reduce<
@@ -97,7 +108,7 @@ function toOllamaViews(quotas: ReadonlyArray<OllamaQuotaItem>): QuotaAccountView
           primaryText: `${percent.toFixed(0)}%`,
           hint: w.status_text
             ? w.status_text
-            : `剩余 ${w.remaining.toFixed(1)}${w.unit}`,
+            : t("quotas.remainingHint", { remaining: w.remaining.toFixed(1), unit: w.unit }),
         };
       }),
     };
@@ -133,6 +144,7 @@ function useProviderTab(
 
 export function QuotasPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [tab, setTab] = useProviderTab("opencode");
   const [viewMode, setViewMode] = useViewMode("quota-monitor", "grid");
   const [page, setPage] = useState(1);
@@ -156,7 +168,7 @@ export function QuotasPage() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -174,8 +186,8 @@ export function QuotasPage() {
   const olOk = olQuotas.filter((q) => q.success).length;
 
   const activeItems = useMemo(
-    () => (tab === "opencode" ? toOpenCodeViews(ocQuotas) : toOllamaViews(olQuotas)),
-    [tab, ocQuotas, olQuotas],
+    () => (tab === "opencode" ? toOpenCodeViews(t, ocQuotas) : toOllamaViews(t, olQuotas)),
+    [tab, ocQuotas, olQuotas, t],
   );
   const activeCount = activeItems.length;
   const pagedItems = useMemo(
@@ -186,11 +198,11 @@ export function QuotasPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="额度监控"
-        description="控制面额度统一查看，支持网格 / 紧凑 / 表格。"
+        title={t("quotas.title")}
+        description={t("quotas.description")}
         toolbar={
           <Tabs
-            aria-label="提供商"
+            aria-label={t("quotas.tabsLabel")}
             value={tab}
             onChange={(id) => setTab(id as ProviderTab)}
             items={
@@ -210,7 +222,7 @@ export function QuotasPage() {
           <>
             <ViewModeToggle value={viewMode} onChange={setViewMode} />
             <Button variant="secondary" size="sm" onClick={() => void load()}>
-              重新抓取
+              {t("quotas.refetch")}
             </Button>
           </>
         }
@@ -223,17 +235,17 @@ export function QuotasPage() {
           <Skeleton className="h-44 w-full" />
         </div>
       ) : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
 
       {!loading && !error && activeCount === 0 ? (
-        <SectionPanel title="额度结果" bodyClassName="p-0">
+        <SectionPanel title={t("quotas.resultsTitle")} bodyClassName="p-0">
           <EmptyState
             icon={tab === "opencode" ? ChartLine : Cloud}
-            title="没有额度数据"
+            title={t("quotas.emptyTitle")}
             description={
               tab === "opencode"
-                ? "请先在账号统计添加并启用 OpenCode 账号。"
-                : "请先在账号统计添加 Ollama session cookie。"
+                ? t("quotas.emptyOpencodeDescription")
+                : t("quotas.emptyOllamaDescription")
             }
             action={
               <Button
@@ -244,7 +256,7 @@ export function QuotasPage() {
                   )
                 }
               >
-                去添加账号
+                {t("quotas.emptyAction")}
               </Button>
             }
           />
@@ -257,7 +269,16 @@ export function QuotasPage() {
             mode={viewMode}
             items={pagedItems}
             {...(tab === "ollama"
-              ? { tableHeaders: ["账号", "套餐", "Session", "Weekly", "状态", "模型"] }
+              ? {
+                  tableHeaders: [
+                    t("quotas.table.account"),
+                    t("quotas.table.plan"),
+                    t("quotas.table.session"),
+                    t("quotas.table.weekly"),
+                    t("quotas.table.status"),
+                    t("quotas.table.models"),
+                  ],
+                }
               : {})}
           />
           <div className="overflow-hidden rounded-none border border-border bg-paper-1">
@@ -277,12 +298,12 @@ export function QuotasPage() {
 
       {!loading && !error ? (
         <p className="text-[12px] text-ink-faint">
-          账号管理请前往{" "}
+          {t("quotas.accountsLinkPrefix")}{" "}
           <Link
             to={tab === "opencode" ? "/app/accounts" : "/app/accounts?tab=ollama"}
             className="text-accent hover:underline"
           >
-            账号统计
+            {t("nav.accounts")}
           </Link>
         </p>
       ) : null}

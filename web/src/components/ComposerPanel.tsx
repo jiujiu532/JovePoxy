@@ -1,6 +1,7 @@
 import { X } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/Button";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 export type ComposerPanelProps = {
@@ -24,6 +25,7 @@ export function ComposerPanel({
   footer,
   className,
 }: ComposerPanelProps) {
+  const { t } = useI18n();
   return (
     <section
       className={cn(
@@ -45,7 +47,7 @@ export function ComposerPanel({
             variant="ghost"
             size="sm"
             className="!h-8 !w-8 !min-w-0 !px-0 shrink-0"
-            aria-label="收起"
+            aria-label={t("composer.collapse")}
             onClick={onClose}
           >
             <X size={16} weight="bold" />

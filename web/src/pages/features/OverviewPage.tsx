@@ -36,12 +36,13 @@ import {
   type UsageRecordDTO,
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n, type Lang, type Translate } from "@/lib/i18n";
 
-function formatUpdatedAt(value?: string): string {
-  if (!value) return "刚刚同步";
+function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
+  if (!value) return t("overview.justSynced");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(lang === "zh" ? "zh-CN" : "en-US", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -103,6 +104,7 @@ function formatCompact(value: number): string {
 
 export function OverviewPage() {
   const navigate = useNavigate();
+  const { t, lang } = useI18n();
   const [data, setData] = useState<OverviewDTO | null>(null);
   const [metrics, setMetrics] = useState<MetricsDTO | null>(null);
   const [requestTrend, setRequestTrend] = useState<TrendPoint[]>([]);
@@ -140,7 +142,7 @@ export function OverviewPage() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -171,11 +173,11 @@ export function OverviewPage() {
   if (error) {
     return (
       <ErrorState
-        title="概览加载失败"
+        title={t("overview.loadFailed")}
         description={error}
         action={
           <Button variant="secondary" onClick={() => void load()}>
-            重试
+            {t("common.retry")}
           </Button>
         }
       />
@@ -194,44 +196,47 @@ export function OverviewPage() {
 
   const cards = [
     {
-      label: "今日请求",
+      label: t("overview.card.requestsToday"),
       value: data.requests_today,
-      hint: "当天完成的代理请求",
+      hint: t("overview.card.requestsTodayHint"),
       icon: Pulse,
       tone: "accent" as const,
     },
     {
-      label: "今日 Token",
+      label: t("overview.card.tokensToday"),
       value: data.tokens_today,
-      hint: "输入 + 输出合计",
+      hint: t("overview.card.tokensTodayHint"),
       icon: Lightning,
       tone: "default" as const,
     },
     {
-      label: "累计请求",
+      label: t("overview.card.requestsTotal"),
       value: data.requests_total,
-      hint: "历史总量",
+      hint: t("overview.card.requestsTotalHint"),
       icon: ChartLineUp,
       tone: "default" as const,
     },
     {
-      label: "累计 Token",
+      label: t("overview.card.tokensTotal"),
       value: data.tokens_total,
-      hint: "全量 token 消耗",
+      hint: t("overview.card.tokensTotalHint"),
       icon: Stack,
       tone: "default" as const,
     },
     {
-      label: "额度有效剩余",
+      label: t("overview.card.quotaRemaining"),
       value: `${Number(data.quota_effective_remaining ?? 0).toFixed(1)}%`,
-      hint: "cascade 后的有效值",
+      hint: t("overview.card.quotaRemainingHint"),
       icon: Coins,
       tone: "success" as const,
     },
     {
-      label: "进程 429",
+      label: t("overview.card.status429"),
       value: total429,
-      hint: total5xx > 0 ? `另有 ${total5xx} 次 5xx` : "限流计数",
+      hint:
+        total5xx > 0
+          ? t("overview.card.status429HintWith5xx", { n: total5xx })
+          : t("overview.card.status429Hint"),
       icon: WarningCircle,
       tone: total429 > 0 ? ("warning" as const) : ("default" as const),
     },
@@ -240,12 +245,12 @@ export function OverviewPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="概览"
-        description="一眼看清网关健康度、额度状态与模型消耗。"
-        meta={`更新于 ${formatUpdatedAt(data.updated_at)}`}
+        title={t("overview.title")}
+        description={t("overview.description")}
+        meta={t("overview.updatedAt", { time: formatUpdatedAt(lang, t, data.updated_at) })}
         actions={
           <Button variant="secondary" onClick={() => void load()}>
-            刷新
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -265,40 +270,40 @@ export function OverviewPage() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <SectionPanel
-          title="请求趋势"
-          description={`近 ${TREND_DAYS} 天网关请求（最近 100 条日志聚合）`}
+          title={t("overview.requestTrend.title")}
+          description={t("overview.requestTrend.description", { days: TREND_DAYS })}
         >
           {requestTrend.some((p) => p.value > 0) ? (
             <HardLineChart
               points={requestTrend}
-              ariaLabel={`近${TREND_DAYS}天请求趋势折线图`}
+              ariaLabel={t("overview.requestTrend.ariaLabel", { days: TREND_DAYS })}
             />
           ) : (
             <EmptyState
               compact
               icon={ChartLineUp}
-              title="暂无请求日志"
-              description="发起代理请求后这里会出现近 7 天趋势。"
+              title={t("overview.requestTrend.emptyTitle")}
+              description={t("overview.requestTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
 
         <SectionPanel
-          title="Token 消耗"
-          description={`近 ${TREND_DAYS} 天 token（最近 100 条用量记录聚合）`}
+          title={t("overview.tokenTrend.title")}
+          description={t("overview.tokenTrend.description", { days: TREND_DAYS })}
         >
           {tokenTrend.some((p) => p.value > 0) ? (
             <HardBarChart
               points={tokenTrend}
               formatValue={formatCompact}
-              ariaLabel={`近${TREND_DAYS}天 token 消耗柱状图`}
+              ariaLabel={t("overview.tokenTrend.ariaLabel", { days: TREND_DAYS })}
             />
           ) : (
             <EmptyState
               compact
               icon={ChartBar}
-              title="暂无用量记录"
-              description="同步 OpenCode 用量后这里会出现 token 柱状图。"
+              title={t("overview.tokenTrend.emptyTitle")}
+              description={t("overview.tokenTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
@@ -306,11 +311,11 @@ export function OverviewPage() {
 
       <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
         <SectionPanel
-          title="网关健康"
-          description="当前进程内的请求结果分布"
+          title={t("overview.health.title")}
+          description={t("overview.health.description")}
         >
           <StatusStackBar
-            ariaLabel="请求状态分布"
+            ariaLabel={t("overview.health.ariaLabel")}
             segments={[
               { label: "2xx", value: total2xx, color: "var(--accent-teal)" },
               { label: "429", value: total429, color: "var(--accent-yellow)" },
@@ -319,19 +324,19 @@ export function OverviewPage() {
           />
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">成功率</p>
+              <p className="text-caption text-ink-muted">{t("overview.health.successRate")}</p>
               <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
                 {successRate}
               </p>
             </div>
             <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">流式请求</p>
+              <p className="text-caption text-ink-muted">{t("overview.health.streamRequests")}</p>
               <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
                 {metrics?.stream_requests ?? 0}
               </p>
             </div>
             <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">5xx</p>
+              <p className="text-caption text-ink-muted">{t("overview.health.status5xx")}</p>
               <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
                 {total5xx}
               </p>
@@ -339,12 +344,27 @@ export function OverviewPage() {
           </div>
         </SectionPanel>
 
-        <SectionPanel title="快捷操作" description="常用配置入口">
+        <SectionPanel
+          title={t("overview.quickActions.title")}
+          description={t("overview.quickActions.description")}
+        >
           <div className="flex flex-col gap-2">
             {[
-              { to: "/app/local-keys", label: "创建本地密钥", desc: "给客户端用" },
-              { to: "/app/proxies", label: "配置出口代理", desc: "缓解 free IP 限流" },
-              { to: "/app/quotas", label: "额度监控", desc: "OpenCode / Ollama 额度" },
+              {
+                to: "/app/local-keys",
+                label: t("overview.quickActions.createLocalKeyLabel"),
+                desc: t("overview.quickActions.createLocalKeyDesc"),
+              },
+              {
+                to: "/app/proxies",
+                label: t("overview.quickActions.configureProxyLabel"),
+                desc: t("overview.quickActions.configureProxyDesc"),
+              },
+              {
+                to: "/app/quotas",
+                label: t("overview.quickActions.quotaMonitorLabel"),
+                desc: t("overview.quickActions.quotaMonitorDesc"),
+              },
             ].map((item) => (
               <Link
                 key={item.to}
@@ -364,8 +384,8 @@ export function OverviewPage() {
 
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
-          title="额度窗口"
-          description="按 cascade 规则计算的有效剩余"
+          title={t("overview.quotaWindows.title")}
+          description={t("overview.quotaWindows.description")}
         >
           <div className="grid gap-3 sm:grid-cols-3">
             {data.quota_windows.map((window) => (
@@ -378,9 +398,9 @@ export function OverviewPage() {
                     {window.label}
                   </p>
                   {window.blocked ? (
-                    <Badge kind="warning">受限</Badge>
+                    <Badge kind="warning">{t("overview.quotaWindows.blocked")}</Badge>
                   ) : (
-                    <Badge kind="healthy">可用</Badge>
+                    <Badge kind="healthy">{t("overview.quotaWindows.available")}</Badge>
                   )}
                 </div>
                 <p className="mt-2 text-2xl font-semibold tabular-nums text-ink">
@@ -394,8 +414,12 @@ export function OverviewPage() {
                   }
                 />
                 <p className="mt-2 text-[12px] text-ink-faint">
-                  已用 {Number(window.used ?? 0).toFixed(1)}%
-                  {window.blocked_by ? ` · 受 ${window.blocked_by} 影响` : ""}
+                  {t("overview.quotaWindows.used", {
+                    percent: Number(window.used ?? 0).toFixed(1),
+                  })}
+                  {window.blocked_by
+                    ? t("overview.quotaWindows.blockedBy", { name: window.blocked_by })
+                    : ""}
                 </p>
               </div>
             ))}
@@ -404,11 +428,11 @@ export function OverviewPage() {
       ) : null}
 
       <SectionPanel
-        title="按模型"
-        description="来自已同步的用量记录"
+        title={t("overview.byModel.title")}
+        description={t("overview.byModel.description")}
         actions={
           <Button variant="ghost" onClick={() => void navigate("/app/logs?tab=usage")}>
-            查看用量
+            {t("overview.byModel.viewUsage")}
           </Button>
         }
         {...(data.by_model.length === 0 ? { bodyClassName: "p-0" } : {})}
@@ -417,11 +441,11 @@ export function OverviewPage() {
           <EmptyState
             compact
             icon={Stack}
-            title="还没有模型用量"
-            description="同步 OpenCode 用量，或先发起几条代理请求后这里会自动出现。"
+            title={t("overview.byModel.emptyTitle")}
+            description={t("overview.byModel.emptyDescription")}
             action={
               <Button variant="secondary" onClick={() => void navigate("/app/logs?tab=usage")}>
-                去同步用量
+                {t("overview.byModel.emptyAction")}
               </Button>
             }
           />
@@ -430,11 +454,11 @@ export function OverviewPage() {
             <table className="w-full min-w-[26rem] text-left text-sm md:min-w-[32rem]">
               <thead>
                 <tr className="border-b border-border text-caption text-ink-muted">
-                  <th className="pb-2 font-medium">模型</th>
-                  <th className="pb-2 font-medium">份额</th>
-                  <th className="pb-2 font-medium">请求</th>
-                  <th className="pb-2 font-medium">输入</th>
-                  <th className="pb-2 font-medium">输出</th>
+                  <th className="pb-2 font-medium">{t("overview.byModel.table.model")}</th>
+                  <th className="pb-2 font-medium">{t("overview.byModel.table.share")}</th>
+                  <th className="pb-2 font-medium">{t("overview.byModel.table.requests")}</th>
+                  <th className="pb-2 font-medium">{t("overview.byModel.table.input")}</th>
+                  <th className="pb-2 font-medium">{t("overview.byModel.table.output")}</th>
                 </tr>
               </thead>
               <tbody>

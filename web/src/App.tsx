@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ToastProvider } from "@/components";
+import { I18nProvider } from "@/lib/i18n";
 import { AuthGate } from "@/pages/AuthGate";
 import { AccountsPage } from "@/pages/features/AccountsPage";
 import { LocalKeysPage } from "@/pages/features/LocalKeysPage";
@@ -15,8 +16,9 @@ import { ShellLayout } from "@/pages/ShellLayout";
 
 export function App() {
   return (
-    <ToastProvider>
-      <BrowserRouter>
+    <I18nProvider>
+      <ToastProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -52,7 +54,8 @@ export function App() {
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </BrowserRouter>
-    </ToastProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </I18nProvider>
   );
 }

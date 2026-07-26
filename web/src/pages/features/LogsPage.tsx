@@ -18,6 +18,7 @@ import {
 } from "@/components";
 import { api, ApiError, type AccountDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n, type Translate } from "@/lib/i18n";
 import { isLogsHubTab, type LogsHubTab } from "@/lib/routes";
 
 type StatusFilter = "all" | "2xx" | "429" | "4xx" | "5xx";
@@ -58,7 +59,7 @@ function useLogsTab(): readonly [LogsHubTab, (tab: LogsHubTab) => void] {
   return [tab, setTab] as const;
 }
 
-function GatewayLogsPanel() {
+function GatewayLogsPanel({ t }: { readonly t: Translate }) {
   const navigate = useNavigate();
   const [logs, setLogs] = useState<LogDTO[]>([]);
   const [query, setQuery] = useState("");
@@ -83,7 +84,7 @@ function GatewayLogsPanel() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -91,6 +92,7 @@ function GatewayLogsPanel() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -152,30 +154,36 @@ function GatewayLogsPanel() {
   return (
     <>
       {loading ? <Skeleton className="h-48 w-full" /> : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <SectionPanel
-          title="网关请求"
-          description={`${filtered.length} / ${logs.length} · 成功 ${ok} · 429 ${rateLimited} · 均延迟 ${logs.length ? formatLatency(avgLatency) : "-"}`}
+          title={t("logs.gatewayTitle")}
+          description={t("logs.gatewayStats", {
+            filtered: filtered.length,
+            total: logs.length,
+            ok,
+            rateLimited,
+            latency: logs.length ? formatLatency(avgLatency) : t("common.none"),
+          })}
           bodyClassName="p-0"
           actions={
             <Button variant="secondary" size="sm" onClick={() => void load()}>
-              刷新
+              {t("common.refresh")}
             </Button>
           }
         >
           <FilterStrip
             search={query}
             onSearchChange={setQuery}
-            searchPlaceholder="模型 / 路由 / key"
+            searchPlaceholder={t("logs.gatewaySearchPlaceholder")}
             filters={
               <>
                 <SegmentedFilter
-                  aria-label="状态"
+                  aria-label={t("logs.statusAria")}
                   value={statusFilter}
                   onChange={(v) => setStatusFilter(v as StatusFilter)}
                   options={[
-                    { value: "all", label: "全部" },
+                    { value: "all", label: t("common.all") },
                     { value: "2xx", label: "2xx" },
                     { value: "429", label: "429" },
                     { value: "4xx", label: "4xx" },
@@ -183,13 +191,13 @@ function GatewayLogsPanel() {
                   ]}
                 />
                 <SegmentedFilter
-                  aria-label="流式"
+                  aria-label={t("logs.streamAria")}
                   value={streamFilter}
                   onChange={(v) => setStreamFilter(v as StreamFilter)}
                   options={[
-                    { value: "all", label: "全部" },
-                    { value: "stream", label: "流式" },
-                    { value: "nonstream", label: "非流式" },
+                    { value: "all", label: t("common.all") },
+                    { value: "stream", label: t("logs.streamYes") },
+                    { value: "nonstream", label: t("logs.streamNo") },
                   ]}
                 />
               </>
@@ -197,27 +205,27 @@ function GatewayLogsPanel() {
             trailing={
               <>
                 <FilterSelect
-                  label="路由"
+                  label={t("logs.routeLabel")}
                   value={routeFilter}
                   onChange={setRouteFilter}
                   options={[
-                    { value: "all", label: "全部" },
+                    { value: "all", label: t("common.all") },
                     ...routes.map((route) => ({ value: route, label: route })),
                   ]}
                 />
                 <FilterSelect
-                  label="排序"
+                  label={t("logs.sortLabel")}
                   value={sortKey}
                   onChange={(v) => setSortKey(v as SortKey)}
                   options={[
-                    { value: "newest", label: "最新优先" },
-                    { value: "oldest", label: "最旧优先" },
-                    { value: "latency_desc", label: "延迟高→低" },
-                    { value: "latency_asc", label: "延迟低→高" },
+                    { value: "newest", label: t("logs.sortNewest") },
+                    { value: "oldest", label: t("logs.sortOldest") },
+                    { value: "latency_desc", label: t("logs.sortLatencyDesc") },
+                    { value: "latency_asc", label: t("logs.sortLatencyAsc") },
                   ]}
                 />
                 <Button variant="secondary" size="sm" onClick={resetFilters}>
-                  重置
+                  {t("logs.reset")}
                 </Button>
               </>
             }
@@ -225,23 +233,23 @@ function GatewayLogsPanel() {
           {logs.length === 0 ? (
             <EmptyState
               icon={ClipboardText}
-              title="暂无请求"
-              description="对 /v1/chat/completions 或 /v1/messages 发起请求后会出现在这里。"
+              title={t("logs.emptyGatewayTitle")}
+              description={t("logs.emptyGatewayDescription")}
             />
           ) : filtered.length === 0 ? (
-            <EmptyState compact title="没有匹配日志" description="放宽筛选条件试试。" />
+            <EmptyState compact title={t("logs.noMatchTitle")} description={t("logs.noMatchDescription")} />
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[52rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
-                      <th className="px-4 py-2.5 font-medium">时间</th>
-                      <th className="px-4 py-2.5 font-medium">路由</th>
-                      <th className="px-4 py-2.5 font-medium">模型</th>
-                      <th className="px-4 py-2.5 font-medium">状态</th>
-                      <th className="px-4 py-2.5 font-medium">延迟</th>
-                      <th className="px-4 py-2.5 font-medium">流式</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.routeLabel")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.statusAria")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colLatency")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.streamAria")}</th>
                       <th className="px-4 py-2.5 font-medium">Key</th>
                     </tr>
                   </thead>
@@ -258,7 +266,7 @@ function GatewayLogsPanel() {
                           {row.route}
                         </td>
                         <td className="px-4 py-3 font-mono text-[13px] text-ink">
-                          {row.model || "-"}
+                          {row.model || t("common.none")}
                         </td>
                         <td className="px-4 py-3">
                           <Badge kind={statusKind(row.status)}>{row.status}</Badge>
@@ -266,9 +274,11 @@ function GatewayLogsPanel() {
                         <td className="px-4 py-3 tabular-nums text-ink">
                           {formatLatency(row.latency_ms)}
                         </td>
-                        <td className="px-4 py-3 text-ink-muted">{row.stream ? "是" : "否"}</td>
+                        <td className="px-4 py-3 text-ink-muted">
+                          {row.stream ? t("logs.yes") : t("logs.no")}
+                        </td>
                         <td className="px-4 py-3 font-mono text-[11px] text-ink-faint">
-                          {row.key_id ?? "-"}
+                          {row.key_id ?? t("common.none")}
                         </td>
                       </tr>
                     ))}
@@ -293,7 +303,7 @@ function GatewayLogsPanel() {
   );
 }
 
-function UsagePanel() {
+function UsagePanel({ t }: { readonly t: Translate }) {
   const navigate = useNavigate();
   const [records, setRecords] = useState<UsageRecordDTO[]>([]);
   const [accounts, setAccounts] = useState<AccountDTO[]>([]);
@@ -324,7 +334,7 @@ function UsagePanel() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -332,6 +342,7 @@ function UsagePanel() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -340,7 +351,7 @@ function UsagePanel() {
 
   async function runSync(backfill: boolean) {
     if (!accountId) {
-      setError("请先选择账号");
+      setError(t("logs.selectAccountFirst"));
       return;
     }
     setSyncing(true);
@@ -348,11 +359,11 @@ function UsagePanel() {
       const result = backfill
         ? await api.backfillUsage(accountId, 5)
         : await api.syncUsage(accountId, 3);
-      setMessage(`写入 ${result.inserted} 条，抓取 ${result.pages_fetched} 页`);
+      setMessage(t("logs.syncResult", { inserted: result.inserted, pages: result.pages_fetched }));
       setError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "同步失败");
+      setError(err instanceof Error ? err.message : t("logs.syncFailed"));
     } finally {
       setSyncing(false);
     }
@@ -399,11 +410,11 @@ function UsagePanel() {
       ) : null}
 
       {loading ? <Skeleton className="h-48 w-full" /> : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <SectionPanel
-          title="OpenCode 用量"
-          description={`${filtered.length} / ${records.length} · 入 ${totalIn} · 出 ${totalOut}`}
+          title={t("logs.usageOcTitle")}
+          description={t("logs.usageOcStats", { filtered: filtered.length, total: records.length, in: totalIn, out: totalOut })}
           bodyClassName="p-0"
           actions={
             <div className="flex flex-wrap gap-1.5">
@@ -413,7 +424,7 @@ function UsagePanel() {
                 loading={syncing}
                 onClick={() => void runSync(false)}
               >
-                增量同步
+                {t("logs.syncIncremental")}
               </Button>
               <Button
                 variant="secondary"
@@ -421,7 +432,7 @@ function UsagePanel() {
                 loading={syncing}
                 onClick={() => void runSync(true)}
               >
-                补拉
+                {t("logs.syncBackfill")}
               </Button>
             </div>
           }
@@ -429,14 +440,14 @@ function UsagePanel() {
           <FilterStrip
             search={query}
             onSearchChange={setQuery}
-            searchPlaceholder="模型 / usg_id / 时间"
+            searchPlaceholder={t("logs.usageOcSearchPlaceholder")}
             filters={
               <FilterSelect
-                label="账号"
+                label={t("logs.accountLabel")}
                 value={accountId || ""}
                 onChange={setAccountId}
                 options={[
-                  { value: "", label: "选择账号" },
+                  { value: "", label: t("logs.selectAccount") },
                   ...accounts.map((account) => ({
                     value: account.id,
                     label: account.name,
@@ -447,24 +458,24 @@ function UsagePanel() {
             trailing={
               <>
                 <FilterSelect
-                  label="模型"
+                  label={t("logs.colModel")}
                   value={modelFilter}
                   onChange={setModelFilter}
                   options={[
-                    { value: "all", label: "全部" },
+                    { value: "all", label: t("common.all") },
                     ...models.map((model) => ({ value: model, label: model })),
                   ]}
                 />
                 <FilterSelect
-                  label="排序"
+                  label={t("logs.sortLabel")}
                   value={sortKey}
                   onChange={(v) =>
                     setSortKey(v as "newest" | "oldest" | "tokens_desc")
                   }
                   options={[
-                    { value: "newest", label: "最新优先" },
-                    { value: "oldest", label: "最旧优先" },
-                    { value: "tokens_desc", label: "Token 多→少" },
+                    { value: "newest", label: t("logs.sortNewest") },
+                    { value: "oldest", label: t("logs.sortOldest") },
+                    { value: "tokens_desc", label: t("logs.sortTokensDesc") },
                   ]}
                 />
                 <Button
@@ -477,7 +488,7 @@ function UsagePanel() {
                     setPage(1);
                   }}
                 >
-                  重置
+                  {t("logs.reset")}
                 </Button>
               </>
             }
@@ -485,16 +496,16 @@ function UsagePanel() {
           {records.length === 0 ? (
             <EmptyState
               icon={Database}
-              title="暂无用量记录"
+              title={t("logs.emptyUsageOcTitle")}
               description={
                 accounts.length === 0
-                  ? "先添加 OpenCode 账号，再执行同步。"
-                  : "选择账号后执行增量同步或补拉。"
+                  ? t("logs.emptyUsageOcNoAccounts")
+                  : t("logs.emptyUsageOcHasAccounts")
               }
               action={
                 accounts.length === 0 ? (
                   <Button variant="secondary" onClick={() => void navigate("/app/accounts")}>
-                    去添加账号
+                    {t("logs.goAddAccount")}
                   </Button>
                 ) : (
                   <Button
@@ -502,24 +513,24 @@ function UsagePanel() {
                     loading={syncing}
                     onClick={() => void runSync(false)}
                   >
-                    立即同步
+                    {t("logs.syncNow")}
                   </Button>
                 )
               }
             />
           ) : filtered.length === 0 ? (
-            <EmptyState compact title="没有匹配记录" description="放宽筛选条件试试。" />
+            <EmptyState compact title={t("logs.noMatchRecordsTitle")} description={t("logs.noMatchDescription")} />
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[44rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
-                      <th className="px-4 py-2.5 font-medium">时间</th>
-                      <th className="px-4 py-2.5 font-medium">模型</th>
-                      <th className="px-4 py-2.5 font-medium">输入</th>
-                      <th className="px-4 py-2.5 font-medium">输出</th>
-                      <th className="px-4 py-2.5 font-medium">合计</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colInput")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colOutput")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("common.total")}</th>
                       <th className="px-4 py-2.5 font-medium">usg_id</th>
                     </tr>
                   </thead>
@@ -570,7 +581,7 @@ type OllamaModelUsageRow = {
   readonly requests: number;
 };
 
-function OllamaUsagePanel() {
+function OllamaUsagePanel({ t }: { readonly t: Translate }) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<OllamaModelUsageRow[]>([]);
   const [query, setQuery] = useState("");
@@ -609,7 +620,7 @@ function OllamaUsagePanel() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -618,6 +629,7 @@ function OllamaUsagePanel() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -652,11 +664,11 @@ function OllamaUsagePanel() {
   return (
     <>
       {loading ? <Skeleton className="h-48 w-full" /> : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <SectionPanel
-          title="Ollama 用量"
-          description={`${filtered.length} 条模型记录 · 请求合计 ${totalReq}（来自控制面额度快照）`}
+          title={t("logs.usageOlTitle")}
+          description={t("logs.usageOlStats", { count: filtered.length, total: totalReq })}
           bodyClassName="p-0"
           actions={
             <Button
@@ -668,21 +680,21 @@ function OllamaUsagePanel() {
                 void load();
               }}
             >
-              刷新
+              {t("common.refresh")}
             </Button>
           }
         >
           <FilterStrip
             search={query}
             onSearchChange={setQuery}
-            searchPlaceholder="模型 / 账号 / 窗口"
+            searchPlaceholder={t("logs.usageOlSearchPlaceholder")}
             filters={
               <FilterSelect
-                label="账号"
+                label={t("logs.accountLabel")}
                 value={accountFilter}
                 onChange={setAccountFilter}
                 options={[
-                  { value: "all", label: "全部" },
+                  { value: "all", label: t("common.all") },
                   ...accounts.map(([id, name]) => ({ value: id, label: name })),
                 ]}
               />
@@ -697,33 +709,33 @@ function OllamaUsagePanel() {
                   setPage(1);
                 }}
               >
-                重置
+                {t("logs.reset")}
               </Button>
             }
           />
           {rows.length === 0 ? (
             <EmptyState
               icon={Database}
-              title="暂无 Ollama 用量"
-              description="额度抓取成功后，会在此汇总各账号窗口下的模型请求数。可先到账号统计添加 Ollama 账号。"
+              title={t("logs.emptyUsageOlTitle")}
+              description={t("logs.emptyUsageOlDescription")}
               action={
                 <Button variant="secondary" onClick={() => void navigate("/app/accounts?tab=ollama")}>
-                  去添加账号
+                  {t("logs.goAddAccount")}
                 </Button>
               }
             />
           ) : filtered.length === 0 ? (
-            <EmptyState compact title="没有匹配记录" description="放宽筛选条件试试。" />
+            <EmptyState compact title={t("logs.noMatchRecordsTitle")} description={t("logs.noMatchDescription")} />
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[36rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
-                      <th className="px-4 py-2.5 font-medium">账号</th>
-                      <th className="px-4 py-2.5 font-medium">窗口</th>
-                      <th className="px-4 py-2.5 font-medium">模型</th>
-                      <th className="px-4 py-2.5 font-medium">请求数</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.accountLabel")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colWindow")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colRequests")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -761,32 +773,33 @@ function OllamaUsagePanel() {
 
 export function LogsPage() {
   const [tab, setTab] = useLogsTab();
+  const { t } = useI18n();
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="请求日志"
-        description="网关代理请求，以及 OpenCode / Ollama 控制面用量。"
+        title={t("logs.pageTitle")}
+        description={t("logs.pageDescription")}
         toolbar={
           <Tabs
-            aria-label="日志类型"
+            aria-label={t("logs.tabsAria")}
             value={tab}
             onChange={(id) => setTab(id as LogsHubTab)}
             items={[
-              { id: "gateway", label: "网关请求" },
-              { id: "usage-oc", label: "OpenCode 用量" },
-              { id: "usage-ol", label: "Ollama 用量" },
+              { id: "gateway", label: t("logs.gatewayTitle") },
+              { id: "usage-oc", label: t("logs.usageOcTitle") },
+              { id: "usage-ol", label: t("logs.usageOlTitle") },
             ]}
           />
         }
       />
 
       {tab === "gateway" ? (
-        <GatewayLogsPanel />
+        <GatewayLogsPanel t={t} />
       ) : tab === "usage-oc" ? (
-        <UsagePanel />
+        <UsagePanel t={t} />
       ) : (
-        <OllamaUsagePanel />
+        <OllamaUsagePanel t={t} />
       )}
     </div>
   );

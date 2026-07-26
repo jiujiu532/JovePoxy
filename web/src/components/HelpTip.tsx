@@ -1,6 +1,7 @@
 import { Question } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 export type HelpTipProps = {
@@ -15,7 +16,9 @@ type TipPos = { readonly top: number; readonly left: number };
  * Compact "?" control. Tooltip is portaled to document.body with fixed
  * coordinates so overflow:hidden ancestors never clip it.
  */
-export function HelpTip({ content, className, label = "说明" }: HelpTipProps) {
+export function HelpTip({ content, className, label }: HelpTipProps) {
+  const { t } = useI18n();
+  const resolvedLabel = label ?? t("helptip.label");
   const tipId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -81,7 +84,7 @@ export function HelpTip({ content, className, label = "说明" }: HelpTipProps) 
         ref={triggerRef}
         type="button"
         className="inline-flex h-5 w-5 items-center justify-center rounded-none border-2 border-border bg-paper-0 text-ink-faint transition-colors hover:bg-paper-1 hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
-        aria-label={label}
+        aria-label={resolvedLabel}
         aria-describedby={open ? tipId : undefined}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}

@@ -39,6 +39,7 @@ import {
 } from "@/lib/account-io";
 import { api, ApiError, type AccountDTO, type OllamaAccountDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n } from "@/lib/i18n";
 import { isProviderTab, type ProviderTab } from "@/lib/routes";
 
 type StatusFilter = "all" | "enabled" | "disabled";
@@ -58,6 +59,7 @@ function useProviderTab(
 
 export function AccountsPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useProviderTab("opencode");
   const [ocAccounts, setOcAccounts] = useState<AccountDTO[]>([]);
@@ -95,7 +97,7 @@ export function AccountsPage() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -177,7 +179,7 @@ export function AccountsPage() {
         await api.createAccount(item);
         ok += 1;
       } catch (err) {
-        fails.push(`${item.name}: ${err instanceof Error ? err.message : "失败"}`);
+        fails.push(`${item.name}: ${err instanceof Error ? err.message : t("accounts.itemFailed")}`);
       }
     }
     return { ok, fails };
@@ -191,7 +193,7 @@ export function AccountsPage() {
         await api.createOllamaAccount(item);
         ok += 1;
       } catch (err) {
-        fails.push(`${item.name}: ${err instanceof Error ? err.message : "失败"}`);
+        fails.push(`${item.name}: ${err instanceof Error ? err.message : t("accounts.itemFailed")}`);
       }
     }
     return { ok, fails };
@@ -225,10 +227,10 @@ export function AccountsPage() {
         setOlCookie("");
       }
       setDialog("closed");
-      setNotice("已添加账号");
+      setNotice(t("accounts.accountAdded"));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建失败");
+      setError(err instanceof Error ? err.message : t("common.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -241,20 +243,20 @@ export function AccountsPage() {
       if (tab === "opencode") {
         const parsed = parseOpenCodeBatchLines(batchText);
         if (parsed.items.length === 0) {
-          setError(parsed.errors.join("；") || "没有可导入行");
+          setError(parsed.errors.join("；") || t("accounts.noImportableLines"));
           return;
         }
         const result = await runImportOpenCode(parsed.items);
-        setNotice(`批量完成：成功 ${result.ok}，失败 ${result.fails.length}`);
+        setNotice(t("accounts.batchResult", { ok: result.ok, fail: result.fails.length }));
         if (result.fails.length > 0) setError(result.fails.slice(0, 5).join("；"));
       } else {
         const parsed = parseOllamaBatchLines(batchText);
         if (parsed.items.length === 0) {
-          setError(parsed.errors.join("；") || "没有可导入行");
+          setError(parsed.errors.join("；") || t("accounts.noImportableLines"));
           return;
         }
         const result = await runImportOllama(parsed.items);
-        setNotice(`批量完成：成功 ${result.ok}，失败 ${result.fails.length}`);
+        setNotice(t("accounts.batchResult", { ok: result.ok, fail: result.fails.length }));
         if (result.fails.length > 0) setError(result.fails.slice(0, 5).join("；"));
       }
       setBatchText("");
@@ -272,20 +274,20 @@ export function AccountsPage() {
       if (tab === "opencode") {
         const parsed = parseOpenCodeImportJSON(importText);
         if (parsed.items.length === 0) {
-          setError(parsed.errors.join("；") || "没有可导入项");
+          setError(parsed.errors.join("；") || t("accounts.noImportableItems"));
           return;
         }
         const result = await runImportOpenCode(parsed.items);
-        setNotice(`导入完成：成功 ${result.ok}，失败 ${result.fails.length}`);
+        setNotice(t("accounts.importResult", { ok: result.ok, fail: result.fails.length }));
         if (result.fails.length > 0) setError(result.fails.slice(0, 5).join("；"));
       } else {
         const parsed = parseOllamaImportJSON(importText);
         if (parsed.items.length === 0) {
-          setError(parsed.errors.join("；") || "没有可导入项");
+          setError(parsed.errors.join("；") || t("accounts.noImportableItems"));
           return;
         }
         const result = await runImportOllama(parsed.items);
-        setNotice(`导入完成：成功 ${result.ok}，失败 ${result.fails.length}`);
+        setNotice(t("accounts.importResult", { ok: result.ok, fail: result.fails.length }));
         if (result.fails.length > 0) setError(result.fails.slice(0, 5).join("；"));
       }
       setImportText("");
@@ -301,9 +303,7 @@ export function AccountsPage() {
     setError(null);
     try {
       if (exportSecrets) {
-        const confirmed = window.confirm(
-          "导出将包含完整 cookie 密钥，请妥善保管文件。确认继续？",
-        );
+        const confirmed = window.confirm(t("accounts.exportConfirmSecrets"));
         if (!confirmed) return;
       }
       const stamp = new Date().toISOString();
@@ -378,9 +378,9 @@ export function AccountsPage() {
           bundle,
         );
       }
-      setNotice(exportSecrets ? "已导出（含密钥）" : "已导出清单（不含密钥）");
+      setNotice(exportSecrets ? t("accounts.exportedWithSecrets") : t("accounts.exportedManifest"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "导出失败");
+      setError(err instanceof Error ? err.message : t("accounts.exportFailed"));
     } finally {
       setBusy(false);
     }
@@ -395,10 +395,10 @@ export function AccountsPage() {
         else await api.setOllamaAccountEnabled(id, enabled);
       }
       setSelected(new Set());
-      setNotice(enabled ? "已批量启用" : "已批量禁用");
+      setNotice(enabled ? t("accounts.bulkEnabled") : t("accounts.bulkDisabled"));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "批量更新失败");
+      setError(err instanceof Error ? err.message : t("accounts.bulkUpdateFailed"));
     } finally {
       setBusy(false);
     }
@@ -406,7 +406,7 @@ export function AccountsPage() {
 
   async function bulkDelete() {
     if (selected.size === 0) return;
-    if (!window.confirm(`确认删除选中的 ${selected.size} 个账号？`)) return;
+    if (!window.confirm(t("accounts.bulkDeleteConfirm", { n: selected.size }))) return;
     setBusy(true);
     try {
       for (const id of selected) {
@@ -414,10 +414,10 @@ export function AccountsPage() {
         else await api.deleteOllamaAccount(id);
       }
       setSelected(new Set());
-      setNotice("已批量删除");
+      setNotice(t("accounts.bulkDeleted"));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "批量删除失败");
+      setError(err instanceof Error ? err.message : t("accounts.bulkDeleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -436,11 +436,11 @@ export function AccountsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="账号统计"
-        description="控制面账号。支持筛选、批量操作与 JSON 导入导出。"
+        title={t("accounts.title")}
+        description={t("accounts.description")}
         toolbar={
           <Tabs
-            aria-label="提供商"
+            aria-label={t("accounts.providerTabAria")}
             value={tab}
             onChange={(id) => setTab(id as ProviderTab)}
             items={[
@@ -451,18 +451,18 @@ export function AccountsPage() {
         }
         meta={
           <>
-            <MetaChip>合计 {ocAccounts.length + olAccounts.length}</MetaChip>
-            <MetaChip>启用 {ocEnabled + olEnabled}</MetaChip>
+            <MetaChip>{t("accounts.metaTotal", { n: ocAccounts.length + olAccounts.length })}</MetaChip>
+            <MetaChip>{t("accounts.metaEnabled", { n: ocEnabled + olEnabled })}</MetaChip>
           </>
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void navigate("/app/quotas")}>
-              额度监控
+              {t("accounts.quotasLink")}
             </Button>
             <Button size="sm" onClick={() => setDialog("add")}>
               <Plus size={16} className="mr-1" />
-              添加
+              {t("common.add")}
             </Button>
           </div>
         }
@@ -475,16 +475,16 @@ export function AccountsPage() {
               <SearchField
                 value={query}
                 onChange={setQuery}
-                placeholder="名称 / workspace / cookie"
+                placeholder={t("accounts.searchPlaceholder")}
               />
               <SegmentedFilter
-                aria-label="状态"
+                aria-label={t("accounts.statusAria")}
                 value={status}
                 onChange={(v) => setStatus(v as StatusFilter)}
                 options={[
-                  { value: "all", label: "全部" },
-                  { value: "enabled", label: "启用" },
-                  { value: "disabled", label: "禁用" },
+                  { value: "all", label: t("common.all") },
+                  { value: "enabled", label: t("common.enabled") },
+                  { value: "disabled", label: t("common.disabled") },
                 ]}
               />
             </div>
@@ -495,21 +495,21 @@ export function AccountsPage() {
                   checked={exportSecrets}
                   onChange={(e) => setExportSecrets(e.target.checked)}
                 />
-                导出含密钥
+                {t("accounts.exportWithSecrets")}
               </label>
               <Button variant="secondary" size="sm" loading={busy} onClick={() => void onExport()}>
                 <DownloadSimple size={14} className="mr-1" />
-                导出
+                {t("common.export")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
                 <UploadSimple size={14} className="mr-1" />
-                导入
+                {t("common.import")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setDialog("import")}>
-                粘贴 JSON
+                {t("accounts.pasteJson")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setDialog("batch")}>
-                批量添加
+                {t("accounts.batchAdd")}
               </Button>
               <input
                 ref={fileRef}
@@ -545,7 +545,7 @@ export function AccountsPage() {
                     loading={busy}
                     onClick={() => void bulkSetEnabled(true)}
                   >
-                    启用
+                    {t("common.enable")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -553,7 +553,7 @@ export function AccountsPage() {
                     loading={busy}
                     onClick={() => void bulkSetEnabled(false)}
                   >
-                    禁用
+                    {t("common.disable")}
                   </Button>
                   <DeleteButton loading={busy} onClick={() => void bulkDelete()} />
                 </>
@@ -583,19 +583,19 @@ export function AccountsPage() {
         error &&
         rows.length === 0 &&
         ocAccounts.length + olAccounts.length === 0 ? (
-          <ErrorState title="加载失败" description={error} />
+          <ErrorState title={t("common.loadFailed")} description={error} />
         ) : null}
 
         {!loading && rows.length === 0 ? (
           <EmptyState
             icon={tab === "opencode" ? UsersThree : Cloud}
-            title={tab === "opencode" ? "暂无 OpenCode 账号" : "暂无 Ollama 账号"}
-            description="可手动添加、批量粘贴，或导入 JSON。"
+            title={tab === "opencode" ? t("accounts.emptyTitleOc") : t("accounts.emptyTitleOl")}
+            description={t("accounts.emptyDescription")}
             action={
               <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={() => setDialog("add")}>添加账号</Button>
+                <Button onClick={() => setDialog("add")}>{t("accounts.addAccount")}</Button>
                 <Button variant="secondary" onClick={() => setDialog("import")}>
-                  导入 JSON
+                  {t("accounts.importJson")}
                 </Button>
               </div>
             }
@@ -613,16 +613,16 @@ export function AccountsPage() {
                         type="checkbox"
                         checked={allSelected}
                         onChange={toggleAll}
-                        aria-label="全选"
+                        aria-label={t("accounts.selectAllAria")}
                       />
                     </th>
-                    <th className="px-3 py-2.5 font-medium">名称</th>
+                    <th className="px-3 py-2.5 font-medium">{t("accounts.colName")}</th>
                     {tab === "opencode" ? (
                       <th className="px-3 py-2.5 font-medium">Workspace</th>
                     ) : null}
                     <th className="px-3 py-2.5 font-medium">Cookie</th>
-                    <th className="px-3 py-2.5 font-medium">状态</th>
-                    <th className="px-3 py-2.5 font-medium">操作</th>
+                    <th className="px-3 py-2.5 font-medium">{t("accounts.colStatus")}</th>
+                    <th className="px-3 py-2.5 font-medium">{t("accounts.colActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -637,7 +637,7 @@ export function AccountsPage() {
                               type="checkbox"
                               checked={selected.has(account.id)}
                               onChange={() => toggleOne(account.id)}
-                              aria-label={`选择 ${account.name}`}
+                              aria-label={t("accounts.selectRowAria", { name: account.name })}
                             />
                           </td>
                           <td className="px-3 py-2.5 font-medium text-ink">{account.name}</td>
@@ -649,9 +649,9 @@ export function AccountsPage() {
                           </td>
                           <td className="px-3 py-2.5">
                             {account.enabled ? (
-                              <Badge kind="healthy">启用</Badge>
+                              <Badge kind="healthy">{t("common.enabled")}</Badge>
                             ) : (
-                              <Badge kind="neutral">禁用</Badge>
+                              <Badge kind="neutral">{t("common.disabled")}</Badge>
                             )}
                           </td>
                           <td className="px-3 py-2.5">
@@ -665,11 +665,11 @@ export function AccountsPage() {
                                     .then(load)
                                 }
                               >
-                                {account.enabled ? "禁用" : "启用"}
+                                {account.enabled ? t("common.disable") : t("common.enable")}
                               </Button>
                               <DeleteButton
                                 onClick={() => {
-                                  if (window.confirm(`删除 ${account.name}？`)) {
+                                  if (window.confirm(t("accounts.deleteConfirm", { name: account.name }))) {
                                     void api.deleteAccount(account.id).then(load);
                                   }
                                 }}
@@ -688,7 +688,7 @@ export function AccountsPage() {
                               type="checkbox"
                               checked={selected.has(account.id)}
                               onChange={() => toggleOne(account.id)}
-                              aria-label={`选择 ${account.name}`}
+                              aria-label={t("accounts.selectRowAria", { name: account.name })}
                             />
                           </td>
                           <td className="px-3 py-2.5 font-medium text-ink">{account.name}</td>
@@ -697,9 +697,9 @@ export function AccountsPage() {
                           </td>
                           <td className="px-3 py-2.5">
                             {account.enabled ? (
-                              <Badge kind="healthy">启用</Badge>
+                              <Badge kind="healthy">{t("common.enabled")}</Badge>
                             ) : (
-                              <Badge kind="neutral">禁用</Badge>
+                              <Badge kind="neutral">{t("common.disabled")}</Badge>
                             )}
                           </td>
                           <td className="px-3 py-2.5">
@@ -713,11 +713,11 @@ export function AccountsPage() {
                                     .then(load)
                                 }
                               >
-                                {account.enabled ? "禁用" : "启用"}
+                                {account.enabled ? t("common.disable") : t("common.enable")}
                               </Button>
                               <DeleteButton
                                 onClick={() => {
-                                  if (window.confirm(`删除 ${account.name}？`)) {
+                                  if (window.confirm(t("accounts.deleteConfirm", { name: account.name }))) {
                                     void api.deleteOllamaAccount(account.id).then(load);
                                   }
                                 }}
@@ -745,9 +745,9 @@ export function AccountsPage() {
 
       <Dialog
         open={dialog === "add"}
-        title={tab === "opencode" ? "添加 OpenCode 账号" : "添加 Ollama 账号"}
+        title={tab === "opencode" ? t("accounts.addDialogTitleOc") : t("accounts.addDialogTitleOl")}
         description={
-          tab === "opencode" ? "需要 workspace 与 auth cookie" : "session cookie 加密存储"
+          tab === "opencode" ? t("accounts.addDialogDescOc") : t("accounts.addDialogDescOl")
         }
         onClose={() => setDialog("closed")}
         className="max-w-lg"
@@ -757,7 +757,7 @@ export function AccountsPage() {
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput
-                  label="名称"
+                  label={t("accounts.nameLabel")}
                   value={ocName}
                   onChange={(e) => setOcName(e.target.value)}
                 />
@@ -776,7 +776,7 @@ export function AccountsPage() {
           ) : (
             <>
               <TextInput
-                label="名称"
+                label={t("accounts.nameLabel")}
                 value={olName}
                 onChange={(e) => setOlName(e.target.value)}
               />
@@ -789,10 +789,10 @@ export function AccountsPage() {
           )}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" type="button" onClick={() => setDialog("closed")}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={busy}>
-              添加
+              {t("common.add")}
             </Button>
           </div>
         </form>
@@ -800,11 +800,11 @@ export function AccountsPage() {
 
       <Dialog
         open={dialog === "batch"}
-        title="批量添加"
+        title={t("accounts.batchDialogTitle")}
         description={
           tab === "opencode"
-            ? "每行：名称|wrk_xxx|auth=..."
-            : "每行：名称|session_cookie 或纯 cookie"
+            ? t("accounts.batchDescOc")
+            : t("accounts.batchDescOl")
         }
         onClose={() => setDialog("closed")}
         className="max-w-xl"
@@ -822,18 +822,18 @@ export function AccountsPage() {
         />
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDialog("closed")}>
-            取消
+            {t("common.cancel")}
           </Button>
           <Button loading={busy} onClick={() => void onBatchSubmit()}>
-            导入行
+            {t("accounts.importLines")}
           </Button>
         </div>
       </Dialog>
 
       <Dialog
         open={dialog === "import"}
-        title="导入 JSON"
-        description={`provider 须为 ${tab}，accounts 数组含密钥字段`}
+        title={t("accounts.importJson")}
+        description={t("accounts.importDialogDesc", { provider: tab })}
         onClose={() => setDialog("closed")}
         className="max-w-xl"
       >
@@ -846,10 +846,10 @@ export function AccountsPage() {
         />
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDialog("closed")}>
-            取消
+            {t("common.cancel")}
           </Button>
           <Button loading={busy} onClick={() => void onImportSubmit()}>
-            开始导入
+            {t("accounts.startImport")}
           </Button>
         </div>
       </Dialog>

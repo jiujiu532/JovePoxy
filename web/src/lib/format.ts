@@ -1,3 +1,5 @@
+import type { Translate } from "./i18n";
+
 /** Format a model id for display tables. */
 export function formatModelId(id: string): string {
   const trimmed = id.trim();
@@ -20,12 +22,12 @@ export function maskSecret(value: string, visiblePrefix = 8): string {
 }
 
 /** Validate non-empty admin password field (client-side). */
-export function validatePasswordInput(password: string): string | null {
+export function validatePasswordInput(password: string, t: Translate): string | null {
   if (password.trim().length === 0) {
-    return "请输入管理员密码";
+    return t("format.passwordRequired");
   }
   if (password.length < 4) {
-    return "密码至少 4 位";
+    return t("format.passwordTooShort");
   }
   return null;
 }

@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 /**
@@ -28,6 +29,7 @@ export function HardLineChart({
   readonly ariaLabel: string;
 }) {
   const uid = useId();
+  const { t } = useI18n();
   if (points.length === 0) return null;
 
   const w = 100;
@@ -93,7 +95,7 @@ export function HardLineChart({
       <figcaption className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums text-ink-faint">
         <span>{first?.label}</span>
         {peak.value > 0 ? (
-          <span className="font-medium text-ink-muted">峰值 {peak.value}</span>
+          <span className="font-medium text-ink-muted">{t("charts.peak", { value: peak.value })}</span>
         ) : null}
         <span>{last?.label}</span>
       </figcaption>
@@ -170,13 +172,14 @@ export function StatusStackBar({
   readonly ariaLabel: string;
 }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
+  const { t } = useI18n();
 
   return (
     <figure className={cn("m-0", className)} role="img" aria-label={ariaLabel}>
       <div className="flex h-7 w-full overflow-hidden border-2 border-border bg-paper-0">
         {total === 0 ? (
           <div className="flex w-full items-center justify-center text-[11px] text-ink-faint">
-            暂无请求
+            {t("charts.noRequests")}
           </div>
         ) : (
           segments

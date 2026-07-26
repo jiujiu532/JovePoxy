@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
 import { ProgressBar, ProgressRing } from "@/components/ProgressRing";
 import { viewModeGridClass } from "@/components/ViewModeToggle";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { assertNever } from "@/lib/assertNever";
 import type { ViewMode } from "@/lib/view-mode";
@@ -72,6 +73,7 @@ function ModelsHover({
   readonly children: ReactNode;
   readonly className?: string;
 }) {
+  const { t } = useI18n();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
@@ -156,7 +158,7 @@ function ModelsHover({
             onMouseLeave={scheduleClose}
           >
             <p className="mb-2 text-[11px] font-medium text-ink-muted">
-              模型请求 · {models.length}
+              {t("quotaviews.modelRequests", { count: models.length })}
             </p>
             <ul
               className="scrollbar-none space-y-1.5 overflow-y-auto"
@@ -204,6 +206,7 @@ function ModelList({
   readonly models: ReadonlyArray<QuotaModelView>;
   readonly dense?: boolean;
 }) {
+  const { t } = useI18n();
   if (models.length === 0) return null;
   const limit = dense ? 4 : 6;
   const visible = models.slice(0, limit);
@@ -230,7 +233,7 @@ function ModelList({
         ))}
         {hidden > 0 ? (
           <li className="text-[11px] font-medium text-accent">
-            +{hidden} 个模型 · 悬停外部展开
+            {t("quotaviews.moreModelsHover", { count: hidden })}
           </li>
         ) : null}
       </ul>
@@ -247,6 +250,7 @@ function CardShell({
   readonly children: ReactNode;
   readonly dense?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <article
       className={cn(
@@ -272,7 +276,7 @@ function CardShell({
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {item.badge ? <Badge kind="free">{item.badge}</Badge> : null}
           <Badge kind={item.success ? "healthy" : "error"}>
-            {item.success ? "正常" : "失败"}
+            {item.success ? t("quotaviews.success") : t("quotaviews.failed")}
           </Badge>
         </div>
       </header>
@@ -287,6 +291,7 @@ function CardShell({
 }
 
 function GridCard({ item }: { readonly item: QuotaAccountView }) {
+  const { t } = useI18n();
   return (
     <CardShell item={item}>
       {item.windows.length > 0 ? (
@@ -313,7 +318,7 @@ function GridCard({ item }: { readonly item: QuotaAccountView }) {
           ))}
         </div>
       ) : !item.error ? (
-        <p className="text-sm text-ink-muted">该账号没有可见窗口。</p>
+        <p className="text-sm text-ink-muted">{t("quotaviews.noWindows")}</p>
       ) : null}
       {item.models ? <ModelList models={item.models} /> : null}
     </CardShell>
@@ -321,6 +326,7 @@ function GridCard({ item }: { readonly item: QuotaAccountView }) {
 }
 
 function CompactCard({ item }: { readonly item: QuotaAccountView }) {
+  const { t } = useI18n();
   return (
     <CardShell item={item} dense>
       {item.windows.length > 0 ? (
@@ -337,7 +343,7 @@ function CompactCard({ item }: { readonly item: QuotaAccountView }) {
           ))}
         </div>
       ) : !item.error ? (
-        <p className="text-[12px] text-ink-muted">无窗口数据</p>
+        <p className="text-[12px] text-ink-muted">{t("quotaviews.noWindowData")}</p>
       ) : null}
       {item.models ? <ModelList models={item.models} dense /> : null}
     </CardShell>
@@ -345,6 +351,7 @@ function CompactCard({ item }: { readonly item: QuotaAccountView }) {
 }
 
 function DefaultTableCells({ item }: { readonly item: QuotaAccountView }) {
+  const { t } = useI18n();
   return (
     <>
       <td className="px-3 py-2.5 font-medium text-ink">{item.name}</td>
@@ -370,7 +377,7 @@ function DefaultTableCells({ item }: { readonly item: QuotaAccountView }) {
       ))}
       <td className="px-3 py-2.5">
         <Badge kind={item.success ? "healthy" : "error"}>
-          {item.success ? "正常" : "失败"}
+          {item.success ? t("quotaviews.success") : t("quotaviews.failed")}
         </Badge>
         {item.error ? (
           <p className="mt-1 max-w-[12rem] truncate text-[11px] text-status-error" title={item.error}>
@@ -405,6 +412,7 @@ function TableView({
   readonly tableHeaders?: ReadonlyArray<string>;
   readonly renderTableCells?: (item: QuotaAccountView) => ReactNode;
 }) {
+  const { t } = useI18n();
   const maxWindows = items.reduce((n, it) => Math.max(n, it.windows.length), 0);
   const windowLabels =
     items.find((it) => it.windows.length === maxWindows)?.windows.map((w) => w.label) ?? [];
@@ -413,11 +421,11 @@ function TableView({
   const headers =
     tableHeaders ??
     [
-      "账号",
-      "套餐 / 标识",
+      t("quotaviews.colAccount"),
+      t("quotaviews.colPlan"),
       ...windowLabels,
-      "状态",
-      ...(hasModels ? ["模型"] : []),
+      t("quotaviews.colStatus"),
+      ...(hasModels ? [t("quotaviews.colModel")] : []),
     ];
 
   return (

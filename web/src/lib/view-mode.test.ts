@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isViewMode, viewModeLabel } from "@/lib/view-mode";
+import { isViewMode, viewModeLabelKey } from "@/lib/view-mode";
 
 describe("viewMode", () => {
   it("accepts known modes only", () => {
@@ -9,9 +9,9 @@ describe("viewMode", () => {
     expect(isViewMode("list")).toBe(false);
   });
 
-  it("labels modes in Chinese", () => {
-    expect(viewModeLabel("grid")).toBe("网格视图");
-    expect(viewModeLabel("compact")).toBe("紧凑视图");
-    expect(viewModeLabel("table")).toBe("表格视图");
+  it("maps modes to i18n label keys", () => {
+    expect(viewModeLabelKey("grid")).toBe("viewmode.grid");
+    expect(viewModeLabelKey("compact")).toBe("viewmode.compact");
+    expect(viewModeLabelKey("table")).toBe("viewmode.table");
   });
 });

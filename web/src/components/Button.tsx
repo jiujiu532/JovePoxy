@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { assertNever } from "@/lib/assertNever";
+import { useI18n } from "@/lib/i18n";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -51,6 +52,7 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const isDisabled = Boolean(disabled || loading);
+  const { t } = useI18n();
   return (
     <button
       type={type}
@@ -68,7 +70,7 @@ export function Button({
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading ? <span className="opacity-80">处理中</span> : children}
+      {loading ? <span className="opacity-80">{t("common.loading")}</span> : children}
     </button>
   );
 }

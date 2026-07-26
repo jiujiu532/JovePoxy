@@ -27,6 +27,7 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { cn } from "@/lib/cn";
+import { useI18n, type Translate } from "@/lib/i18n";
 import {
   compareBySort,
   matchWeight,
@@ -47,23 +48,20 @@ type ProxyRow = {
   cooldown_until?: string;
 };
 
-function friendlyError(err: unknown, fallback: string): string {
+function friendlyError(err: unknown, fallback: string, t: Translate): string {
   if (err instanceof ApiError) {
-    if (err.status === 401) return "登录已过期，请重新登录";
+    if (err.status === 401) return t("proxies.sessionExpired");
     return err.message || fallback;
   }
-  if (err instanceof TypeError) return "无法连接服务，请确认后端已启动";
+  if (err instanceof TypeError) return t("proxies.connectFailed");
   if (err instanceof Error) {
     if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return "无法连接服务，请确认后端已启动";
+      return t("proxies.connectFailed");
     }
     return err.message || fallback;
   }
   return fallback;
 }
-
-const BEHAVIOR_TIP =
-  "未配置时 free 直连本机 IP；配置后按权重轮询出口。上游 429/5xx/连接失败会冷却节点并最多换一个重试。";
 
 /** Parse multi-line proxy batch: `url` or `label|url` or `label|url|weight` */
 function parseProxyLines(text: string): Array<{ label: string; url: string; weight: number }> {
@@ -92,6 +90,7 @@ function parseProxyLines(text: string): Array<{ label: string; url: string; weig
 export function ProxiesPage() {
   const navigate = useNavigate();
   const { push } = useToast();
+  const { t } = useI18n();
   const [rows, setRows] = useState<ProxyRow[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -136,7 +135,7 @@ export function ProxiesPage() {
         void navigate("/login");
         return;
       }
-      setListError(friendlyError(err, "加载失败"));
+      setListError(friendlyError(err, t("common.loadFailed"), t));
     } finally {
       setLoading(false);
     }
@@ -144,13 +143,14 @@ export function ProxiesPage() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
     const items = parseProxyLines(batch);
     if (items.length === 0) {
-      push("请粘贴至少一行代理 URL", "error");
+      push(t("proxies.pasteAtLeastOne"), "error");
       return;
     }
     setSaving(true);
@@ -168,10 +168,13 @@ export function ProxiesPage() {
       if (ok > 0) {
         setBatch("");
         setShowAdd(false);
-        push(fail > 0 ? `成功 ${ok}，失败 ${fail}` : `已添加 ${ok} 个节点`, fail > 0 ? "info" : "success");
+        push(
+          fail > 0 ? t("proxies.addResultMixed", { ok, fail }) : t("proxies.addResultAll", { n: ok }),
+          fail > 0 ? "info" : "success",
+        );
         await load();
       } else {
-        push("全部添加失败，请检查 URL 格式", "error");
+        push(t("proxies.addAllFailed"), "error");
       }
     } finally {
       setSaving(false);
@@ -189,7 +192,7 @@ export function ProxiesPage() {
     event.preventDefault();
     if (!editing) return;
     if (!editLabel.trim()) {
-      push("标签不能为空", "error");
+      push(t("proxies.labelRequired"), "error");
       return;
     }
     setEditSaving(true);
@@ -201,10 +204,10 @@ export function ProxiesPage() {
       if (editUrl.trim()) payload.url = editUrl.trim();
       await api.updateProxy(editing.id, payload);
       setEditing(null);
-      push("已保存", "success");
+      push(t("proxies.saved"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "保存失败"), "error");
+      push(friendlyError(err, t("proxies.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
     }
@@ -263,7 +266,10 @@ export function ProxiesPage() {
           /* continue */
         }
       }
-      push(next ? `已启用 ${ok} 个` : `已禁用 ${ok} 个`, ok > 0 ? "success" : "error");
+      push(
+        next ? t("proxies.enabledBulk", { n: ok }) : t("proxies.disabledBulk", { n: ok }),
+        ok > 0 ? "success" : "error",
+      );
       selection.clear();
       await load();
     } finally {
@@ -273,7 +279,7 @@ export function ProxiesPage() {
 
   async function bulkDelete() {
     if (selection.selected.size === 0) return;
-    if (!window.confirm(`确认删除选中的 ${selection.selected.size} 个节点？`)) return;
+    if (!window.confirm(t("proxies.bulkDeleteConfirm", { n: selection.selected.size }))) return;
     setBulkBusy(true);
     let ok = 0;
     try {
@@ -285,7 +291,7 @@ export function ProxiesPage() {
           /* continue */
         }
       }
-      push(`已删除 ${ok} 个`, ok > 0 ? "success" : "error");
+      push(t("proxies.deletedBulk", { n: ok }), ok > 0 ? "success" : "error");
       selection.clear();
       await load();
     } finally {
@@ -298,24 +304,24 @@ export function ProxiesPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="出口代理池"
-        description="Free 模型出站轮换，支持 http / socks5 / socks5h。"
+        title={t("proxies.title")}
+        description={t("proxies.description")}
         meta={
           <>
-            <MetaChip>{rows.length} 节点</MetaChip>
-            <MetaChip>启用 {enabled}</MetaChip>
-            <MetaChip>冷却 {cooling}</MetaChip>
-            <HelpTip content={BEHAVIOR_TIP} label="行为说明" />
+            <MetaChip>{t("proxies.metaNodes", { n: rows.length })}</MetaChip>
+            <MetaChip>{t("proxies.metaEnabled", { n: enabled })}</MetaChip>
+            <MetaChip>{t("proxies.metaCooling", { n: cooling })}</MetaChip>
+            <HelpTip content={t("proxies.behaviorTip")} label={t("proxies.behaviorTipLabel")} />
           </>
         }
         actions={
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
-              刷新
+              {t("common.refresh")}
             </Button>
             <Button size="sm" onClick={() => setShowAdd((v) => !v)}>
               <Plus size={14} className="mr-1" weight="bold" />
-              {showAdd ? "收起" : "批量添加"}
+              {showAdd ? t("proxies.collapse") : t("proxies.addBatch")}
             </Button>
           </div>
         }
@@ -323,17 +329,17 @@ export function ProxiesPage() {
 
       {showAdd ? (
         <ComposerPanel
-          title="批量添加代理"
-          description="每行一个节点。支持 URL，或 label|url|weight。"
+          title={t("proxies.composerTitle")}
+          description={t("proxies.composerDescription")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
               <div className="flex flex-wrap items-center gap-1.5">
-                <MetaChip>已解析 {parsedCount}</MetaChip>
-                <span className="text-[11px] text-ink-faint"># 开头为注释</span>
+                <MetaChip>{t("proxies.parsedCount", { n: parsedCount })}</MetaChip>
+                <span className="text-[11px] text-ink-faint">{t("proxies.commentHint")}</span>
               </div>
               <Button type="submit" form="proxy-batch-create" size="sm" loading={saving}>
-                写入池
+                {t("proxies.writeToPool")}
               </Button>
             </>
           }
@@ -346,7 +352,7 @@ export function ProxiesPage() {
               )}
               value={batch}
               onChange={(e) => setBatch(e.target.value)}
-              placeholder={`socks5h://user:pass@host1:1080\nhk-2|socks5h://user:pass@host2:1080|2\n# 井号开头为注释`}
+              placeholder={t("proxies.placeholder")}
               spellCheck={false}
             />
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -368,14 +374,19 @@ export function ProxiesPage() {
       ) : null}
 
       <SectionPanel
-        title="代理列表"
-        description={`${filtered.length} / ${rows.length} · 启用 ${enabled} · 冷却 ${cooling}`}
+        title={t("proxies.listTitle")}
+        description={t("proxies.listStats", {
+          filtered: filtered.length,
+          total: rows.length,
+          enabled,
+          cooling,
+        })}
         bodyClassName="p-0"
       >
         <ListToolbar
           search={query}
           onSearchChange={setQuery}
-          searchPlaceholder="标签 / 主机 / 协议"
+          searchPlaceholder={t("proxies.searchPlaceholder")}
           selectedCount={selection.selected.size}
           totalVisible={paged.length}
           allSelected={selection.allSelected}
@@ -384,25 +395,25 @@ export function ProxiesPage() {
           onClear={selection.clear}
           filters={
             <SegmentedFilter
-              aria-label="状态"
+              aria-label={t("proxies.statusAria")}
               value={status}
               onChange={(v) => setStatus(v as StatusFilter)}
               options={[
-                { value: "all", label: "全部" },
-                { value: "enabled", label: "启用" },
-                { value: "disabled", label: "禁用" },
-                { value: "cooling", label: "冷却" },
+                { value: "all", label: t("common.all") },
+                { value: "enabled", label: t("common.enabled") },
+                { value: "disabled", label: t("common.disabled") },
+                { value: "cooling", label: t("proxies.statusCooling") },
               ]}
             />
           }
           trailing={
             <>
               <FilterSelect
-                label="协议"
+                label={t("proxies.schemeLabel")}
                 value={scheme}
                 onChange={setScheme}
                 options={[
-                  { value: "all", label: "全部" },
+                  { value: "all", label: t("common.all") },
                   { value: "http", label: "http" },
                   { value: "https", label: "https" },
                   { value: "socks5", label: "socks5" },
@@ -410,25 +421,25 @@ export function ProxiesPage() {
                 ]}
               />
               <FilterSelect
-                label="权重"
+                label={t("proxies.weightFilterLabel")}
                 value={weightFilter}
                 onChange={(v) => setWeightFilter(v as WeightFilter)}
                 options={[
-                  { value: "all", label: "全部" },
-                  { value: "1", label: "=1" },
-                  { value: "ge2", label: "≥2" },
-                  { value: "ge5", label: "≥5" },
+                  { value: "all", label: t("common.all") },
+                  { value: "1", label: t("proxies.weightEq1") },
+                  { value: "ge2", label: t("proxies.weightGe2") },
+                  { value: "ge5", label: t("proxies.weightGe5") },
                 ]}
               />
               <FilterSelect
-                label="排序"
+                label={t("proxies.sortLabel")}
                 value={sort}
                 onChange={(v) => setSort(v as SortKey)}
                 options={[
-                  { value: "label_asc", label: "标签 A→Z" },
-                  { value: "host_asc", label: "主机" },
-                  { value: "weight_desc", label: "权重高→低" },
-                  { value: "status", label: "状态优先" },
+                  { value: "label_asc", label: t("proxies.sortLabelAsc") },
+                  { value: "host_asc", label: t("proxies.sortHost") },
+                  { value: "weight_desc", label: t("proxies.sortWeightDesc") },
+                  { value: "status", label: t("proxies.sortStatus") },
                 ]}
               />
             </>
@@ -441,7 +452,7 @@ export function ProxiesPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(true)}
               >
-                启用
+                {t("common.enable")}
               </Button>
               <Button
                 variant="secondary"
@@ -449,7 +460,7 @@ export function ProxiesPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(false)}
               >
-                禁用
+                {t("common.disable")}
               </Button>
               <DeleteButton loading={bulkBusy} onClick={() => void bulkDelete()} />
             </>
@@ -464,11 +475,11 @@ export function ProxiesPage() {
           <EmptyState
             compact
             icon={Globe}
-            title="无法加载"
+            title={t("proxies.loadFailedTitle")}
             description={listError}
             action={
               <Button variant="secondary" size="sm" onClick={() => void load()}>
-                重试
+                {t("common.retry")}
               </Button>
             }
           />
@@ -476,17 +487,17 @@ export function ProxiesPage() {
           <EmptyState
             compact
             icon={Globe}
-            title="暂无出口"
-            description="批量粘贴代理 URL，free 模型可换 IP 出站。"
+            title={t("proxies.emptyTitle")}
+            description={t("proxies.emptyDescription")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
-                批量添加
+                {t("proxies.addBatch")}
               </Button>
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title="无匹配" description="调整筛选或关键词。" />
+          <EmptyState compact title={t("proxies.noMatchTitle")} description={t("proxies.noMatchDescription")} />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -500,9 +511,9 @@ export function ProxiesPage() {
                   }
                 }}
                 onChange={selection.toggleAll}
-                aria-label="全选"
+                aria-label={t("proxies.selectAllAria")}
               />
-              <span className="text-[12px] text-ink-muted">全选本页</span>
+              <span className="text-[12px] text-ink-muted">{t("proxies.selectAllPageLabel")}</span>
             </div>
             <ResponsiveList
               mobile={
@@ -516,7 +527,7 @@ export function ProxiesPage() {
                           type="checkbox"
                           checked={selection.selected.has(row.id)}
                           onChange={() => selection.toggleOne(row.id)}
-                          aria-label={`选择 ${row.label}`}
+                          aria-label={t("proxies.selectRowAria", { label: row.label })}
                         />
                       }
                       title={row.label}
@@ -527,20 +538,20 @@ export function ProxiesPage() {
                       }
                       badge={
                         row.cooldown_until ? (
-                          <Badge kind="warning">冷却</Badge>
+                          <Badge kind="warning">{t("proxies.statusCooling")}</Badge>
                         ) : row.enabled ? (
-                          <Badge kind="healthy">启用</Badge>
+                          <Badge kind="healthy">{t("common.enabled")}</Badge>
                         ) : (
-                          <Badge kind="neutral">禁用</Badge>
+                          <Badge kind="neutral">{t("common.disabled")}</Badge>
                         )
                       }
                       fields={[
-                        { label: "权重", value: row.weight },
+                        { label: t("proxies.weightFilterLabel"), value: row.weight },
                         {
-                          label: "冷却",
+                          label: t("proxies.statusCooling"),
                           value: row.cooldown_until
                             ? new Date(row.cooldown_until).toLocaleString()
-                            : "-",
+                            : t("common.none"),
                         },
                       ]}
                       actions={
@@ -548,7 +559,7 @@ export function ProxiesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            aria-label="编辑"
+                            aria-label={t("proxies.editAria")}
                             onClick={() => openEdit(row)}
                           >
                             <PencilSimple size={14} />
@@ -561,20 +572,20 @@ export function ProxiesPage() {
                                 .setProxyEnabled(row.id, !row.enabled)
                                 .then(load)
                                 .catch((err) =>
-                                  push(friendlyError(err, "操作失败"), "error"),
+                                  push(friendlyError(err, t("common.actionFailed"), t), "error"),
                                 )
                             }
                           >
-                            {row.enabled ? "禁用" : "启用"}
+                            {row.enabled ? t("common.disable") : t("common.enable")}
                           </Button>
                           <DeleteButton
                             onClick={() => {
-                              if (window.confirm(`删除 ${row.label}？`)) {
+                              if (window.confirm(t("proxies.deleteConfirm", { label: row.label }))) {
                                 void api
                                   .deleteProxy(row.id)
                                   .then(load)
                                   .catch((err) =>
-                                    push(friendlyError(err, "删除失败"), "error"),
+                                    push(friendlyError(err, t("proxies.deleteFailed"), t), "error"),
                                   );
                               }
                             }}
@@ -601,22 +612,22 @@ export function ProxiesPage() {
                               }
                             }}
                             onChange={selection.toggleAll}
-                            aria-label="全选"
+                            aria-label={t("proxies.selectAllAria")}
                           />
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">标签</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">协议</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">主机</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("proxies.colLabel")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("proxies.schemeLabel")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("proxies.sortHost")}</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">
                           <span className="inline-flex items-center gap-1">
-                            权重
-                            <HelpTip content="启用节点按权重轮询；权重大 → 选中概率高。" />
+                            {t("proxies.weightFilterLabel")}
+                            <HelpTip content={t("proxies.weightTip")} />
                           </span>
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">状态</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">冷却</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("proxies.statusAria")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("proxies.statusCooling")}</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                          操作
+                          {t("proxies.colActions")}
                         </th>
                       </tr>
                     </thead>
@@ -632,7 +643,7 @@ export function ProxiesPage() {
                               type="checkbox"
                               checked={selection.selected.has(row.id)}
                               onChange={() => selection.toggleOne(row.id)}
-                              aria-label={`选择 ${row.label}`}
+                              aria-label={t("proxies.selectRowAria", { label: row.label })}
                             />
                           </td>
                           <td
@@ -660,24 +671,24 @@ export function ProxiesPage() {
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5">
                             {row.cooldown_until ? (
-                              <Badge kind="warning">冷却</Badge>
+                              <Badge kind="warning">{t("proxies.statusCooling")}</Badge>
                             ) : row.enabled ? (
-                              <Badge kind="healthy">启用</Badge>
+                              <Badge kind="healthy">{t("common.enabled")}</Badge>
                             ) : (
-                              <Badge kind="neutral">禁用</Badge>
+                              <Badge kind="neutral">{t("common.disabled")}</Badge>
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-ink-muted">
                             {row.cooldown_until
                               ? new Date(row.cooldown_until).toLocaleString()
-                              : "-"}
+                              : t("common.none")}
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex justify-end gap-1.5">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                aria-label="编辑"
+                                aria-label={t("proxies.editAria")}
                                 onClick={() => openEdit(row)}
                               >
                                 <PencilSimple size={14} />
@@ -690,21 +701,21 @@ export function ProxiesPage() {
                                     .setProxyEnabled(row.id, !row.enabled)
                                     .then(load)
                                     .catch((err) =>
-                                      push(friendlyError(err, "操作失败"), "error"),
+                                      push(friendlyError(err, t("common.actionFailed"), t), "error"),
                                     )
                                 }
                               >
-                                {row.enabled ? "禁用" : "启用"}
+                                {row.enabled ? t("common.disable") : t("common.enable")}
                               </Button>
                               <DeleteButton
                                 onClick={() => {
-                                  if (window.confirm(`删除 ${row.label}？`)) {
+                                  if (window.confirm(t("proxies.deleteConfirm", { label: row.label }))) {
                                     void api
                                       .deleteProxy(row.id)
                                       .then(load)
                                       .catch((err) =>
                                         push(
-                                          friendlyError(err, "删除失败"),
+                                          friendlyError(err, t("proxies.deleteFailed"), t),
                                           "error",
                                         ),
                                       );
@@ -736,20 +747,20 @@ export function ProxiesPage() {
 
       <Dialog
         open={editing !== null}
-        title="编辑出口代理"
-        description="可改标签与权重；URL 留空则保持原节点"
+        title={t("proxies.editTitle")}
+        description={t("proxies.editDescription")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>
           <TextInput
-            label="标签"
+            label={t("proxies.colLabel")}
             value={editLabel}
             onChange={(e) => setEditLabel(e.target.value)}
           />
           <div>
             <label className="mb-1 flex items-center gap-1 text-caption text-ink-muted">
-              权重
-              <HelpTip content="启用节点按权重轮询。" />
+              {t("proxies.weightFilterLabel")}
+              <HelpTip content={t("proxies.weightTipEdit")} />
             </label>
             <input
               className="h-10 w-full rounded-none border border-border bg-paper-0 px-3 text-sm text-ink"
@@ -759,22 +770,22 @@ export function ProxiesPage() {
             />
           </div>
           <TextInput
-            label="新 URL（可选）"
+            label={t("proxies.newUrlLabel")}
             value={editUrl}
             onChange={(e) => setEditUrl(e.target.value)}
-            placeholder="留空 = 不更换"
+            placeholder={t("proxies.newUrlPlaceholder")}
           />
           {editing ? (
             <p className="font-mono text-[12px] text-ink-faint">
-              当前 {editing.scheme}://{editing.host}
+              {t("proxies.currentUrl", { scheme: editing.scheme, host: editing.host })}
             </p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(null)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" size="sm" loading={editSaving}>
-              保存
+              {t("common.save")}
             </Button>
           </div>
         </form>

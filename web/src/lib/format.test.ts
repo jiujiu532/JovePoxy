@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { formatModelId, maskSecret, validatePasswordInput } from "./format";
+import { translate } from "./i18n";
+
+const t = (key: Parameters<typeof translate>[1]) => translate("zh", key);
 
 describe("formatModelId", () => {
   it("returns hyphen when empty", () => {
@@ -23,14 +26,14 @@ describe("maskSecret", () => {
 
 describe("validatePasswordInput", () => {
   it("rejects empty password", () => {
-    expect(validatePasswordInput("")).toBe("请输入管理员密码");
+    expect(validatePasswordInput("", t)).toBe("请输入管理员密码");
   });
 
   it("rejects short password", () => {
-    expect(validatePasswordInput("ab")).toBe("密码至少 4 位");
+    expect(validatePasswordInput("ab", t)).toBe("密码至少 4 位");
   });
 
   it("accepts valid password", () => {
-    expect(validatePasswordInput("admin")).toBeNull();
+    expect(validatePasswordInput("admin", t)).toBeNull();
   });
 });

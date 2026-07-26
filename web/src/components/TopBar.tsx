@@ -1,5 +1,6 @@
 import { List } from "@phosphor-icons/react";
 import { BrandMark } from "@/components/BrandMark";
+import { useI18n } from "@/lib/i18n";
 
 export type TopBarProps = {
   readonly onMenuClick: () => void;
@@ -7,12 +8,13 @@ export type TopBarProps = {
 
 /** Mobile-only bar: hamburger. Desktop chrome lives in the sidebar. */
 export function TopBar({ onMenuClick }: TopBarProps) {
+  const { t } = useI18n();
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b-2 border-border bg-paper-1 px-3 md:hidden">
       <button
         type="button"
         className="inline-flex h-9 w-9 items-center justify-center border-2 border-transparent text-ink-muted hover:border-border hover:bg-paper-0 hover:text-ink"
-        aria-label="打开导航"
+        aria-label={t("shell.openNav")}
         onClick={onMenuClick}
       >
         <List size={20} weight="bold" />

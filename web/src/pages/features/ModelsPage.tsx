@@ -17,6 +17,7 @@ import {
 } from "@/components";
 import { api, ApiError, type ModelDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n } from "@/lib/i18n";
 
 /** free≈public, paid≈zen — single axis. */
 type KindFilter = "all" | "free" | "paid";
@@ -29,6 +30,7 @@ function modelFamily(id: string): string {
 
 export function ModelsPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [models, setModels] = useState<ModelDTO[]>([]);
   const [stale, setStale] = useState(false);
   const [query, setQuery] = useState("");
@@ -55,7 +57,7 @@ export function ModelsPage() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -122,53 +124,58 @@ export function ModelsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="模型目录"
-        description="动态来自上游目录。Free 走 public + 出口代理，Paid 走 OpenCode 密钥池。"
+        title={t("models.title")}
+        description={t("models.description")}
         meta={
           stale
-            ? "缓存可能过期，建议刷新"
-            : `共 ${models.length} · free ${freeCount} · paid ${paidCount}`
+            ? t("models.staleMeta")
+            : t("models.summaryMeta", { total: models.length, free: freeCount, paid: paidCount })
         }
         actions={
           <Button variant="secondary" size="sm" loading={refreshing} onClick={() => void load(true)}>
             <ArrowClockwise size={16} className="mr-1.5" />
-            刷新
+            {t("common.refresh")}
           </Button>
         }
         className="!pb-3"
       />
 
       {loading ? <Skeleton className="h-48 w-full" /> : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
 
       {!loading && !error ? (
         <SectionPanel
-          title="目录"
-          description={`${filtered.length} / ${models.length} · free ${filteredFree} · paid ${filtered.length - filteredFree}`}
+          title={t("models.catalogTitle")}
+          description={t("models.catalogDescription", {
+            filtered: filtered.length,
+            total: models.length,
+            filteredFree,
+            filteredPaid: filtered.length - filteredFree,
+          })}
           bodyClassName="p-0"
         >
           <FilterStrip
             search={query}
             onSearchChange={setQuery}
-            searchPlaceholder="模型 ID / 系列"
+            searchPlaceholder={t("models.searchPlaceholder")}
             filters={
               <>
                 <SegmentedFilter
-                  aria-label="类型"
+                  aria-label={t("models.filterKindLabel")}
                   value={kind}
                   onChange={(v) => setKind(v as KindFilter)}
                   options={[
-                    { value: "all", label: "全部" },
+                    { value: "all", label: t("common.all") },
                     { value: "free", label: "Free" },
                     { value: "paid", label: "Paid" },
                   ]}
                 />
                 <FilterSelect
-                  label="系列"
+                  label={t("models.filterFamilyLabel")}
                   value={familyFilter}
                   onChange={setFamilyFilter}
                   options={[
-                    { value: "all", label: "全部" },
+                    { value: "all", label: t("common.all") },
                     ...families.map((family) => ({ value: family, label: family })),
                   ]}
                 />
@@ -177,18 +184,18 @@ export function ModelsPage() {
             trailing={
               <>
                 <FilterSelect
-                  label="排序"
+                  label={t("models.filterSortLabel")}
                   value={sortKey}
                   onChange={(v) => setSortKey(v as SortKey)}
                   options={[
-                    { value: "id_asc", label: "ID A→Z" },
-                    { value: "id_desc", label: "ID Z→A" },
-                    { value: "free_first", label: "Free 优先" },
-                    { value: "paid_first", label: "Paid 优先" },
+                    { value: "id_asc", label: t("models.sortIdAsc") },
+                    { value: "id_desc", label: t("models.sortIdDesc") },
+                    { value: "free_first", label: t("models.sortFreeFirst") },
+                    { value: "paid_first", label: t("models.sortPaidFirst") },
                   ]}
                 />
                 <Button variant="secondary" size="sm" onClick={resetFilters}>
-                  重置
+                  {t("models.reset")}
                 </Button>
               </>
             }
@@ -197,16 +204,20 @@ export function ModelsPage() {
           {models.length === 0 ? (
             <EmptyState
               icon={Stack}
-              title="暂无模型"
-              description="上游目录为空，或缓存尚未就绪。点右上角刷新。"
+              title={t("models.emptyTitle")}
+              description={t("models.emptyDescription")}
               action={
                 <Button size="sm" loading={refreshing} onClick={() => void load(true)}>
-                  刷新目录
+                  {t("models.emptyAction")}
                 </Button>
               }
             />
           ) : filtered.length === 0 ? (
-            <EmptyState compact title="无匹配" description="调整筛选条件。" />
+            <EmptyState
+              compact
+              title={t("models.emptyFilteredTitle")}
+              description={t("models.emptyFilteredDescription")}
+            />
           ) : (
             <div className="min-w-0 overflow-hidden">
               <div className="divide-y divide-border md:hidden">
@@ -218,7 +229,7 @@ export function ModelsPage() {
                       </p>
                       <p className="mt-0.5 text-[12px] text-ink-muted">
                         {modelFamily(model.id)} ·{" "}
-                        {model.free ? "public + 出口代理" : "OpenCode 密钥池"}
+                        {model.free ? t("models.routeFree") : t("models.routePaid")}
                       </p>
                     </div>
                     {model.free ? (
@@ -233,10 +244,10 @@ export function ModelsPage() {
                 <table className="w-full min-w-[36rem] text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">模型 ID</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">系列</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">类型</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">路由</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.id")}</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.family")}</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.kind")}</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.route")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -259,7 +270,7 @@ export function ModelsPage() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-ink-muted">
-                          {model.free ? "public + 出口代理" : "OpenCode 密钥池"}
+                          {model.free ? t("models.routeFree") : t("models.routePaid")}
                         </td>
                       </tr>
                     ))}

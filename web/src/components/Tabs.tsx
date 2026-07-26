@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 export type TabItem = {
@@ -27,8 +28,10 @@ export function Tabs({
   onChange,
   className,
   variant = "pill",
-  "aria-label": ariaLabel = "分区",
+  "aria-label": ariaLabelProp,
 }: TabsProps) {
+  const { t } = useI18n();
+  const ariaLabel = ariaLabelProp ?? t("tabs.defaultAriaLabel");
   function onKeyNav(event: KeyboardEvent, currentId: string) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
     event.preventDefault();

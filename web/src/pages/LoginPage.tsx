@@ -5,6 +5,7 @@ import { BrandMark, SecretInput, Skeleton } from "@/components";
 import { ApiError, api } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { validatePasswordInput } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { APP_VERSION } from "@/lib/version";
 import { cn } from "@/lib/cn";
 
@@ -14,6 +15,7 @@ import { cn } from "@/lib/cn";
  */
 export function LoginPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
@@ -63,7 +65,7 @@ export function LoginPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validation = validatePasswordInput(password);
+    const validation = validatePasswordInput(password, t);
     if (validation) {
       setError(validation);
       return;
@@ -75,7 +77,7 @@ export function LoginPage() {
       setSessionHint(true);
       void navigate("/app/overview");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "登录失败");
+      setError(err instanceof ApiError ? err.message : t("login.failed"));
     } finally {
       setLoading(false);
     }
@@ -109,7 +111,7 @@ export function LoginPage() {
                   JovePoxy
                 </p>
                 <p className="mt-0.5 text-[12px] text-ink-faint">
-                  Gateway Console
+                  {t("login.brandSub")}
                 </p>
               </div>
             </div>
@@ -117,10 +119,10 @@ export function LoginPage() {
             {/* Title */}
             <div className="mt-7">
               <h1 className="text-[1.55rem] font-semibold tracking-tight text-ink">
-                登录控制台
+                {t("login.title")}
               </h1>
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink-muted">
-                使用管理员密码进入。
+                {t("login.subtitle")}
               </p>
             </div>
 
@@ -131,7 +133,7 @@ export function LoginPage() {
               noValidate
             >
               <SecretInput
-                label="管理员密码"
+                label={t("login.password")}
                 name="password"
                 value={password}
                 onChange={(e) => {
@@ -142,7 +144,7 @@ export function LoginPage() {
                 disabled={loading}
                 autoFocus
                 autoComplete="current-password"
-                placeholder="输入密码"
+                placeholder={t("login.passwordPlaceholder")}
                 inputClassName={cn(
                   "h-11 rounded-none border-2 border-border bg-paper-2",
                   "focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",
@@ -166,7 +168,7 @@ export function LoginPage() {
                 )}
               >
                 <span className="truncate">
-                  {loading ? "正在进入…" : "进入控制台"}
+                  {loading ? t("login.submitting") : t("login.submit")}
                 </span>
                 <span
                   className={cn(
@@ -182,7 +184,7 @@ export function LoginPage() {
 
             {/* Quiet foot */}
             <div className="mt-6 flex items-center justify-between gap-3 border-t-2 border-border pt-4">
-              <p className="text-[11px] text-ink-faint">本地网关 · 会话 Cookie</p>
+              <p className="text-[11px] text-ink-faint">{t("login.foot")}</p>
               <p className="font-mono text-[11px] tabular-nums text-ink-faint">
                 v{APP_VERSION}
               </p>

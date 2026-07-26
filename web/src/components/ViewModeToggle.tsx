@@ -2,7 +2,8 @@ import { Rows, SquaresFour, Table } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { assertNever } from "@/lib/assertNever";
-import { viewModeLabel, type ViewMode } from "@/lib/view-mode";
+import { useI18n } from "@/lib/i18n";
+import { viewModeLabelKey, viewModeShortLabelKey, type ViewMode } from "@/lib/view-mode";
 
 export type ViewModeToggleProps = {
   readonly value: ViewMode;
@@ -28,10 +29,11 @@ function modeButtonClass(active: boolean): string {
 }
 
 export function ViewModeToggle({ value, onChange, className }: ViewModeToggleProps) {
+  const { t } = useI18n();
   return (
     <div
       role="group"
-      aria-label="切换视图"
+      aria-label={t("viewmode.switch")}
       className={cn(
         "inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5",
         className,
@@ -39,7 +41,7 @@ export function ViewModeToggle({ value, onChange, className }: ViewModeTogglePro
     >
       {MODES.map(({ mode, Icon }) => {
         const active = value === mode;
-        const label = viewModeLabel(mode);
+        const label = t(viewModeLabelKey(mode));
         return (
           <button
             key={mode}
@@ -51,7 +53,7 @@ export function ViewModeToggle({ value, onChange, className }: ViewModeTogglePro
             onClick={() => onChange(mode)}
           >
             <Icon size={16} weight={active ? "fill" : "regular"} aria-hidden />
-            <span className="hidden sm:inline">{label.replace("视图", "")}</span>
+            <span className="hidden sm:inline">{t(viewModeShortLabelKey(mode))}</span>
           </button>
         );
       })}

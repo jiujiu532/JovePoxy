@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { assertNever } from "@/lib/assertNever";
+import type { MessageKey } from "@/lib/i18n/zh";
 
 export type ViewMode = "grid" | "compact" | "table";
 
@@ -29,14 +30,29 @@ export function writeViewMode(storageKey: string, mode: ViewMode): void {
   }
 }
 
-export function viewModeLabel(mode: ViewMode): string {
+/** 返回视图模式标签的 i18n key；由渲染处 t()。 */
+export function viewModeLabelKey(mode: ViewMode): MessageKey {
   switch (mode) {
     case "grid":
-      return "网格视图";
+      return "viewmode.grid";
     case "compact":
-      return "紧凑视图";
+      return "viewmode.compact";
     case "table":
-      return "表格视图";
+      return "viewmode.table";
+    default:
+      return assertNever(mode);
+  }
+}
+
+/** 返回视图模式短标签（无"视图"/"view"后缀）的 i18n key；由渲染处 t()。 */
+export function viewModeShortLabelKey(mode: ViewMode): MessageKey {
+  switch (mode) {
+    case "grid":
+      return "viewmode.gridShort";
+    case "compact":
+      return "viewmode.compactShort";
+    case "table":
+      return "viewmode.tableShort";
     default:
       return assertNever(mode);
   }

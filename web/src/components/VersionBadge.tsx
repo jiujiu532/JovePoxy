@@ -2,13 +2,14 @@ import { useCallback, useState } from "react";
 import { Badge, Button, Dialog } from "@/components";
 import { api, type VersionInfoDTO } from "@/lib/api";
 import { APP_VERSION } from "@/lib/version";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
-function formatCheckedAt(value?: string): string {
+function formatCheckedAt(value: string | undefined, lang: "zh" | "en"): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("zh-CN", {
+  return d.toLocaleString(lang === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -23,32 +24,36 @@ function formatCheckedAt(value?: string): string {
  * Full-width bar (not pill) for sidebar footer. Opens remote version dialog.
  */
 export function VersionBadge({ className }: { readonly className?: string }) {
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [info, setInfo] = useState<VersionInfoDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (refresh: boolean) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.version(refresh);
-      setInfo(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "检查失败");
-      setInfo({
-        current: APP_VERSION,
-        latest: APP_VERSION,
-        update_available: false,
-        image: "jovepoxy",
-        checked_at: new Date().toISOString(),
-        source: "local",
-        note: "无法连接版本检查接口",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (refresh: boolean) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await api.version(refresh);
+        setInfo(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t("version.checkFailed"));
+        setInfo({
+          current: APP_VERSION,
+          latest: APP_VERSION,
+          update_available: false,
+          image: "jovepoxy",
+          checked_at: new Date().toISOString(),
+          source: "local",
+          note: t("version.offlineNote"),
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [t],
+  );
 
   async function openDialog() {
     setOpen(true);
@@ -71,42 +76,42 @@ export function VersionBadge({ className }: { readonly className?: string }) {
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
           className,
         )}
-        aria-label={`当前版本 v${APP_VERSION}，点击查看更新`}
+        aria-label={t("version.badgeAria", { version: APP_VERSION })}
       >
         v{APP_VERSION}
       </button>
 
-      <Dialog open={open} title="版本" onClose={() => setOpen(false)}>
+      <Dialog open={open} title={t("version.title")} onClose={() => setOpen(false)}>
         <div className="flex flex-col gap-3.5">
           <div className="grid gap-3">
             <div>
-              <p className="text-[12px] text-ink-muted">当前版本</p>
+              <p className="text-[12px] text-ink-muted">{t("version.current")}</p>
               <p className="mt-0.5 font-mono text-[18px] font-semibold tracking-tight text-ink">
                 v{current}
               </p>
             </div>
             <div>
-              <p className="text-[12px] text-ink-muted">最新版本</p>
+              <p className="text-[12px] text-ink-muted">{t("version.latest")}</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <p className="font-mono text-[18px] font-semibold tracking-tight text-ink">
                   v{latest}
                 </p>
-                {update ? <Badge kind="healthy">可更新</Badge> : null}
+                {update ? <Badge kind="healthy">{t("version.updatable")}</Badge> : null}
                 {!update && info && !error ? (
-                  <Badge kind="neutral">最新</Badge>
+                  <Badge kind="neutral">{t("version.upToDate")}</Badge>
                 ) : null}
               </div>
             </div>
             <div>
-              <p className="text-[12px] text-ink-muted">镜像 / 产物</p>
+              <p className="text-[12px] text-ink-muted">{t("version.image")}</p>
               <p className="mt-0.5 break-all font-mono text-[13px] text-ink">
                 {info?.image ?? "jovepoxy"}
               </p>
             </div>
             <div>
-              <p className="text-[12px] text-ink-muted">检查时间</p>
+              <p className="text-[12px] text-ink-muted">{t("version.checkedAt")}</p>
               <p className="mt-0.5 text-[13px] text-ink">
-                {formatCheckedAt(info?.checked_at)}
+                {formatCheckedAt(info?.checked_at, lang)}
               </p>
             </div>
           </div>
@@ -121,8 +126,7 @@ export function VersionBadge({ className }: { readonly className?: string }) {
           ) : null}
 
           <p className="text-[11px] leading-relaxed text-ink-faint">
-            远端检查读取公开 GitHub Releases（VERSION_REPO=owner/repo）。私有仓库不会返回更新。Docker
-            环境请 docker pull / 重建镜像后重启。
+            {t("version.hint")}
           </p>
 
           <div className="flex justify-end gap-2 pt-1">
@@ -132,10 +136,10 @@ export function VersionBadge({ className }: { readonly className?: string }) {
               loading={loading}
               onClick={() => void load(true)}
             >
-              立即检查
+              {t("version.checkNow")}
             </Button>
             <Button size="sm" onClick={() => setOpen(false)}>
-              关闭
+              {t("dialog.close")}
             </Button>
           </div>
         </div>

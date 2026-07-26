@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 export type SegmentOption = {
@@ -225,6 +226,7 @@ export function SearchField({
   readonly placeholder?: string;
   readonly className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <label className={cn("relative w-full min-w-0 sm:w-56", className)}>
       <MagnifyingGlass
@@ -235,7 +237,7 @@ export function SearchField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? "搜索"}
+        placeholder={placeholder ?? t("common.search")}
         className={cn(
           "h-8 w-full rounded-none border-2 border-border bg-paper-0 pl-8 pr-2.5 text-[12px] text-ink",
           "placeholder:text-ink-faint outline-none transition-[border-color,box-shadow] duration-150",
@@ -347,6 +349,7 @@ export function SelectionStrip({
   readonly bulkActions?: ReactNode;
   readonly className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div
       role="status"
@@ -365,9 +368,9 @@ export function SelectionStrip({
           >
             {selectedCount}
           </span>
-          已选
+          {t("listselect.selected")}
           <span className="font-normal text-ink-faint">
-            / 本页 {totalVisible}
+            {t("listselect.ofPage", { total: totalVisible })}
           </span>
         </span>
         <span className="hidden h-3.5 w-px bg-ink sm:inline-block" aria-hidden />
@@ -377,21 +380,21 @@ export function SelectionStrip({
             className="font-medium text-ink-muted transition-colors hover:text-ink"
             onClick={onSelectAll}
           >
-            {allSelected ? "取消全选" : "全选本页"}
+            {allSelected ? t("listselect.deselectAll") : t("listselect.selectAll")}
           </button>
           <button
             type="button"
             className="font-medium text-ink-muted transition-colors hover:text-ink"
             onClick={onInvert}
           >
-            反选
+            {t("listselect.invert")}
           </button>
           <button
             type="button"
             className="font-medium text-ink-faint transition-colors hover:text-ink"
             onClick={onClear}
           >
-            清空
+            {t("listselect.clear")}
           </button>
         </div>
       </div>

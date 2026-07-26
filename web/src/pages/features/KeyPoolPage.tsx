@@ -29,6 +29,7 @@ import {
 } from "@/components";
 import { api, ApiError, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n, type Translate } from "@/lib/i18n";
 import { isProviderTab, type ProviderTab } from "@/lib/routes";
 import {
   compareBySort,
@@ -40,23 +41,20 @@ import {
 } from "@/lib/selection";
 import { tableRowClass } from "@/lib/table-row";
 
-function friendlyError(err: unknown, fallback: string): string {
+function friendlyError(err: unknown, fallback: string, t: Translate): string {
   if (err instanceof ApiError) {
-    if (err.status === 401) return "登录已过期，请重新登录";
+    if (err.status === 401) return t("keypool.sessionExpired");
     return err.message || fallback;
   }
-  if (err instanceof TypeError) return "无法连接服务，请确认后端已启动";
+  if (err instanceof TypeError) return t("keypool.connectFailed");
   if (err instanceof Error) {
     if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return "无法连接服务，请确认后端已启动";
+      return t("keypool.connectFailed");
     }
     return err.message || fallback;
   }
   return fallback;
 }
-
-const POLL_TIP =
-  "OpenCode 付费模型按权重加权轮询健康密钥；上游 401/429/5xx 会冷却当前 key 并最多换一把重试一次。权重越大被选中概率越高。";
 
 function useKeyProviderTab(): readonly [ProviderTab, (tab: ProviderTab) => void] {
   const [params, setParams] = useSearchParams();
@@ -70,6 +68,7 @@ function useKeyProviderTab(): readonly [ProviderTab, (tab: ProviderTab) => void]
 
 export function KeyPoolPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { push } = useToast();
   const [provider, setProvider] = useKeyProviderTab();
   const [keys, setKeys] = useState<ZenKeyDTO[]>([]);
@@ -108,7 +107,7 @@ export function KeyPoolPage() {
         void navigate("/login");
         return;
       }
-      setListError(friendlyError(err, "加载密钥列表失败"));
+      setListError(friendlyError(err, t("keypool.loadListFailed"), t));
     } finally {
       setLoading(false);
     }
@@ -128,7 +127,7 @@ export function KeyPoolPage() {
   async function onCreate(event: FormEvent) {
     event.preventDefault();
     if (!secret.trim()) {
-      push(`请填写 ${providerLabel} API Key`, "error");
+      push(t("keypool.secretRequired", { provider: providerLabel }), "error");
       return;
     }
     setSaving(true);
@@ -143,10 +142,10 @@ export function KeyPoolPage() {
       setSecret("");
       setWeight("1");
       setShowAdd(false);
-      push("密钥已添加", "success");
+      push(t("keypool.added"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "添加失败"), "error");
+      push(friendlyError(err, t("keypool.addFailed"), t), "error");
     } finally {
       setSaving(false);
     }
@@ -163,7 +162,7 @@ export function KeyPoolPage() {
     event.preventDefault();
     if (!editing) return;
     if (!editLabel.trim()) {
-      push("标签不能为空", "error");
+      push(t("keypool.labelRequired"), "error");
       return;
     }
     setEditSaving(true);
@@ -175,10 +174,10 @@ export function KeyPoolPage() {
       if (editSecret.trim()) payload.secret = editSecret.trim();
       await api.updateZenKey(editing.id, payload);
       setEditing(null);
-      push("已保存", "success");
+      push(t("keypool.saved"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "保存失败"), "error");
+      push(friendlyError(err, t("keypool.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
     }
@@ -236,7 +235,10 @@ export function KeyPoolPage() {
           /* continue */
         }
       }
-      push(next ? `已启用 ${ok} 把` : `已禁用 ${ok} 把`, ok > 0 ? "success" : "error");
+      push(
+        next ? t("keypool.bulkEnabled", { n: ok }) : t("keypool.bulkDisabled", { n: ok }),
+        ok > 0 ? "success" : "error",
+      );
       selection.clear();
       await load();
     } finally {
@@ -246,7 +248,7 @@ export function KeyPoolPage() {
 
   async function bulkDelete() {
     if (selection.selected.size === 0) return;
-    if (!window.confirm(`确认删除选中的 ${selection.selected.size} 把密钥？`)) return;
+    if (!window.confirm(t("keypool.bulkDeleteConfirm", { n: selection.selected.size }))) return;
     setBulkBusy(true);
     let ok = 0;
     try {
@@ -258,7 +260,7 @@ export function KeyPoolPage() {
           /* continue */
         }
       }
-      push(`已删除 ${ok} 把`, ok > 0 ? "success" : "error");
+      push(t("keypool.bulkDeleted", { n: ok }), ok > 0 ? "success" : "error");
       selection.clear();
       await load();
     } finally {
@@ -269,11 +271,11 @@ export function KeyPoolPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="密钥池"
-        description="上游 API 密钥池。按提供商分池管理，支持加权轮询与冷却。"
+        title={t("keypool.title")}
+        description={t("keypool.description")}
         toolbar={
           <Tabs
-            aria-label="提供商"
+            aria-label={t("keypool.providerTabAria")}
             value={provider}
             onChange={(id) => setProvider(id as ProviderTab)}
             items={[
@@ -284,21 +286,21 @@ export function KeyPoolPage() {
         }
         meta={
           <>
-            <MetaChip>{keys.length} 把</MetaChip>
-            <MetaChip>启用 {enabled}</MetaChip>
-            <MetaChip>冷却 {cooling}</MetaChip>
-            <MetaChip>权重 {totalWeight}</MetaChip>
-            <HelpTip content={POLL_TIP} label="轮询说明" />
+            <MetaChip>{t("keypool.metaCount", { n: keys.length })}</MetaChip>
+            <MetaChip>{t("keypool.metaEnabled", { n: enabled })}</MetaChip>
+            <MetaChip>{t("keypool.metaCooling", { n: cooling })}</MetaChip>
+            <MetaChip>{t("keypool.metaWeight", { n: totalWeight })}</MetaChip>
+            <HelpTip content={t("keypool.pollTip")} label={t("keypool.pollTipLabel")} />
           </>
         }
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
-              刷新
+              {t("common.refresh")}
             </Button>
             <Button size="sm" onClick={() => setShowAdd((v) => !v)}>
               <Plus size={14} className="mr-1" weight="bold" />
-              {showAdd ? "收起" : "添加"}
+              {showAdd ? t("keypool.collapse") : t("common.add")}
             </Button>
           </div>
         }
@@ -306,14 +308,14 @@ export function KeyPoolPage() {
 
       {showAdd ? (
         <ComposerPanel
-          title={`添加 ${providerLabel} 密钥`}
-          description="完整 secret 入库后不可回显，仅保存掩码前缀。"
+          title={t("keypool.addDialogTitle", { provider: providerLabel })}
+          description={t("keypool.addDialogDesc")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
-              <p className="text-[12px] text-ink-faint">权重越大，被轮询选中概率越高</p>
+              <p className="text-[12px] text-ink-faint">{t("keypool.weightHint")}</p>
               <Button type="submit" form="key-pool-create" size="sm" loading={saving}>
-                入库
+                {t("keypool.submit")}
               </Button>
             </>
           }
@@ -323,7 +325,7 @@ export function KeyPoolPage() {
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1.3fr_6.5rem]"
             onSubmit={(e) => void onCreate(e)}
           >
-            <CompactField label="标签">
+            <CompactField label={t("keypool.labelField")}>
               <input
                 className={fieldInputClass}
                 value={label}
@@ -342,9 +344,9 @@ export function KeyPoolPage() {
               />
             </CompactField>
             <CompactField
-              label="权重"
+              label={t("keypool.weightField")}
               tip={
-                <HelpTip content="加权轮询：建议主力 2–5，备用 1。" />
+                <HelpTip content={t("keypool.weightTip")} />
               }
             >
               <input
@@ -359,14 +361,14 @@ export function KeyPoolPage() {
       ) : null}
 
       <SectionPanel
-        title="密钥列表"
-        description={`${filtered.length} / ${keys.length} 把 · 可多选批量操作`}
+        title={t("keypool.listTitle")}
+        description={t("keypool.listDesc", { filtered: filtered.length, total: keys.length })}
         bodyClassName="p-0"
       >
         <ListToolbar
           search={query}
           onSearchChange={setQuery}
-          searchPlaceholder="标签 / 前缀"
+          searchPlaceholder={t("keypool.searchPlaceholder")}
           selectedCount={selection.selected.size}
           totalVisible={paged.length}
           allSelected={selection.allSelected}
@@ -375,40 +377,40 @@ export function KeyPoolPage() {
           onClear={selection.clear}
           filters={
             <SegmentedFilter
-              aria-label="状态"
+              aria-label={t("keypool.statusAria")}
               value={status}
               onChange={(v) => setStatus(v as StatusFilter)}
               options={[
-                { value: "all", label: "全部" },
-                { value: "enabled", label: "启用" },
-                { value: "disabled", label: "禁用" },
-                { value: "cooling", label: "冷却" },
+                { value: "all", label: t("common.all") },
+                { value: "enabled", label: t("common.enabled") },
+                { value: "disabled", label: t("common.disabled") },
+                { value: "cooling", label: t("keypool.statusCooling") },
               ]}
             />
           }
           trailing={
             <>
               <FilterSelect
-                label="权重"
+                label={t("keypool.weightFilterLabel")}
                 value={weightFilter}
                 onChange={(v) => setWeightFilter(v as WeightFilter)}
                 options={[
-                  { value: "all", label: "全部" },
-                  { value: "1", label: "=1" },
-                  { value: "ge2", label: "≥2" },
-                  { value: "ge5", label: "≥5" },
+                  { value: "all", label: t("common.all") },
+                  { value: "1", label: t("keypool.weightEq1") },
+                  { value: "ge2", label: t("keypool.weightGe2") },
+                  { value: "ge5", label: t("keypool.weightGe5") },
                 ]}
               />
               <FilterSelect
-                label="排序"
+                label={t("keypool.sortLabel")}
                 value={sort}
                 onChange={(v) => setSort(v as SortKey)}
                 options={[
-                  { value: "label_asc", label: "标签 A→Z" },
-                  { value: "label_desc", label: "标签 Z→A" },
-                  { value: "weight_desc", label: "权重高→低" },
-                  { value: "weight_asc", label: "权重低→高" },
-                  { value: "status", label: "状态优先" },
+                  { value: "label_asc", label: t("keypool.sortLabelAsc") },
+                  { value: "label_desc", label: t("keypool.sortLabelDesc") },
+                  { value: "weight_desc", label: t("keypool.sortWeightDesc") },
+                  { value: "weight_asc", label: t("keypool.sortWeightAsc") },
+                  { value: "status", label: t("keypool.sortStatus") },
                 ]}
               />
             </>
@@ -421,7 +423,7 @@ export function KeyPoolPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(true)}
               >
-                启用
+                {t("common.enable")}
               </Button>
               <Button
                 variant="secondary"
@@ -429,7 +431,7 @@ export function KeyPoolPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(false)}
               >
-                禁用
+                {t("common.disable")}
               </Button>
               <DeleteButton loading={bulkBusy} onClick={() => void bulkDelete()} />
             </>
@@ -444,11 +446,11 @@ export function KeyPoolPage() {
           <EmptyState
             compact
             icon={Key}
-            title="无法加载"
+            title={t("keypool.loadFailedTitle")}
             description={listError}
             action={
               <Button variant="secondary" size="sm" onClick={() => void load()}>
-                重试
+                {t("common.retry")}
               </Button>
             }
           />
@@ -456,21 +458,21 @@ export function KeyPoolPage() {
           <EmptyState
             compact
             icon={Key}
-            title="池是空的"
+            title={t("keypool.emptyTitle")}
             description={
               provider === "opencode"
-                ? "先添加至少一把 OpenCode 密钥，付费模型才能转发。"
-                : "先添加至少一把 Ollama 上游密钥。"
+                ? t("keypool.emptyDescOc")
+                : t("keypool.emptyDescOl")
             }
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
-                添加密钥
+                {t("keypool.addKey")}
               </Button>
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title="无匹配项" description="调整筛选或关键词。" />
+          <EmptyState compact title={t("keypool.noMatchTitle")} description={t("keypool.noMatchDesc")} />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -484,9 +486,9 @@ export function KeyPoolPage() {
                   }
                 }}
                 onChange={selection.toggleAll}
-                aria-label="全选"
+                aria-label={t("keypool.selectAllAria")}
               />
-              <span className="text-[12px] text-ink-muted">全选本页</span>
+              <span className="text-[12px] text-ink-muted">{t("keypool.selectAllPage")}</span>
             </div>
             <ResponsiveList
               mobile={
@@ -506,7 +508,7 @@ export function KeyPoolPage() {
                             type="checkbox"
                             checked={selection.selected.has(key.id)}
                             onChange={() => selection.toggleOne(key.id)}
-                            aria-label={`选择 ${key.label}`}
+                            aria-label={t("keypool.selectRowAria", { label: key.label })}
                           />
                         }
                         title={key.label}
@@ -515,18 +517,18 @@ export function KeyPoolPage() {
                         }
                         badge={
                           key.cooldown_until ? (
-                            <Badge kind="warning">冷却</Badge>
+                            <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
                           ) : key.enabled ? (
-                            <Badge kind="healthy">启用</Badge>
+                            <Badge kind="healthy">{t("common.enabled")}</Badge>
                           ) : (
-                            <Badge kind="neutral">禁用</Badge>
+                            <Badge kind="neutral">{t("common.disabled")}</Badge>
                           )
                         }
                         fields={[
-                          { label: "权重", value: key.weight },
-                          { label: "占比", value: share },
+                          { label: t("keypool.weightField"), value: key.weight },
+                          { label: t("keypool.shareLabel"), value: share },
                           {
-                            label: "冷却",
+                            label: t("keypool.coolingLabel"),
                             value: key.cooldown_until
                               ? new Date(key.cooldown_until).toLocaleString()
                               : "-",
@@ -537,7 +539,7 @@ export function KeyPoolPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              aria-label="编辑"
+                              aria-label={t("keypool.editAria")}
                               onClick={() => openEdit(key)}
                             >
                               <PencilSimple size={14} />
@@ -550,21 +552,21 @@ export function KeyPoolPage() {
                                   .setZenKeyEnabled(key.id, !key.enabled)
                                   .then(load)
                                   .catch((err) =>
-                                    push(friendlyError(err, "操作失败"), "error"),
+                                    push(friendlyError(err, t("common.actionFailed"), t), "error"),
                                   )
                               }
                             >
-                              {key.enabled ? "禁用" : "启用"}
+                              {key.enabled ? t("common.disable") : t("common.enable")}
                             </Button>
                             <DeleteButton
                               onClick={() => {
-                                if (window.confirm(`删除 ${key.label}？`)) {
+                                if (window.confirm(t("keypool.deleteConfirm", { label: key.label }))) {
                                   void api
                                     .deleteZenKey(key.id)
                                     .then(load)
                                     .catch((err) =>
                                       push(
-                                        friendlyError(err, "删除失败"),
+                                        friendlyError(err, t("keypool.deleteFailed"), t),
                                         "error",
                                       ),
                                     );
@@ -594,22 +596,22 @@ export function KeyPoolPage() {
                               }
                             }}
                             onChange={selection.toggleAll}
-                            aria-label="全选"
+                            aria-label={t("keypool.selectAllAria")}
                           />
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">标签</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">前缀</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colLabel")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colPrefix")}</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">
                           <span className="inline-flex items-center gap-1">
-                            权重
-                            <HelpTip content="启用且未冷却时参与加权轮询；权重大 → 选中概率高。" />
+                            {t("keypool.colWeight")}
+                            <HelpTip content={t("keypool.weightColTip")} />
                           </span>
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">占比</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">状态</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">冷却</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colShare")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colStatus")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colCooling")}</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                          操作
+                          {t("keypool.colActions")}
                         </th>
                       </tr>
                     </thead>
@@ -631,7 +633,7 @@ export function KeyPoolPage() {
                                 type="checkbox"
                                 checked={selection.selected.has(key.id)}
                                 onChange={() => selection.toggleOne(key.id)}
-                                aria-label={`选择 ${key.label}`}
+                                aria-label={t("keypool.selectRowAria", { label: key.label })}
                               />
                             </td>
                             <td
@@ -661,11 +663,11 @@ export function KeyPoolPage() {
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5">
                               {key.cooldown_until ? (
-                                <Badge kind="warning">冷却</Badge>
+                                <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
                               ) : key.enabled ? (
-                                <Badge kind="healthy">启用</Badge>
+                                <Badge kind="healthy">{t("common.enabled")}</Badge>
                               ) : (
-                                <Badge kind="neutral">禁用</Badge>
+                                <Badge kind="neutral">{t("common.disabled")}</Badge>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-ink-muted">
@@ -678,7 +680,7 @@ export function KeyPoolPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  aria-label="编辑"
+                                  aria-label={t("keypool.editAria")}
                                   onClick={() => openEdit(key)}
                                 >
                                   <PencilSimple size={14} />
@@ -692,23 +694,23 @@ export function KeyPoolPage() {
                                       .then(load)
                                       .catch((err) =>
                                         push(
-                                          friendlyError(err, "操作失败"),
+                                          friendlyError(err, t("common.actionFailed"), t),
                                           "error",
                                         ),
                                       )
                                   }
                                 >
-                                  {key.enabled ? "禁用" : "启用"}
+                                  {key.enabled ? t("common.disable") : t("common.enable")}
                                 </Button>
                                 <DeleteButton
                                   onClick={() => {
-                                    if (window.confirm(`删除 ${key.label}？`)) {
+                                    if (window.confirm(t("keypool.deleteConfirm", { label: key.label }))) {
                                       void api
                                         .deleteZenKey(key.id)
                                         .then(load)
                                         .catch((err) =>
                                           push(
-                                            friendlyError(err, "删除失败"),
+                                            friendlyError(err, t("keypool.deleteFailed"), t),
                                             "error",
                                           ),
                                         );
@@ -741,20 +743,20 @@ export function KeyPoolPage() {
 
       <Dialog
         open={editing !== null}
-        title={`编辑 ${providerLabel} 密钥`}
-        description="可改标签与权重；密钥留空则保持原值"
+        title={t("keypool.editDialogTitle", { provider: providerLabel })}
+        description={t("keypool.editDialogDesc")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>
           <TextInput
-            label="标签"
+            label={t("keypool.labelField")}
             value={editLabel}
             onChange={(e) => setEditLabel(e.target.value)}
           />
           <div>
             <label className="mb-1 flex items-center gap-1 text-caption text-ink-muted">
-              权重
-              <HelpTip content="加权轮询：权重大 → 被选中概率高。" />
+              {t("keypool.weightField")}
+              <HelpTip content={t("keypool.weightTipShort")} />
             </label>
             <input
               className="h-10 w-full rounded-none border border-border bg-paper-0 px-3 text-sm text-ink"
@@ -764,17 +766,17 @@ export function KeyPoolPage() {
             />
           </div>
           <SecretInput
-            label="新密钥（可选）"
+            label={t("keypool.newSecretLabel")}
             value={editSecret}
             onChange={(e) => setEditSecret(e.target.value)}
-            placeholder="留空 = 不更换"
+            placeholder={t("keypool.newSecretPlaceholder")}
           />
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(null)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" size="sm" loading={editSaving}>
-              保存
+              {t("common.save")}
             </Button>
           </div>
         </form>

@@ -14,6 +14,7 @@ import {
 import { api, ApiError, type SettingsDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { cn } from "@/lib/cn";
+import { useI18n, type Translate } from "@/lib/i18n";
 
 type InfoRow = {
   readonly label: string;
@@ -23,75 +24,75 @@ type InfoRow = {
   readonly on?: boolean;
 };
 
-function serviceRows(s: SettingsDTO): InfoRow[] {
+function serviceRows(t: Translate, s: SettingsDTO): InfoRow[] {
   return [
     {
-      label: "监听地址",
+      label: t("settings.listen"),
       value: s.listen,
-      tip: "服务对外监听 host:port。改 LISTEN 环境变量后需重启。",
+      tip: t("settings.listenTip"),
     },
     {
-      label: "数据目录",
+      label: t("settings.dataDir"),
       value: s.data_dir,
-      tip: "SQLite 与加密密钥存放路径（DATA_DIR）。",
+      tip: t("settings.dataDirTip"),
     },
     {
-      label: "上游 Zen 基址",
+      label: t("settings.zenBase"),
       value: s.zen_base,
-      tip: "OpenCode paid 模型转发地址（ZEN_BASE）。",
+      tip: t("settings.zenBaseTip"),
     },
     {
-      label: "上游超时",
-      value: `${s.upstream_timeout_seconds} 秒`,
-      tip: "转发上游请求的超时时间（UPSTREAM_TIMEOUT）。",
+      label: t("settings.upstreamTimeout"),
+      value: t("settings.upstreamTimeoutValue", { seconds: s.upstream_timeout_seconds }),
+      tip: t("settings.upstreamTimeoutTip"),
     },
     {
-      label: "进程 HTTP 代理",
-      value: s.http_proxy_configured ? "已配置" : "未配置",
-      tip: "环境变量 HTTP_PROXY 是否已设置（影响上游出站）。",
+      label: t("settings.httpProxy"),
+      value: s.http_proxy_configured ? t("settings.configured") : t("settings.notConfigured"),
+      tip: t("settings.httpProxyTip"),
       badge: true,
       on: s.http_proxy_configured,
     },
     {
-      label: "进程 HTTPS 代理",
-      value: s.https_proxy_configured ? "已配置" : "未配置",
-      tip: "环境变量 HTTPS_PROXY 是否已设置。",
+      label: t("settings.httpsProxy"),
+      value: s.https_proxy_configured ? t("settings.configured") : t("settings.notConfigured"),
+      tip: t("settings.httpsProxyTip"),
       badge: true,
       on: s.https_proxy_configured,
     },
   ];
 }
 
-function modelRows(s: SettingsDTO): InfoRow[] {
+function modelRows(t: Translate, s: SettingsDTO): InfoRow[] {
   return [
     {
-      label: "展示全部模型",
-      value: s.show_all_models ? "开启" : "关闭",
-      tip: "SHOW_ALL_MODELS=true 时，/v1/models 会同时返回 paid 模型。",
+      label: t("settings.showAllModels"),
+      value: s.show_all_models ? t("settings.on") : t("settings.off"),
+      tip: t("settings.showAllModelsTip"),
       badge: true,
       on: s.show_all_models,
     },
     {
-      label: "模型目录缓存",
-      value: `${s.model_cache_ttl_seconds} 秒`,
-      tip: "模型列表缓存时长（MODEL_CACHE_TTL）。到期后下次请求会刷新。",
+      label: t("settings.modelCacheTtl"),
+      value: t("settings.modelCacheTtlValue", { seconds: s.model_cache_ttl_seconds }),
+      tip: t("settings.modelCacheTtlTip"),
     },
     {
-      label: "OpenCode 客户端版本",
+      label: t("settings.ocVersion"),
       value: s.oc_version,
-      tip: "请求上游时声明的客户端版本（OC_VERSION），不是本管理台版本号。",
+      tip: t("settings.ocVersionTip"),
     },
     {
-      label: "Cookie Secure",
-      value: s.cookie_secure ? "开启" : "关闭",
-      tip: "COOKIE_SECURE=true 时会话 Cookie 仅经 HTTPS 发送。反代 HTTPS 后建议开启。",
+      label: t("settings.cookieSecure"),
+      value: s.cookie_secure ? t("settings.on") : t("settings.off"),
+      tip: t("settings.cookieSecureTip"),
       badge: true,
       on: s.cookie_secure,
     },
     {
-      label: "管理会话有效期",
-      value: `${s.session_ttl_hours} 小时`,
-      tip: "登录成功后会话 cookie 的有效时长。",
+      label: t("settings.sessionTtl"),
+      value: t("settings.sessionTtlValue", { hours: s.session_ttl_hours }),
+      tip: t("settings.sessionTtlTip"),
     },
   ];
 }
@@ -127,6 +128,7 @@ function InfoList({ rows }: { readonly rows: readonly InfoRow[] }) {
 export function SettingsPage() {
   const navigate = useNavigate();
   const { push } = useToast();
+  const { t } = useI18n();
   const [settings, setSettings] = useState<SettingsDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,7 +148,7 @@ export function SettingsPage() {
         void navigate("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -159,11 +161,11 @@ export function SettingsPage() {
   async function onChangePassword(event: FormEvent) {
     event.preventDefault();
     if (newPassword.length < 8) {
-      push("新密码至少 8 位", "error");
+      push(t("settings.errNewPasswordTooShort"), "error");
       return;
     }
     if (newPassword !== confirmPassword) {
-      push("两次输入的新密码不一致", "error");
+      push(t("settings.errPasswordMismatch"), "error");
       return;
     }
     setSavingPassword(true);
@@ -171,13 +173,13 @@ export function SettingsPage() {
       await api.changePassword(currentPassword, newPassword);
       // Backend revokes all sessions + clears cookie; force re-login.
       setSessionHint(false);
-      push("密码已更新，请使用新密码重新登录", "success");
+      push(t("settings.successPasswordUpdated"), "success");
       void navigate("/login", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        push("当前密码不正确", "error");
+        push(t("settings.errCurrentPasswordWrong"), "error");
       } else {
-        push(err instanceof Error ? err.message : "修改失败", "error");
+        push(err instanceof Error ? err.message : t("settings.errUpdateFailed"), "error");
       }
     } finally {
       setSavingPassword(false);
@@ -187,11 +189,11 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="设置"
-        description="管理台鉴权、服务连接与运行参数。标 ? 的说明悬停查看。"
+        title={t("settings.title")}
+        description={t("settings.description")}
         actions={
           <Button variant="secondary" size="sm" onClick={() => void load()}>
-            刷新
+            {t("common.refresh")}
           </Button>
         }
       />
@@ -202,16 +204,16 @@ export function SettingsPage() {
           <Skeleton className="h-40 w-full" />
         </div>
       ) : null}
-      {!loading && error ? <ErrorState title="加载失败" description={error} /> : null}
+      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
 
       {!loading && settings ? (
         <>
           <SectionPanel
-            title="登录鉴权"
+            title={t("settings.authTitle")}
             description={
               settings.password_custom
-                ? "当前使用已自定义的管理密码（保存在本地数据）"
-                : "当前使用环境变量 ADMIN_PASSWORD；在此修改会写入本地并覆盖环境密码"
+                ? t("settings.authCustomDescription")
+                : t("settings.authEnvDescription")
             }
             bodyClassName="!p-4 sm:!p-5"
           >
@@ -220,7 +222,7 @@ export function SettingsPage() {
               onSubmit={(e) => void onChangePassword(e)}
             >
               <SecretInput
-                label="当前密码"
+                label={t("settings.currentPassword")}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 autoComplete="current-password"
@@ -228,14 +230,14 @@ export function SettingsPage() {
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <SecretInput
-                  label="新密码"
+                  label={t("settings.newPassword")}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
                   required
                 />
                 <SecretInput
-                  label="确认新密码"
+                  label={t("settings.confirmNewPassword")}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   autoComplete="new-password"
@@ -244,47 +246,47 @@ export function SettingsPage() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <p className="text-[12px] text-ink-faint">
-                  至少 8 位；保存后所有会话立即失效并回到登录页
+                  {t("settings.authHint")}
                 </p>
                 <Button type="submit" size="sm" loading={savingPassword}>
-                  更新密码
+                  {t("settings.updatePassword")}
                 </Button>
               </div>
             </form>
           </SectionPanel>
 
           <SectionPanel
-            title="服务连接"
-            description="进程级连接参数（多数需改环境变量并重启）"
+            title={t("settings.serviceTitle")}
+            description={t("settings.serviceDescription")}
             bodyClassName="p-0"
           >
-            <InfoList rows={serviceRows(settings)} />
+            <InfoList rows={serviceRows(t, settings)} />
           </SectionPanel>
 
           <SectionPanel
-            title="模型与会话"
-            description="目录缓存、模型可见性与管理 Cookie"
+            title={t("settings.modelTitle")}
+            description={t("settings.modelDescription")}
             bodyClassName="p-0"
           >
-            <InfoList rows={modelRows(settings)} />
+            <InfoList rows={modelRows(t, settings)} />
           </SectionPanel>
 
           <SectionPanel
-            title="环境变量速查"
-            description="在 start.bat 或系统环境中配置"
+            title={t("settings.envTitle")}
+            description={t("settings.envDescription")}
             bodyClassName="!p-4 sm:!p-5"
           >
             <div className="grid gap-2 sm:grid-cols-2">
               {(
                 [
-                  ["ADMIN_PASSWORD", "管理台登录密码（初始）"],
-                  ["ADMIN_SECRET", "加密密钥，至少 32 字符"],
-                  ["LISTEN", "监听地址"],
-                  ["DATA_DIR", "数据目录"],
-                  ["ZEN_BASE", "上游 Zen API"],
-                  ["SHOW_ALL_MODELS", "是否暴露 paid 模型"],
-                  ["COOKIE_SECURE", "HTTPS 下的安全 Cookie"],
-                  ["MODEL_CACHE_TTL", "模型缓存时长"],
+                  ["ADMIN_PASSWORD", t("settings.envAdminPassword")],
+                  ["ADMIN_SECRET", t("settings.envAdminSecret")],
+                  ["LISTEN", t("settings.listen")],
+                  ["DATA_DIR", t("settings.dataDir")],
+                  ["ZEN_BASE", t("settings.envZenBase")],
+                  ["SHOW_ALL_MODELS", t("settings.envShowAllModels")],
+                  ["COOKIE_SECURE", t("settings.envCookieSecure")],
+                  ["MODEL_CACHE_TTL", t("settings.envModelCacheTtl")],
                 ] as const
               ).map(([env, tip]) => (
                 <div

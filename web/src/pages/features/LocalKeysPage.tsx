@@ -27,6 +27,7 @@ import {
 } from "@/components";
 import { api, ApiError, type LocalKeyDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { useI18n, type Translate } from "@/lib/i18n";
 import {
   compareBySort,
   useRowSelection,
@@ -36,33 +37,28 @@ import {
 } from "@/lib/selection";
 import { tableRowClass } from "@/lib/table-row";
 
-function friendlyError(err: unknown, fallback: string): string {
+function friendlyError(err: unknown, fallback: string, t: Translate): string {
   if (err instanceof ApiError) {
-    if (err.status === 401) return "登录已过期，请重新登录";
+    if (err.status === 401) return t("localkeys.sessionExpired");
     return err.message || fallback;
   }
-  if (err instanceof TypeError) return "无法连接服务，请确认后端已启动";
+  if (err instanceof TypeError) return t("localkeys.connectFailed");
   if (err instanceof Error) {
     if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return "无法连接服务，请确认后端已启动";
+      return t("localkeys.connectFailed");
     }
     return err.message || fallback;
   }
   return fallback;
 }
 
-const LIMIT_TIP =
-  "后端在鉴权时按密钥原子计数：RPM 按自然分钟窗口、日上限按 UTC 自然日窗口；0 表示不限制。超限返回 429（真实生效，非展示字段）。";
-
-const SECRET_TIP =
-  "完整 sk-oc- 密钥仅在创建成功时返回一次；之后列表只显示前缀，丢失需删除后重建。";
-
-function formatLimit(value: number): string {
-  return value > 0 ? String(value) : "不限";
+function formatLimit(value: number, t: Translate): string {
+  return value > 0 ? String(value) : t("localkeys.unlimited");
 }
 
 export function LocalKeysPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { push } = useToast();
   const [keys, setKeys] = useState<LocalKeyDTO[]>([]);
   const [query, setQuery] = useState("");
@@ -99,7 +95,7 @@ export function LocalKeysPage() {
         void navigate("/login");
         return;
       }
-      setListError(friendlyError(err, "加载密钥列表失败"));
+      setListError(friendlyError(err, t("localkeys.loadListFailed"), t));
     } finally {
       setLoading(false);
     }
@@ -124,23 +120,23 @@ export function LocalKeysPage() {
       setRpm("0");
       setDaily("0");
       setShowAdd(false);
-      push("密钥已创建，请立即复制", "success");
+      push(t("localkeys.secretCreated"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "创建失败"), "error");
+      push(friendlyError(err, t("common.createFailed"), t), "error");
     } finally {
       setSaving(false);
     }
   }
 
   async function onRevoke(id: string, name: string) {
-    if (!window.confirm(`删除「${name}」后立即失效，确认？`)) return;
+    if (!window.confirm(t("localkeys.revokeConfirm", { name }))) return;
     try {
       await api.revokeLocalKey(id);
-      push("已删除", "success");
+      push(t("localkeys.deleted"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "删除失败"), "error");
+      push(friendlyError(err, t("localkeys.revokeFailed"), t), "error");
     }
   }
 
@@ -155,7 +151,7 @@ export function LocalKeysPage() {
     event.preventDefault();
     if (!editing) return;
     if (!editLabel.trim()) {
-      push("标签不能为空", "error");
+      push(t("localkeys.labelRequired"), "error");
       return;
     }
     setEditSaving(true);
@@ -167,10 +163,10 @@ export function LocalKeysPage() {
         Number(editDaily) || 0,
       );
       setEditing(null);
-      push("已保存", "success");
+      push(t("localkeys.saved"), "success");
       await load();
     } catch (err) {
-      push(friendlyError(err, "保存失败"), "error");
+      push(friendlyError(err, t("localkeys.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
     }
@@ -181,10 +177,10 @@ export function LocalKeysPage() {
     try {
       await navigator.clipboard.writeText(createdSecret);
       setCopied(true);
-      push("已复制到剪贴板", "success");
+      push(t("localkeys.copiedToClipboard"), "success");
     } catch {
       setCopied(false);
-      push("复制失败，请手动选中复制", "error");
+      push(t("localkeys.copyFailed"), "error");
     }
   }
 
@@ -241,7 +237,10 @@ export function LocalKeysPage() {
           /* continue */
         }
       }
-      push(next ? `已启用 ${ok} 把` : `已禁用 ${ok} 把`, ok > 0 ? "success" : "error");
+      push(
+        next ? t("localkeys.bulkEnabled", { n: ok }) : t("localkeys.bulkDisabled", { n: ok }),
+        ok > 0 ? "success" : "error",
+      );
       selection.clear();
       await load();
     } finally {
@@ -251,7 +250,7 @@ export function LocalKeysPage() {
 
   async function bulkRevoke() {
     if (selection.selected.size === 0) return;
-    if (!window.confirm(`确认删除选中的 ${selection.selected.size} 把密钥？`)) return;
+    if (!window.confirm(t("localkeys.bulkDeleteConfirm", { n: selection.selected.size }))) return;
     setBulkBusy(true);
     let ok = 0;
     try {
@@ -265,7 +264,7 @@ export function LocalKeysPage() {
           /* continue */
         }
       }
-      push(`已删除 ${ok} 把`, ok > 0 ? "success" : "error");
+      push(t("localkeys.bulkDeleted", { n: ok }), ok > 0 ? "success" : "error");
       selection.clear();
       await load();
     } finally {
@@ -276,23 +275,23 @@ export function LocalKeysPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="分发管理"
-        description="向客户端发放本地 API Key，接入 Cursor / Claude Code。"
+        title={t("localkeys.title")}
+        description={t("localkeys.description")}
         meta={
           <>
-            <MetaChip>{keys.length} 把</MetaChip>
-            <MetaChip>可用 {active}</MetaChip>
-            <HelpTip content={LIMIT_TIP} label="限流说明" />
+            <MetaChip>{t("localkeys.metaCount", { n: keys.length })}</MetaChip>
+            <MetaChip>{t("localkeys.metaAvailable", { n: active })}</MetaChip>
+            <HelpTip content={t("localkeys.limitTip")} label={t("localkeys.limitTipLabel")} />
           </>
         }
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
-              刷新
+              {t("common.refresh")}
             </Button>
             <Button size="sm" onClick={() => setShowAdd((v) => !v)}>
               <Plus size={14} className="mr-1" weight="bold" />
-              {showAdd ? "收起" : "发放"}
+              {showAdd ? t("localkeys.collapse") : t("localkeys.issue")}
             </Button>
           </div>
         }
@@ -300,8 +299,8 @@ export function LocalKeysPage() {
 
       {createdSecret ? (
         <ComposerPanel
-          title="新密钥已生成"
-          description="明文仅展示一次，请立即复制保存。"
+          title={t("localkeys.newSecretTitle")}
+          description={t("localkeys.newSecretDesc")}
           onClose={() => {
             setCreatedSecret(null);
             setCopied(false);
@@ -314,7 +313,7 @@ export function LocalKeysPage() {
               </p>
               <Button size="sm" onClick={() => void onCopy()}>
                 <Copy size={14} className="mr-1" weight="bold" />
-                {copied ? "已复制" : "复制密钥"}
+                {copied ? t("common.copied") : t("localkeys.copySecret")}
               </Button>
             </>
           }
@@ -322,7 +321,7 @@ export function LocalKeysPage() {
           <div className="rounded-none border border-border bg-paper-0 px-3.5 py-3">
             <div className="mb-1.5 flex items-center gap-1 text-[11px] font-medium text-ink-muted">
               Secret
-              <HelpTip content={SECRET_TIP} label="密钥可见性" />
+              <HelpTip content={t("localkeys.secretTip")} label={t("localkeys.secretTipLabel")} />
             </div>
             <code className="block break-all font-mono text-[13px] leading-relaxed text-ink">
               {createdSecret}
@@ -333,14 +332,14 @@ export function LocalKeysPage() {
 
       {showAdd ? (
         <ComposerPanel
-          title="发放密钥"
-          description="标签用于区分客户端；限流填 0 表示不限制。"
+          title={t("localkeys.issueTitle")}
+          description={t("localkeys.issueDesc")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
-              <p className="text-[12px] text-ink-faint">生成后明文仅展示一次</p>
+              <p className="text-[12px] text-ink-faint">{t("localkeys.issueFooterHint")}</p>
               <Button type="submit" form="local-key-create" size="sm" loading={saving}>
-                生成密钥
+                {t("localkeys.generate")}
               </Button>
             </>
           }
@@ -350,7 +349,7 @@ export function LocalKeysPage() {
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]"
             onSubmit={(e) => void onCreate(e)}
           >
-            <CompactField label="标签" className="sm:col-span-2 lg:col-span-1">
+            <CompactField label={t("localkeys.labelField")} className="sm:col-span-2 lg:col-span-1">
               <input
                 className={fieldInputClass}
                 value={label}
@@ -360,7 +359,7 @@ export function LocalKeysPage() {
             </CompactField>
             <CompactField
               label="RPM"
-              tip={<HelpTip content="每分钟请求上限。0 = 不限。" />}
+              tip={<HelpTip content={t("localkeys.rpmTip")} />}
             >
               <input
                 className={fieldInputClass}
@@ -371,8 +370,8 @@ export function LocalKeysPage() {
               />
             </CompactField>
             <CompactField
-              label="日上限"
-              tip={<HelpTip content="每日请求上限（UTC）。0 = 不限。超限返回 429。" />}
+              label={t("localkeys.dailyField")}
+              tip={<HelpTip content={t("localkeys.dailyTip")} />}
             >
               <input
                 className={fieldInputClass}
@@ -387,14 +386,14 @@ export function LocalKeysPage() {
       ) : null}
 
       <SectionPanel
-        title="已发放列表"
-        description={`${filtered.length} / ${keys.length} 把 · 可多选批量操作`}
+        title={t("localkeys.listTitle")}
+        description={t("localkeys.listDesc", { filtered: filtered.length, total: keys.length })}
         bodyClassName="p-0"
       >
         <ListToolbar
           search={query}
           onSearchChange={setQuery}
-          searchPlaceholder="标签 / 前缀"
+          searchPlaceholder={t("localkeys.searchPlaceholder")}
           selectedCount={selection.selected.size}
           totalVisible={paged.length}
           allSelected={selection.allSelected}
@@ -403,38 +402,38 @@ export function LocalKeysPage() {
           onClear={selection.clear}
           filters={
             <SegmentedFilter
-              aria-label="状态"
+              aria-label={t("localkeys.statusAria")}
               value={status}
               onChange={(v) => setStatus(v as StatusFilter)}
               options={[
-                { value: "all", label: "全部" },
-                { value: "enabled", label: "可用" },
-                { value: "disabled", label: "禁用" },
-                { value: "revoked", label: "已删除" },
+                { value: "all", label: t("common.all") },
+                { value: "enabled", label: t("localkeys.statusAvailable") },
+                { value: "disabled", label: t("common.disabled") },
+                { value: "revoked", label: t("localkeys.statusRevoked") },
               ]}
             />
           }
           trailing={
             <>
               <FilterSelect
-                label="限流"
+                label={t("localkeys.limitFilterLabel")}
                 value={limitFilter}
                 onChange={(v) => setLimitFilter(v as LimitFilter)}
                 options={[
-                  { value: "all", label: "全部" },
-                  { value: "unlimited", label: "无限制" },
-                  { value: "has_rpm", label: "有 RPM" },
-                  { value: "has_daily", label: "有日限" },
+                  { value: "all", label: t("common.all") },
+                  { value: "unlimited", label: t("localkeys.limitUnlimited") },
+                  { value: "has_rpm", label: t("localkeys.limitHasRpm") },
+                  { value: "has_daily", label: t("localkeys.limitHasDaily") },
                 ]}
               />
               <FilterSelect
-                label="排序"
+                label={t("localkeys.sortLabel")}
                 value={sort}
                 onChange={(v) => setSort(v as SortKey)}
                 options={[
-                  { value: "label_asc", label: "标签 A→Z" },
-                  { value: "label_desc", label: "标签 Z→A" },
-                  { value: "status", label: "状态优先" },
+                  { value: "label_asc", label: t("localkeys.sortLabelAsc") },
+                  { value: "label_desc", label: t("localkeys.sortLabelDesc") },
+                  { value: "status", label: t("localkeys.sortStatus") },
                 ]}
               />
             </>
@@ -447,7 +446,7 @@ export function LocalKeysPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(true)}
               >
-                启用
+                {t("common.enable")}
               </Button>
               <Button
                 variant="secondary"
@@ -455,7 +454,7 @@ export function LocalKeysPage() {
                 loading={bulkBusy}
                 onClick={() => void bulkSetEnabled(false)}
               >
-                禁用
+                {t("common.disable")}
               </Button>
               <DeleteButton loading={bulkBusy} onClick={() => void bulkRevoke()} />
             </>
@@ -470,11 +469,11 @@ export function LocalKeysPage() {
           <EmptyState
             compact
             icon={Key}
-            title="无法加载"
+            title={t("localkeys.loadFailedTitle")}
             description={listError}
             action={
               <Button variant="secondary" size="sm" onClick={() => void load()}>
-                重试
+                {t("common.retry")}
               </Button>
             }
           />
@@ -482,17 +481,17 @@ export function LocalKeysPage() {
           <EmptyState
             compact
             icon={Key}
-            title="还没有密钥"
-            description="发放一把 sk-oc- 密钥后，客户端即可调用本网关。"
+            title={t("localkeys.emptyTitle")}
+            description={t("localkeys.emptyDesc")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
-                发放
+                {t("localkeys.issue")}
               </Button>
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title="无匹配项" description="调整筛选或关键词。" />
+          <EmptyState compact title={t("localkeys.noMatchTitle")} description={t("localkeys.noMatchDesc")} />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -506,9 +505,9 @@ export function LocalKeysPage() {
                   }
                 }}
                 onChange={selection.toggleAll}
-                aria-label="全选"
+                aria-label={t("localkeys.selectAllAria")}
               />
-              <span className="text-[12px] text-ink-muted">全选本页</span>
+              <span className="text-[12px] text-ink-muted">{t("localkeys.selectAllPage")}</span>
             </div>
             <ResponsiveList
               mobile={
@@ -524,7 +523,7 @@ export function LocalKeysPage() {
                             type="checkbox"
                             checked={selection.selected.has(key.id)}
                             onChange={() => selection.toggleOne(key.id)}
-                            aria-label={`选择 ${key.label}`}
+                            aria-label={t("localkeys.selectRowAria", { label: key.label })}
                           />
                         }
                         title={key.label}
@@ -533,17 +532,17 @@ export function LocalKeysPage() {
                         }
                         badge={
                           key.revoked ? (
-                            <Badge kind="error">已删除</Badge>
+                            <Badge kind="error">{t("localkeys.statusRevoked")}</Badge>
                           ) : key.enabled ? (
-                            <Badge kind="healthy">可用</Badge>
+                            <Badge kind="healthy">{t("localkeys.statusAvailable")}</Badge>
                           ) : (
-                            <Badge kind="neutral">禁用</Badge>
+                            <Badge kind="neutral">{t("common.disabled")}</Badge>
                           )
                         }
                         fields={[
                           {
-                            label: "RPM / 日",
-                            value: `${formatLimit(key.rpm_limit)} / ${formatLimit(key.daily_limit)}`,
+                            label: t("localkeys.rpmDailyLabel"),
+                            value: `${formatLimit(key.rpm_limit, t)} / ${formatLimit(key.daily_limit, t)}`,
                           },
                         ]}
                         actions={
@@ -552,7 +551,7 @@ export function LocalKeysPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                aria-label="编辑"
+                                aria-label={t("localkeys.editAria")}
                                 onClick={() => openEdit(key)}
                               >
                                 <PencilSimple size={14} />
@@ -565,11 +564,11 @@ export function LocalKeysPage() {
                                     .setLocalKeyEnabled(key.id, !key.enabled)
                                     .then(load)
                                     .catch((err) =>
-                                      push(friendlyError(err, "操作失败"), "error"),
+                                      push(friendlyError(err, t("common.actionFailed"), t), "error"),
                                     )
                                 }
                               >
-                                {key.enabled ? "禁用" : "启用"}
+                                {key.enabled ? t("common.disable") : t("common.enable")}
                               </Button>
                               <DeleteButton
                                 onClick={() => void onRevoke(key.id, key.label)}
@@ -598,20 +597,20 @@ export function LocalKeysPage() {
                               }
                             }}
                             onChange={selection.toggleAll}
-                            aria-label="全选"
+                            aria-label={t("localkeys.selectAllAria")}
                           />
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">标签</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">前缀</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("localkeys.colLabel")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("localkeys.colPrefix")}</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">
                           <span className="inline-flex items-center gap-1">
-                            RPM / 日
-                            <HelpTip content={LIMIT_TIP} />
+                            {t("localkeys.rpmDailyLabel")}
+                            <HelpTip content={t("localkeys.limitTip")} />
                           </span>
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">状态</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("localkeys.colStatus")}</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                          操作
+                          {t("localkeys.colActions")}
                         </th>
                       </tr>
                     </thead>
@@ -629,7 +628,7 @@ export function LocalKeysPage() {
                                 type="checkbox"
                                 checked={selection.selected.has(key.id)}
                                 onChange={() => selection.toggleOne(key.id)}
-                                aria-label={`选择 ${key.label}`}
+                                aria-label={t("localkeys.selectRowAria", { label: key.label })}
                               />
                             </td>
                             <td
@@ -641,16 +640,16 @@ export function LocalKeysPage() {
                               {key.prefix}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-ink-muted">
-                              {formatLimit(key.rpm_limit)} /{" "}
-                              {formatLimit(key.daily_limit)}
+                              {formatLimit(key.rpm_limit, t)} /{" "}
+                              {formatLimit(key.daily_limit, t)}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5">
                               {key.revoked ? (
-                                <Badge kind="error">已删除</Badge>
+                                <Badge kind="error">{t("localkeys.statusRevoked")}</Badge>
                               ) : key.enabled ? (
-                                <Badge kind="healthy">可用</Badge>
+                                <Badge kind="healthy">{t("localkeys.statusAvailable")}</Badge>
                               ) : (
-                                <Badge kind="neutral">禁用</Badge>
+                                <Badge kind="neutral">{t("common.disabled")}</Badge>
                               )}
                             </td>
                             <td className="px-3 py-2.5">
@@ -662,7 +661,7 @@ export function LocalKeysPage() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      aria-label="编辑"
+                                      aria-label={t("localkeys.editAria")}
                                       onClick={() => openEdit(key)}
                                     >
                                       <PencilSimple size={14} />
@@ -676,13 +675,13 @@ export function LocalKeysPage() {
                                           .then(load)
                                           .catch((err) =>
                                             push(
-                                              friendlyError(err, "操作失败"),
+                                              friendlyError(err, t("common.actionFailed"), t),
                                               "error",
                                             ),
                                           )
                                       }
                                     >
-                                      {key.enabled ? "禁用" : "启用"}
+                                      {key.enabled ? t("common.disable") : t("common.enable")}
                                     </Button>
                                     <DeleteButton
                                       onClick={() =>
@@ -717,13 +716,13 @@ export function LocalKeysPage() {
 
       <Dialog
         open={editing !== null}
-        title="编辑发放密钥"
-        description="可改标签与限流；密钥本身不可轮换，丢失请删除后重建"
+        title={t("localkeys.editDialogTitle")}
+        description={t("localkeys.editDialogDesc")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>
           <TextInput
-            label="标签"
+            label={t("localkeys.labelField")}
             value={editLabel}
             onChange={(e) => setEditLabel(e.target.value)}
           />
@@ -731,7 +730,7 @@ export function LocalKeysPage() {
             <div>
               <label className="mb-1 flex items-center gap-1 text-caption text-ink-muted">
                 RPM
-                <HelpTip content="每分钟请求上限；0 不限。" />
+                <HelpTip content={t("localkeys.rpmTipShort")} />
               </label>
               <input
                 className="h-10 w-full rounded-none border border-border bg-paper-0 px-3 text-sm text-ink"
@@ -742,8 +741,8 @@ export function LocalKeysPage() {
             </div>
             <div>
               <label className="mb-1 flex items-center gap-1 text-caption text-ink-muted">
-                日上限
-                <HelpTip content="每日请求上限（UTC 日）；0 不限。" />
+                {t("localkeys.dailyField")}
+                <HelpTip content={t("localkeys.dailyTipShort")} />
               </label>
               <input
                 className="h-10 w-full rounded-none border border-border bg-paper-0 px-3 text-sm text-ink"
@@ -754,14 +753,14 @@ export function LocalKeysPage() {
             </div>
           </div>
           {editing ? (
-            <p className="font-mono text-[12px] text-ink-faint">前缀 {editing.prefix}</p>
+            <p className="font-mono text-[12px] text-ink-faint">{t("localkeys.prefixLabel", { prefix: editing.prefix })}</p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(null)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" size="sm" loading={editSaving}>
-              保存
+              {t("common.save")}
             </Button>
           </div>
         </form>

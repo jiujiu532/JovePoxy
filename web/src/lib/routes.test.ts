@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_ROUTES, isLogsHubTab, isProviderTab, pageTitleForPath } from "./routes";
+import { NAV_ROUTES, isLogsHubTab, isProviderTab, pageTitleKeyForPath } from "./routes";
 
 describe("NAV_ROUTES", () => {
   it("reserves all operator destinations", () => {
@@ -18,16 +18,16 @@ describe("NAV_ROUTES", () => {
   });
 });
 
-describe("pageTitleForPath", () => {
-  it("returns Chinese label for known path", () => {
-    expect(pageTitleForPath("/app/local-keys")).toBe("分发管理");
-    expect(pageTitleForPath("/app/accounts")).toBe("账号统计");
-    expect(pageTitleForPath("/app/quotas")).toBe("额度监控");
-    expect(pageTitleForPath("/app/logs")).toBe("请求日志");
+describe("pageTitleKeyForPath", () => {
+  it("maps known paths to nav label keys", () => {
+    expect(pageTitleKeyForPath("/app/local-keys")).toBe("nav.localKeys");
+    expect(pageTitleKeyForPath("/app/accounts")).toBe("nav.accounts");
+    expect(pageTitleKeyForPath("/app/quotas")).toBe("nav.quotas");
+    expect(pageTitleKeyForPath("/app/logs")).toBe("nav.logs");
   });
 
-  it("falls back for unknown path", () => {
-    expect(pageTitleForPath("/app/unknown")).toBe("管理台");
+  it("falls back to console key for unknown path", () => {
+    expect(pageTitleKeyForPath("/app/unknown")).toBe("nav.console");
   });
 });
 
