@@ -24,11 +24,11 @@
 
 ---
 
-JovePoxy 是一个单二进制网关：对外提供 OpenAI `/v1/chat/completions` 与 Anthropic `/v1/messages` 兼容接口，对内把请求路由到 OpenCode Zen 的免费模型（`Bearer public`）或付费 Zen Key 池；同一监听端口内嵌完整管理台 SPA。数据落在单文件 SQLite，无需本地 OpenCode 进程。
+JovePoxy 是一个单二进制网关：对外提供 OpenAI `/v1/chat/completions`、`/v1/responses` 与 Anthropic `/v1/messages` 兼容接口，对内把请求路由到 OpenCode Zen 的免费模型（`Bearer public`）或付费 Zen Key 池；同一监听端口内嵌完整管理台 SPA。数据落在单文件 SQLite，无需本地 OpenCode 进程。
 
 ## 核心功能
 
-- **双协议兼容**：OpenAI Chat Completions 与 Anthropic Messages（含 SSE 流式）一套入口全支持。
+- **三端点兼容**：OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages（均含 SSE 流式）一套入口全支持。
 - **免费 / 付费自动分流**：模型目录自动识别 free 模型走公共通道，付费模型走 Zen Key 池并自动故障转移。
 - **本地密钥体系**：给客户端签发 `sk-oc-...` 本地密钥，支持 RPM / 日限额与并发会话限制；库内只存 SHA-256。
 - **出口代理池**：free 通道被限流（429/5xx）时自动轮换出口代理重试；Key 是身份，代理是出口 IP，二者独立。
@@ -131,6 +131,12 @@ curl http://127.0.0.1:6446/v1/chat/completions \
   -H "Authorization: Bearer sk-oc-..." \
   -H "Content-Type: application/json" \
   -d '{"model":"big-pickle","messages":[{"role":"user","content":"hello"}]}'
+
+# OpenAI Responses 兼容
+curl http://127.0.0.1:6446/v1/responses \
+  -H "Authorization: Bearer sk-oc-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"big-pickle","input":"hello"}'
 
 # Anthropic 兼容
 curl http://127.0.0.1:6446/v1/messages \

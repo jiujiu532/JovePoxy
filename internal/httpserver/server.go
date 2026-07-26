@@ -53,5 +53,6 @@ func New(dependencies Dependencies) http.Handler {
 	mux.HandleFunc("GET /v1/models", server.listModels)
 	mux.HandleFunc("POST /v1/chat/completions", server.observe("/v1/chat/completions", server.chatCompletions))
 	mux.HandleFunc("POST /v1/messages", server.observe("/v1/messages", server.messages))
+	mux.HandleFunc("POST /v1/responses", server.observe("/v1/responses", server.responsesHandler))
 	return mux
 }

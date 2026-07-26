@@ -24,11 +24,11 @@
 
 ---
 
-JovePoxy is a single-binary gateway. It exposes OpenAI `/v1/chat/completions` and Anthropic `/v1/messages` compatible endpoints, and routes requests either to OpenCode Zen free models (`Bearer public`) or to a pool of paid Zen API keys with failover. The full admin SPA is embedded on the same listener. All state lives in a single SQLite file; no local OpenCode process is required.
+JovePoxy is a single-binary gateway. It exposes OpenAI `/v1/chat/completions`, OpenAI `/v1/responses`, and Anthropic `/v1/messages` compatible endpoints, and routes requests either to OpenCode Zen free models (`Bearer public`) or to a pool of paid Zen API keys with failover. The full admin SPA is embedded on the same listener. All state lives in a single SQLite file; no local OpenCode process is required.
 
 ## Features
 
-- **Dual protocol**: OpenAI Chat Completions and Anthropic Messages (including SSE streaming) behind one endpoint.
+- **Triple endpoint**: OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages (all with SSE streaming) behind one listener.
 - **Free / paid auto-routing**: the model catalog classifies free models to the public channel and paid models to the Zen key pool with automatic failover.
 - **Local API keys**: issue `sk-oc-...` keys for clients with optional RPM / daily limits and concurrent-session caps; only SHA-256 hashes are stored.
 - **Egress proxy pool**: when the free channel is rate-limited (429/5xx), requests retry through rotating egress proxies. Key = identity, proxy = egress IP; the two are independent.
@@ -131,6 +131,12 @@ curl http://127.0.0.1:6446/v1/chat/completions \
   -H "Authorization: Bearer sk-oc-..." \
   -H "Content-Type: application/json" \
   -d '{"model":"big-pickle","messages":[{"role":"user","content":"hello"}]}'
+
+# OpenAI Responses compatible
+curl http://127.0.0.1:6446/v1/responses \
+  -H "Authorization: Bearer sk-oc-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"big-pickle","input":"hello"}'
 
 # Anthropic compatible
 curl http://127.0.0.1:6446/v1/messages \
