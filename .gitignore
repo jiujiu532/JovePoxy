@@ -15,6 +15,10 @@ api-keys.json
 .idea/
 .vscode/
 
+# Local convenience scripts (not shipped)
+start.bat
+stop.bat
+
 # Local agent / tooling workspaces (not part of the product)
 .claude/
 .omo/
