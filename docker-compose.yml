@@ -1,0 +1,13 @@
+services:
+  jovepoxy:
+    build: .
+    ports:
+      - "6446:6446"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
+      ADMIN_SECRET: ${ADMIN_SECRET:-please-replace-with-32-plus-chars-secret}
+      DATA_DIR: /data
+      LISTEN: 0.0.0.0:6446
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

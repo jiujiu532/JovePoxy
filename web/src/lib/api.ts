@@ -1,0 +1,366 @@
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export type ModelDTO = { readonly id: string; readonly free: boolean };
+export type LocalKeyDTO = {
+  readonly id: string;
+  readonly label: string;
+  readonly prefix: string;
+  readonly enabled: boolean;
+  readonly revoked: boolean;
+  readonly rpm_limit: number;
+  readonly daily_limit: number;
+};
+export type LocalKeyCreatedDTO = {
+  readonly id: string;
+  readonly prefix: string;
+  readonly secret: string;
+};
+export type KeyProvider = "opencode" | "ollama";
+
+export type ZenKeyDTO = {
+  readonly id: string;
+  readonly label: string;
+  readonly prefix: string;
+  readonly weight: number;
+  readonly enabled: boolean;
+  readonly provider?: KeyProvider;
+  readonly cooldown_until?: string;
+  readonly created_at?: string;
+};
+export type AccountDTO = {
+  readonly id: string;
+  readonly name: string;
+  readonly workspace_id: string;
+  readonly masked_cookie: string;
+  readonly show_rolling: boolean;
+  readonly show_weekly: boolean;
+  readonly show_monthly: boolean;
+  readonly enabled: boolean;
+};
+export type OllamaAccountDTO = {
+  readonly id: string;
+  readonly name: string;
+  readonly masked_cookie: string;
+  readonly show_session: boolean;
+  readonly show_weekly: boolean;
+  readonly enabled: boolean;
+};
+export type QuotaWindowDTO = {
+  readonly label: string;
+  readonly used: number;
+  readonly remaining: number;
+  readonly total: number;
+  readonly unit: string;
+  readonly reset_in_sec: number;
+};
+export type AccountQuotaDTO = {
+  readonly account_id: string;
+  readonly name: string;
+  readonly workspace_id: string;
+  readonly success: boolean;
+  readonly updated_at: string;
+  readonly windows?: ReadonlyArray<QuotaWindowDTO>;
+  readonly error?: string;
+};
+export type UsageRecordDTO = {
+  readonly id: string;
+  readonly account_id: string;
+  readonly usg_id: string;
+  readonly model: string;
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly recorded_at: string;
+};
+export type UsageSyncResultDTO = {
+  readonly inserted: number;
+  readonly pages_fetched: number;
+  readonly sync_at: string;
+  readonly error?: string;
+};
+export type LogDTO = {
+  readonly id: string;
+  readonly key_id?: string;
+  readonly model: string;
+  readonly route: string;
+  readonly status: number;
+  readonly latency_ms: number;
+  readonly stream: boolean;
+  readonly error_class?: string;
+  readonly created_at: string;
+};
+export type VersionInfoDTO = {
+  readonly current: string;
+  readonly latest: string;
+  readonly update_available: boolean;
+  readonly image: string;
+  readonly checked_at: string;
+  readonly source: string;
+  readonly note?: string;
+};
+
+export type SettingsDTO = {
+  readonly model_cache_ttl_seconds: number;
+  readonly show_all_models: boolean;
+  readonly oc_version: string;
+  readonly listen: string;
+  readonly cookie_secure: boolean;
+  readonly zen_base: string;
+  readonly data_dir: string;
+  readonly upstream_timeout_seconds: number;
+  readonly session_ttl_hours: number;
+  readonly password_custom: boolean;
+  readonly http_proxy_configured: boolean;
+  readonly https_proxy_configured: boolean;
+};
+export type OverviewDTO = {
+  readonly requests_today: number;
+  readonly tokens_today: number;
+  readonly requests_total: number;
+  readonly tokens_total: number;
+  readonly by_model: ReadonlyArray<{
+    readonly model: string;
+    readonly requests: number;
+    readonly input_tokens: number;
+    readonly output_tokens: number;
+  }>;
+  readonly quota_effective_remaining: number;
+  readonly quota_windows?: ReadonlyArray<{
+    readonly label: string;
+    readonly used: number;
+    readonly remaining: number;
+    readonly effective_remaining: number;
+    readonly blocked: boolean;
+    readonly blocked_by?: string;
+  }>;
+  readonly updated_at?: string;
+};
+export type MetricsDTO = {
+  readonly total_requests: number;
+  readonly status_429: number;
+  readonly status_5xx: number;
+  readonly status_2xx: number;
+  readonly stream_requests: number;
+};
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const response = await fetch(path, { ...init, headers, credentials: "include" });
+  const text = await response.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      throw new ApiError(response.status, "响应不是有效 JSON");
+    }
+  }
+  if (!response.ok) {
+    const message =
+      typeof data === "object" &&
+      data !== null &&
+      "error" in data &&
+      typeof (data as { error: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : `请求失败 (${response.status})`;
+    throw new ApiError(response.status, message);
+  }
+  return data as T;
+}
+
+export const api = {
+  login: (password: string) =>
+    request<{ ok: boolean; expires_at?: string }>("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  logout: () => request<{ ok: boolean }>("/api/admin/logout", { method: "POST" }),
+  me: () => request<{ ok: boolean; role: string }>("/api/admin/me"),
+  overview: () => request<OverviewDTO>("/api/admin/overview"),
+  models: () => request<{ models: ModelDTO[]; stale: boolean }>("/api/admin/models"),
+  refreshModels: () =>
+    request<{ models: ModelDTO[]; stale: boolean }>("/api/admin/models/refresh", {
+      method: "POST",
+    }),
+  localKeys: () => request<{ keys: LocalKeyDTO[] }>("/api/admin/local-keys"),
+  createLocalKey: (label: string, rpmLimit = 0, dailyLimit = 0) =>
+    request<LocalKeyCreatedDTO>("/api/admin/local-keys", {
+      method: "POST",
+      body: JSON.stringify({ label, rpm_limit: rpmLimit, daily_limit: dailyLimit }),
+    }),
+  updateLocalKey: (id: string, label: string, rpmLimit = 0, dailyLimit = 0) =>
+    request<{ ok: boolean }>(`/api/admin/local-keys/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ label, rpm_limit: rpmLimit, daily_limit: dailyLimit }),
+    }),
+  setLocalKeyEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean }>(
+      `/api/admin/local-keys/${id}/${enabled ? "enable" : "disable"}`,
+      { method: "POST" },
+    ),
+  revokeLocalKey: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/local-keys/${id}/revoke`, { method: "POST" }),
+  zenKeys: (provider?: KeyProvider) =>
+    request<{ keys: ZenKeyDTO[] }>(
+      provider
+        ? `/api/admin/zen-keys?provider=${encodeURIComponent(provider)}`
+        : "/api/admin/zen-keys",
+    ),
+  createZenKey: (
+    label: string,
+    secret: string,
+    weight = 1,
+    provider: KeyProvider = "opencode",
+  ) =>
+    request<ZenKeyDTO>("/api/admin/zen-keys", {
+      method: "POST",
+      body: JSON.stringify({ label, secret, weight, provider }),
+    }),
+  updateZenKey: (id: string, body: { label: string; weight: number; secret?: string }) =>
+    request<ZenKeyDTO>(`/api/admin/zen-keys/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        label: body.label,
+        weight: body.weight,
+        secret: body.secret ?? "",
+      }),
+    }),
+  setZenKeyEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean }>(
+      `/api/admin/zen-keys/${id}/${enabled ? "enable" : "disable"}`,
+      { method: "POST" },
+    ),
+  deleteZenKey: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/zen-keys/${id}`, { method: "DELETE" }),
+  proxies: () =>
+    request<{
+      proxies: ReadonlyArray<{
+        id: string;
+        label: string;
+        scheme: string;
+        host: string;
+        weight: number;
+        enabled: boolean;
+        cooldown_until?: string;
+      }>;
+    }>("/api/admin/proxies"),
+  createProxy: (label: string, url: string, weight = 1) =>
+    request("/api/admin/proxies", {
+      method: "POST",
+      body: JSON.stringify({ label, url, weight }),
+    }),
+  updateProxy: (id: string, body: { label: string; weight: number; url?: string }) =>
+    request(`/api/admin/proxies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        label: body.label,
+        weight: body.weight,
+        url: body.url ?? "",
+      }),
+    }),
+  setProxyEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean }>(`/api/admin/proxies/${id}/${enabled ? "enable" : "disable"}`, {
+      method: "POST",
+    }),
+  deleteProxy: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/proxies/${id}`, { method: "DELETE" }),
+  accounts: () => request<{ accounts: AccountDTO[] }>("/api/admin/opencode-accounts"),
+  createAccount: (body: {
+    name: string;
+    workspace_id: string;
+    auth_cookie: string;
+    show_rolling: boolean;
+    show_weekly: boolean;
+    show_monthly: boolean;
+    enabled: boolean;
+  }) =>
+    request<AccountDTO>("/api/admin/opencode-accounts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  setAccountEnabled: (id: string, enabled: boolean) =>
+    request<AccountDTO>(
+      `/api/admin/opencode-accounts/${id}/${enabled ? "enable" : "disable"}`,
+      { method: "POST" },
+    ),
+  getAccountCredential: (id: string) =>
+    request<{ workspace_id: string; auth_cookie: string }>(
+      `/api/admin/opencode-accounts/${id}/credential`,
+    ),
+  deleteAccount: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/opencode-accounts/${id}`, { method: "DELETE" }),
+  quotas: () => request<{ quotas: AccountQuotaDTO[] }>("/api/admin/quotas"),
+  ollamaAccounts: () => request<{ accounts: OllamaAccountDTO[] }>("/api/admin/ollama-accounts"),
+  createOllamaAccount: (body: {
+    name: string;
+    session_cookie: string;
+    enabled?: boolean;
+    show_session?: boolean;
+    show_weekly?: boolean;
+  }) =>
+    request<OllamaAccountDTO>("/api/admin/ollama-accounts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  setOllamaAccountEnabled: (id: string, enabled: boolean) =>
+    request<OllamaAccountDTO>(
+      `/api/admin/ollama-accounts/${id}/${enabled ? "enable" : "disable"}`,
+      { method: "POST" },
+    ),
+  getOllamaAccountCredential: (id: string) =>
+    request<{ session_cookie: string }>(`/api/admin/ollama-accounts/${id}/credential`),
+  deleteOllamaAccount: (id: string) =>
+    request<{ ok: boolean }>(`/api/admin/ollama-accounts/${id}`, { method: "DELETE" }),
+  ollamaQuotas: () =>
+    request<{
+      quotas: ReadonlyArray<{
+        account_id: string;
+        name: string;
+        success: boolean;
+        plan?: string;
+        error?: string;
+        windows?: ReadonlyArray<{
+          label: string;
+          used: number;
+          remaining: number;
+          unit: string;
+          status_text?: string;
+          models?: ReadonlyArray<{ model: string; requests: number }>;
+        }>;
+      }>;
+    }>("/api/admin/ollama-quotas"),
+  usage: () => request<{ records: UsageRecordDTO[] }>("/api/admin/usage?limit=100"),
+  syncUsage: (accountId: string, maxPages = 3) =>
+    request<UsageSyncResultDTO>("/api/admin/usage/sync", {
+      method: "POST",
+      body: JSON.stringify({ account_id: accountId, max_pages: maxPages }),
+    }),
+  backfillUsage: (accountId: string, maxPages = 5) =>
+    request<UsageSyncResultDTO>("/api/admin/usage/backfill", {
+      method: "POST",
+      body: JSON.stringify({ account_id: accountId, max_pages: maxPages }),
+    }),
+  logs: () => request<{ logs: LogDTO[] }>("/api/admin/logs?limit=100"),
+  metrics: () => request<MetricsDTO>("/api/admin/metrics"),
+  settings: () => request<SettingsDTO>("/api/admin/settings"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/api/admin/password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    }),
+  version: (refresh = false) =>
+    request<VersionInfoDTO>(
+      refresh ? "/api/admin/version?refresh=1" : "/api/admin/version",
+    ),
+};

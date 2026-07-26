@@ -1,0 +1,31 @@
+data/
+*.db
+*.db-journal
+.env
+.env.*
+node_modules/
+web/dist/
+dist/
+web/node_modules/
+bin/
+*.exe
+*.log
+.DS_Store
+api-keys.json
+.idea/
+.vscode/
+
+# Local agent / tooling workspaces (not part of the product)
+.claude/
+.omo/
+.opencode/
+.grok/
+.playwright-cli/
+.trellis/
+
+# Read-only local reference material
+参考/
+
+# Local design research artifacts
+neo-brutalist-stylekit*.yaml
+neo-brutalist-stylekit*.png
