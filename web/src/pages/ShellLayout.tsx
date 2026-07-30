@@ -31,13 +31,7 @@ export function ShellLayout() {
 
   return (
     <div className="relative flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-paper-0">
-      <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onLogout={handleLogout}
-      />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           onMenuClick={() => setSidebarOpen(true)}

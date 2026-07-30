@@ -1,19 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   ChartLine,
   ClipboardText,
   Coins,
   GearSix,
-  GithubLogo,
   Globe,
   Key,
-  Moon,
   SidebarSimple,
-  SignOut,
   SquaresFour,
   Stack,
-  Sun,
-  Translate,
   UsersThree,
   X,
 } from "@phosphor-icons/react";
@@ -86,9 +81,6 @@ function readCollapsed(): boolean {
 export type SidebarProps = {
   readonly open: boolean;
   readonly onClose: () => void;
-  readonly theme: "light" | "dark";
-  readonly onToggleTheme: () => void;
-  readonly onLogout: () => void;
 };
 
 function IconTile({
@@ -115,62 +107,8 @@ function IconTile({
   );
 }
 
-function FooterIconButton({
-  label,
-  onClick,
-  children,
-  href,
-}: {
-  readonly label: string;
-  readonly onClick?: () => void;
-  readonly children: ReactNode;
-  readonly href?: string;
-}) {
-  const className = cn(
-    "inline-flex h-9 w-9 shrink-0 items-center justify-center",
-    "border-2 border-border bg-paper-0 text-ink-muted",
-    "shadow-[2px_2px_0_var(--border)]",
-    "transition-[transform,background-color,color] duration-150",
-    "hover:bg-paper-1 hover:text-ink active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
-  );
-
-  if (href) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={label}
-        title={label}
-        className={className}
-      >
-        {children}
-      </a>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={className}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function Sidebar({
-  open,
-  onClose,
-  theme,
-  onToggleTheme,
-  onLogout,
-}: SidebarProps) {
-  const { t, lang, setLang } = useI18n();
+export function Sidebar({ open, onClose }: SidebarProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
   useEffect(() => {
@@ -209,10 +147,10 @@ export function Sidebar({
         aria-label={t("nav.console")}
         data-collapsed={collapsed ? "true" : "false"}
       >
-        {/* Brand */}
+        {/* Brand — h-16 matches TopBar so the horizontal rule aligns */}
         <div
           className={cn(
-            "flex h-14 shrink-0 items-center border-b-2 border-border",
+            "flex h-16 shrink-0 items-center border-b-2 border-border",
             collapsed ? "justify-center px-2" : "justify-between px-3.5",
           )}
         >
@@ -319,83 +257,31 @@ export function Sidebar({
           </div>
         </nav>
 
-        {/* Footer */}
+        {/* Footer: desktop collapse only (theme/lang/github/logout live in TopBar) */}
         <div
           className={cn(
-            "shrink-0 border-t-2 border-border bg-paper-1 pb-[max(0.625rem,env(safe-area-inset-bottom))]",
-            collapsed ? "px-2 py-2" : "px-2.5 py-2.5",
+            "hidden shrink-0 border-t-2 border-border bg-paper-1 md:flex",
+            "items-center pb-[max(0.625rem,env(safe-area-inset-bottom))]",
+            collapsed ? "justify-center px-2 py-2" : "justify-end px-2.5 py-2.5",
           )}
         >
-          <div
+          <button
+            type="button"
             className={cn(
-              "flex gap-1.5",
-              collapsed
-                ? "flex-col items-center"
-                : "flex-wrap items-center",
+              "inline-flex h-9 w-9 shrink-0 items-center justify-center",
+              "border-2 border-border bg-paper-0 text-ink",
+              "shadow-[2px_2px_0_var(--border)]",
+              "transition-[transform,background-color] duration-150",
+              "hover:bg-paper-1 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
             )}
+            aria-label={collapsed ? t("shell.expand") : t("shell.collapse")}
+            aria-pressed={collapsed}
+            title={collapsed ? t("shell.expand") : t("shell.collapse")}
+            onClick={toggleCollapsed}
           >
-            <FooterIconButton
-              label={theme === "dark" ? t("shell.toLight") : t("shell.toDark")}
-              onClick={onToggleTheme}
-            >
-              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            </FooterIconButton>
-            <FooterIconButton
-              label={t("shell.switchLang")}
-              onClick={() => setLang(lang === "zh" ? "en" : "zh")}
-            >
-              <Translate size={18} />
-            </FooterIconButton>
-            <FooterIconButton
-              label={t("shell.github")}
-              href="https://github.com/jiujiu532/JovePoxy"
-            >
-              <GithubLogo size={18} />
-            </FooterIconButton>
-
-            {collapsed ? (
-              <FooterIconButton label={t("shell.logout")} onClick={onLogout}>
-                <SignOut size={18} />
-              </FooterIconButton>
-            ) : (
-              <button
-                type="button"
-                onClick={onLogout}
-                className={cn(
-                  "inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5",
-                  "border-2 border-border bg-paper-0 px-2 text-[12px] font-semibold text-ink",
-                  "shadow-[2px_2px_0_var(--border)]",
-                  "transition-[transform,background-color] duration-150",
-                  "hover:bg-accent-yellow hover:text-black",
-                  "active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
-                )}
-              >
-                <SignOut size={16} aria-hidden />
-                <span className="truncate">{t("shell.logout")}</span>
-              </button>
-            )}
-
-            {/* Desktop collapse toggle — matches reference rail control */}
-            <button
-              type="button"
-              className={cn(
-                "hidden md:inline-flex h-9 w-9 shrink-0 items-center justify-center",
-                "border-2 border-border bg-paper-0 text-ink",
-                "shadow-[2px_2px_0_var(--border)]",
-                "transition-[transform,background-color] duration-150",
-                "hover:bg-paper-1 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
-                collapsed ? "" : "ml-auto",
-              )}
-              aria-label={collapsed ? t("shell.expand") : t("shell.collapse")}
-              aria-pressed={collapsed}
-              title={collapsed ? t("shell.expand") : t("shell.collapse")}
-              onClick={toggleCollapsed}
-            >
-              <SidebarSimple size={18} weight={collapsed ? "fill" : "regular"} />
-            </button>
-          </div>
+            <SidebarSimple size={18} weight={collapsed ? "fill" : "regular"} />
+          </button>
         </div>
       </aside>
     </>
