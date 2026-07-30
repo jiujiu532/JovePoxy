@@ -375,11 +375,17 @@ export function KeyPoolPage() {
         />
       ) : keys.length === 0 ? (
         <PosterEmpty
-          stamp={t("keypool.posterStamp")}
+          stamp={
+            provider === "opencode"
+              ? t("keypool.posterStampOc")
+              : t("keypool.posterStampOl")
+          }
           stampSub={t("keypool.posterStampSub")}
           title={t("keypool.emptyTitle")}
           description={
-            provider === "opencode" ? t("keypool.emptyDescOc") : t("keypool.emptyDescOl")
+            provider === "opencode"
+              ? t("keypool.emptyDescOc")
+              : t("keypool.emptyDescOl")
           }
           note={t("keypool.posterNote")}
           action={
@@ -388,26 +394,48 @@ export function KeyPoolPage() {
               onClick={() => setShowAdd(true)}
             >
               <Plus size={16} className="mr-1" weight="bold" />
-              {t("keypool.addKeyCta")}
+              {provider === "opencode"
+                ? t("keypool.addKeyCtaOc")
+                : t("keypool.addKeyCtaOl")}
             </Button>
           }
-          bars={[
-            {
-              label: t("keypool.barPaidLabel"),
-              detail: t("keypool.barPaidDetail"),
-              tone: "accent",
-            },
-            {
-              label: t("keypool.barKeyLabel"),
-              detail: t("keypool.barKeyDetail"),
-              tone: "teal",
-            },
-            {
-              label: t("keypool.barWeightLabel"),
-              detail: t("keypool.barWeightDetail"),
-              tone: "mint",
-            },
-          ]}
+          bars={
+            provider === "opencode"
+              ? [
+                  {
+                    label: t("keypool.barPaidLabelOc"),
+                    detail: t("keypool.barPaidDetailOc"),
+                    tone: "accent" as const,
+                  },
+                  {
+                    label: t("keypool.barKeyLabelOc"),
+                    detail: t("keypool.barKeyDetailOc"),
+                    tone: "teal" as const,
+                  },
+                  {
+                    label: t("keypool.barWeightLabelOc"),
+                    detail: t("keypool.barWeightDetailOc"),
+                    tone: "mint" as const,
+                  },
+                ]
+              : [
+                  {
+                    label: t("keypool.barPaidLabelOl"),
+                    detail: t("keypool.barPaidDetailOl"),
+                    tone: "coral" as const,
+                  },
+                  {
+                    label: t("keypool.barKeyLabelOl"),
+                    detail: t("keypool.barKeyDetailOl"),
+                    tone: "yellow" as const,
+                  },
+                  {
+                    label: t("keypool.barWeightLabelOl"),
+                    detail: t("keypool.barWeightDetailOl"),
+                    tone: "mint" as const,
+                  },
+                ]
+          }
         />
       ) : (
         <>

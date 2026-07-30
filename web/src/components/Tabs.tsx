@@ -95,11 +95,11 @@ export function Tabs({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-9 max-w-full flex-wrap items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5",
+        "inline-flex h-9 max-w-full items-stretch overflow-hidden rounded-none border-2 border-border bg-paper-0 shadow-[3px_3px_0_var(--border)]",
         className,
       )}
     >
-      {items.map((item) => {
+      {items.map((item, index) => {
         const selected = item.id === value;
         return (
           <button
@@ -110,11 +110,12 @@ export function Tabs({
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-none px-3 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-150",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+              "inline-flex h-full items-center gap-1.5 px-3.5 text-[13px] font-bold transition-[background-color,color] duration-100",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
+              index > 0 && "border-l-2 border-border",
               selected
-                ? "bg-paper-2 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
-                : "text-ink-muted hover:bg-paper-1/80 hover:text-ink",
+                ? "bg-ink text-paper-0"
+                : "bg-paper-0 text-ink-muted hover:bg-paper-1 hover:text-ink",
             )}
             onClick={() => onChange(item.id)}
             onKeyDown={(e) => onKeyNav(e, item.id)}
@@ -123,9 +124,9 @@ export function Tabs({
             {item.count !== undefined ? (
               <span
                 className={cn(
-                  "inline-flex min-w-[1.15rem] items-center justify-center rounded-none px-1 py-px text-[10px] font-semibold tabular-nums leading-none",
+                  "inline-flex min-w-[1.15rem] items-center justify-center px-1 py-px font-mono text-[10px] font-black tabular-nums leading-none",
                   selected
-                    ? "bg-accent/15 text-accent"
+                    ? "bg-paper-0/15 text-paper-0"
                     : "bg-paper-2 text-ink-faint",
                 )}
               >
