@@ -272,7 +272,6 @@ export function KeyPoolPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("keypool.title")}
-        description={t("keypool.description")}
         toolbar={
           <Tabs
             aria-label={t("keypool.providerTabAria")}
@@ -309,7 +308,6 @@ export function KeyPoolPage() {
       {showAdd ? (
         <ComposerPanel
           title={t("keypool.addDialogTitle", { provider: providerLabel })}
-          description={t("keypool.addDialogDesc")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
@@ -744,7 +742,6 @@ export function KeyPoolPage() {
       <Dialog
         open={editing !== null}
         title={t("keypool.editDialogTitle", { provider: providerLabel })}
-        description={t("keypool.editDialogDesc")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>

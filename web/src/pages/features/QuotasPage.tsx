@@ -199,7 +199,6 @@ export function QuotasPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("quotas.title")}
-        description={t("quotas.description")}
         toolbar={
           <Tabs
             aria-label={t("quotas.tabsLabel")}

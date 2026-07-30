@@ -305,7 +305,6 @@ export function ProxiesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("proxies.title")}
-        description={t("proxies.description")}
         meta={
           <>
             <MetaChip>{t("proxies.metaNodes", { n: rows.length })}</MetaChip>
@@ -330,7 +329,6 @@ export function ProxiesPage() {
       {showAdd ? (
         <ComposerPanel
           title={t("proxies.composerTitle")}
-          description={t("proxies.composerDescription")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
@@ -488,7 +486,6 @@ export function ProxiesPage() {
             compact
             icon={Globe}
             title={t("proxies.emptyTitle")}
-            description={t("proxies.emptyDescription")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
@@ -748,7 +745,6 @@ export function ProxiesPage() {
       <Dialog
         open={editing !== null}
         title={t("proxies.editTitle")}
-        description={t("proxies.editDescription")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>

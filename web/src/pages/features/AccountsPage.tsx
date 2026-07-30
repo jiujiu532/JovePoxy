@@ -437,7 +437,6 @@ export function AccountsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("accounts.title")}
-        description={t("accounts.description")}
         toolbar={
           <Tabs
             aria-label={t("accounts.providerTabAria")}
@@ -590,7 +589,6 @@ export function AccountsPage() {
           <EmptyState
             icon={tab === "opencode" ? UsersThree : Cloud}
             title={tab === "opencode" ? t("accounts.emptyTitleOc") : t("accounts.emptyTitleOl")}
-            description={t("accounts.emptyDescription")}
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => setDialog("add")}>{t("accounts.addAccount")}</Button>

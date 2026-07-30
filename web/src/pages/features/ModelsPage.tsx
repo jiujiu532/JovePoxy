@@ -125,7 +125,6 @@ export function ModelsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("models.title")}
-        description={t("models.description")}
         meta={
           stale
             ? t("models.staleMeta")
@@ -205,7 +204,6 @@ export function ModelsPage() {
             <EmptyState
               icon={Stack}
               title={t("models.emptyTitle")}
-              description={t("models.emptyDescription")}
               action={
                 <Button size="sm" loading={refreshing} onClick={() => void load(true)}>
                   {t("models.emptyAction")}
@@ -216,7 +214,6 @@ export function ModelsPage() {
             <EmptyState
               compact
               title={t("models.emptyFilteredTitle")}
-              description={t("models.emptyFilteredDescription")}
             />
           ) : (
             <div className="min-w-0 overflow-hidden">

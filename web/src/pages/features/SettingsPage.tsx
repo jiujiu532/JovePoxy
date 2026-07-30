@@ -190,7 +190,6 @@ export function SettingsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("settings.title")}
-        description={t("settings.description")}
         actions={
           <Button variant="secondary" size="sm" onClick={() => void load()}>
             {t("common.refresh")}
@@ -257,7 +256,6 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.serviceTitle")}
-            description={t("settings.serviceDescription")}
             bodyClassName="p-0"
           >
             <InfoList rows={serviceRows(t, settings)} />
@@ -265,7 +263,6 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.modelTitle")}
-            description={t("settings.modelDescription")}
             bodyClassName="p-0"
           >
             <InfoList rows={modelRows(t, settings)} />
@@ -273,7 +270,6 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.envTitle")}
-            description={t("settings.envDescription")}
             bodyClassName="!p-4 sm:!p-5"
           >
             <div className="grid gap-2 sm:grid-cols-2">

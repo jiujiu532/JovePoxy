@@ -246,7 +246,6 @@ export function OverviewPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title={t("overview.title")}
-        description={t("overview.description")}
         meta={t("overview.updatedAt", { time: formatUpdatedAt(lang, t, data.updated_at) })}
         actions={
           <Button variant="secondary" onClick={() => void load()}>
@@ -283,7 +282,6 @@ export function OverviewPage() {
               compact
               icon={ChartLineUp}
               title={t("overview.requestTrend.emptyTitle")}
-              description={t("overview.requestTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
@@ -303,7 +301,6 @@ export function OverviewPage() {
               compact
               icon={ChartBar}
               title={t("overview.tokenTrend.emptyTitle")}
-              description={t("overview.tokenTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
@@ -312,7 +309,6 @@ export function OverviewPage() {
       <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
         <SectionPanel
           title={t("overview.health.title")}
-          description={t("overview.health.description")}
         >
           <StatusStackBar
             ariaLabel={t("overview.health.ariaLabel")}
@@ -346,7 +342,6 @@ export function OverviewPage() {
 
         <SectionPanel
           title={t("overview.quickActions.title")}
-          description={t("overview.quickActions.description")}
         >
           <div className="flex flex-col gap-2">
             {[
@@ -385,7 +380,6 @@ export function OverviewPage() {
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
           title={t("overview.quotaWindows.title")}
-          description={t("overview.quotaWindows.description")}
         >
           <div className="grid gap-3 sm:grid-cols-3">
             {data.quota_windows.map((window) => (
@@ -429,7 +423,6 @@ export function OverviewPage() {
 
       <SectionPanel
         title={t("overview.byModel.title")}
-        description={t("overview.byModel.description")}
         actions={
           <Button variant="ghost" onClick={() => void navigate("/app/logs?tab=usage")}>
             {t("overview.byModel.viewUsage")}
@@ -442,7 +435,6 @@ export function OverviewPage() {
             compact
             icon={Stack}
             title={t("overview.byModel.emptyTitle")}
-            description={t("overview.byModel.emptyDescription")}
             action={
               <Button variant="secondary" onClick={() => void navigate("/app/logs?tab=usage")}>
                 {t("overview.byModel.emptyAction")}

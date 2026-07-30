@@ -276,7 +276,6 @@ export function LocalKeysPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("localkeys.title")}
-        description={t("localkeys.description")}
         meta={
           <>
             <MetaChip>{t("localkeys.metaCount", { n: keys.length })}</MetaChip>
@@ -300,7 +299,6 @@ export function LocalKeysPage() {
       {createdSecret ? (
         <ComposerPanel
           title={t("localkeys.newSecretTitle")}
-          description={t("localkeys.newSecretDesc")}
           onClose={() => {
             setCreatedSecret(null);
             setCopied(false);
@@ -333,7 +331,6 @@ export function LocalKeysPage() {
       {showAdd ? (
         <ComposerPanel
           title={t("localkeys.issueTitle")}
-          description={t("localkeys.issueDesc")}
           onClose={() => setShowAdd(false)}
           footer={
             <>
@@ -482,7 +479,6 @@ export function LocalKeysPage() {
             compact
             icon={Key}
             title={t("localkeys.emptyTitle")}
-            description={t("localkeys.emptyDesc")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
@@ -717,7 +713,6 @@ export function LocalKeysPage() {
       <Dialog
         open={editing !== null}
         title={t("localkeys.editDialogTitle")}
-        description={t("localkeys.editDialogDesc")}
         onClose={() => setEditing(null)}
       >
         <form className="flex flex-col gap-3" onSubmit={(e) => void onSaveEdit(e)}>

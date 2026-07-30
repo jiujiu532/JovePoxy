@@ -234,7 +234,6 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
             <EmptyState
               icon={ClipboardText}
               title={t("logs.emptyGatewayTitle")}
-              description={t("logs.emptyGatewayDescription")}
             />
           ) : filtered.length === 0 ? (
             <EmptyState compact title={t("logs.noMatchTitle")} description={t("logs.noMatchDescription")} />
@@ -717,7 +716,6 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
             <EmptyState
               icon={Database}
               title={t("logs.emptyUsageOlTitle")}
-              description={t("logs.emptyUsageOlDescription")}
               action={
                 <Button variant="secondary" onClick={() => void navigate("/app/accounts?tab=ollama")}>
                   {t("logs.goAddAccount")}
@@ -779,7 +777,6 @@ export function LogsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("logs.pageTitle")}
-        description={t("logs.pageDescription")}
         toolbar={
           <Tabs
             aria-label={t("logs.tabsAria")}
