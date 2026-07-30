@@ -7,6 +7,7 @@ import {
   Globe,
   Key,
   SidebarSimple,
+  SignOut,
   SquaresFour,
   Stack,
   UsersThree,
@@ -81,33 +82,43 @@ function readCollapsed(): boolean {
 export type SidebarProps = {
   readonly open: boolean;
   readonly onClose: () => void;
+  readonly onLogout: () => void;
 };
 
 function IconTile({
   IconComp,
   active,
-  size = 18,
 }: {
   readonly IconComp: Icon;
   readonly active: boolean;
-  readonly size?: number;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center border-2 border-border",
-        "shadow-[2px_2px_0_var(--border)] transition-colors duration-150",
-        active
-          ? "bg-accent text-black"
-          : "bg-paper-0 text-ink group-hover:bg-paper-1",
+        "nav-icon-tile inline-flex h-9 w-9 shrink-0 items-center justify-center",
+        "border-2 border-border bg-paper-0 text-ink",
+        "shadow-[2px_2px_0_var(--border)]",
+        "transition-[transform,background-color,color,box-shadow] duration-200 ease-out",
+        "group-hover:-translate-y-px group-hover:shadow-[3px_3px_0_var(--border)]",
+        active && "bg-accent text-black shadow-[3px_3px_0_var(--border)]",
       )}
+      data-active={active ? "true" : "false"}
     >
-      <IconComp size={size} weight={active ? "fill" : "regular"} aria-hidden />
+      <IconComp
+        size={20}
+        weight={active ? "fill" : "duotone"}
+        className={cn(
+          "nav-icon-svg transition-[transform] duration-200 ease-out",
+          "group-hover:scale-110",
+          active && "nav-icon-pop",
+        )}
+        aria-hidden
+      />
     </span>
   );
 }
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, onLogout }: SidebarProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
@@ -125,6 +136,35 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <>
+      <style>{`
+        @keyframes nav-icon-pop {
+          0% { transform: scale(0.72) rotate(-8deg); }
+          55% { transform: scale(1.14) rotate(4deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes nav-active-bar {
+          0% { transform: scaleY(0); opacity: 0; }
+          100% { transform: scaleY(1); opacity: 1; }
+        }
+        .nav-icon-pop {
+          animation: nav-icon-pop 0.38s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+        }
+        .nav-active-bar {
+          transform-origin: center;
+          animation: nav-active-bar 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .nav-icon-pop,
+          .nav-active-bar {
+            animation: none !important;
+          }
+          .nav-icon-tile,
+          .nav-icon-svg {
+            transition: none !important;
+          }
+        }
+      `}</style>
+
       <button
         type="button"
         className={cn(
@@ -139,40 +179,32 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           "flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col overflow-hidden border-r-2 border-border bg-paper-1",
           "fixed inset-y-0 left-0 z-50 transition-[width,transform] duration-200",
           "md:static md:z-0 md:translate-x-0",
-          // Mobile drawer always expanded width; desktop respects collapse.
-          "w-60",
-          collapsed ? "md:w-[72px]" : "md:w-60",
+          "w-64",
+          collapsed ? "md:w-[76px]" : "md:w-64",
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
         aria-label={t("nav.console")}
         data-collapsed={collapsed ? "true" : "false"}
       >
-        {/* Brand — h-16 matches TopBar so the horizontal rule aligns */}
+        {/* Brand — h-16 aligns with TopBar rule */}
         <div
           className={cn(
             "flex h-16 shrink-0 items-center border-b-2 border-border",
-            collapsed ? "justify-center px-2" : "justify-between px-3.5",
+            collapsed ? "justify-center px-2" : "gap-3 px-4",
           )}
         >
-          <div
-            className={cn(
-              "flex min-w-0 items-center",
-              collapsed ? "justify-center" : "gap-2.5",
-            )}
-          >
-            <BrandMark size={collapsed ? 36 : 32} className="rounded-none shadow-none" />
-            <div className={cn("min-w-0", collapsed && "md:hidden")}>
-              <p className="truncate text-[13px] font-semibold tracking-tight text-ink">
-                JovePoxy
-              </p>
-              <p className="truncate text-[11px] font-medium leading-tight text-ink-faint">
-                {t("shell.subtitle")}
-              </p>
-            </div>
+          <BrandMark size={40} className="shrink-0 rounded-none shadow-none" />
+          <div className={cn("min-w-0", collapsed && "md:hidden")}>
+            <p className="truncate text-[15px] font-semibold tracking-tight text-ink">
+              JovePoxy
+            </p>
+            <p className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-ink-faint">
+              {t("shell.subtitle")}
+            </p>
           </div>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center border-2 border-transparent text-ink-muted transition-colors duration-150 hover:border-border hover:bg-paper-0 hover:text-ink md:hidden"
+            className="ml-auto inline-flex h-8 w-8 items-center justify-center border-2 border-transparent text-ink-muted transition-colors duration-150 hover:border-border hover:bg-paper-0 hover:text-ink md:hidden"
             aria-label={t("shell.closeNav")}
             onClick={onClose}
           >
@@ -183,26 +215,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {/* Nav */}
         <nav
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto py-2.5",
-            collapsed ? "px-2" : "px-2.5",
+            "min-h-0 flex-1 overflow-y-auto py-3",
+            collapsed ? "px-2" : "px-3",
           )}
         >
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {NAV_SECTIONS.map((section) => (
               <div key={section.labelKey ?? section.ids.join("-")}>
                 {section.labelKey ? (
                   collapsed ? (
                     <div
-                      className="mx-auto mb-1.5 hidden h-px w-6 bg-border md:block"
+                      className="mx-auto mb-2 hidden h-px w-7 bg-border md:block"
                       aria-hidden
                     />
                   ) : (
-                    <p className="mb-1.5 px-2 text-[11px] font-medium tracking-wide text-ink-faint">
+                    <p className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-ink-faint">
                       {t(section.labelKey)}
                     </p>
                   )
                 ) : null}
-                <ul className="flex flex-col gap-1.5">
+                <ul className="flex flex-col gap-2">
                   {section.ids.map((id) => {
                     const route = routeFor(id);
                     const IconComp = iconFor(id);
@@ -215,10 +247,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                           title={label}
                           className={({ isActive }) =>
                             cn(
-                              "group relative flex items-center border-2 transition-colors duration-150",
+                              "group relative flex items-center border-2 transition-[background-color,border-color,color,transform] duration-150",
                               collapsed
-                                ? "justify-center px-1 py-1"
-                                : "gap-2.5 px-1.5 py-1",
+                                ? "justify-center px-1.5 py-1.5"
+                                : "gap-3 px-2 py-1.5",
                               isActive
                                 ? "border-border bg-accent-soft text-ink"
                                 : "border-transparent text-ink-muted hover:border-border hover:bg-paper-0 hover:text-ink",
@@ -230,7 +262,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                               {isActive ? (
                                 <span
                                   className={cn(
-                                    "absolute left-0 top-1 bottom-1 w-1 bg-accent",
+                                    "nav-active-bar absolute left-0 top-1.5 bottom-1.5 w-1 bg-accent",
                                     collapsed && "md:hidden",
                                   )}
                                   aria-hidden
@@ -239,7 +271,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                               <IconTile IconComp={IconComp} active={isActive} />
                               <span
                                 className={cn(
-                                  "truncate text-[13px] font-medium",
+                                  "truncate text-[14px] font-medium",
                                   collapsed && "md:hidden",
                                 )}
                               >
@@ -257,31 +289,75 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
         </nav>
 
-        {/* Footer: desktop collapse only (theme/lang/github/logout live in TopBar) */}
+        {/* Footer: logout + desktop collapse (JoveMage-style) */}
         <div
           className={cn(
-            "hidden shrink-0 border-t-2 border-border bg-paper-1 md:flex",
-            "items-center pb-[max(0.625rem,env(safe-area-inset-bottom))]",
-            collapsed ? "justify-center px-2 py-2" : "justify-end px-2.5 py-2.5",
+            "shrink-0 border-t-2 border-border bg-paper-1",
+            "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+            collapsed ? "px-2 py-2.5" : "px-3 py-3",
           )}
         >
-          <button
-            type="button"
+          <div
             className={cn(
-              "inline-flex h-9 w-9 shrink-0 items-center justify-center",
-              "border-2 border-border bg-paper-0 text-ink",
-              "shadow-[2px_2px_0_var(--border)]",
-              "transition-[transform,background-color] duration-150",
-              "hover:bg-paper-1 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+              "flex gap-2",
+              collapsed ? "flex-col items-center" : "items-center",
             )}
-            aria-label={collapsed ? t("shell.expand") : t("shell.collapse")}
-            aria-pressed={collapsed}
-            title={collapsed ? t("shell.expand") : t("shell.collapse")}
-            onClick={toggleCollapsed}
           >
-            <SidebarSimple size={18} weight={collapsed ? "fill" : "regular"} />
-          </button>
+            {collapsed ? (
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label={t("shell.logout")}
+                title={t("shell.logout")}
+                className={cn(
+                  "inline-flex h-10 w-10 shrink-0 items-center justify-center",
+                  "border-2 border-border bg-paper-0 text-ink",
+                  "shadow-[2px_2px_0_var(--border)]",
+                  "transition-[transform,background-color] duration-150",
+                  "hover:bg-accent-yellow hover:text-black",
+                  "active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+                )}
+              >
+                <SignOut size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onLogout}
+                className={cn(
+                  "inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2",
+                  "border-2 border-border bg-paper-0 px-3 text-[13px] font-semibold text-ink",
+                  "shadow-[2px_2px_0_var(--border)]",
+                  "transition-[transform,background-color] duration-150",
+                  "hover:bg-accent-yellow hover:text-black",
+                  "active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+                )}
+              >
+                <SignOut size={16} aria-hidden />
+                <span className="truncate">{t("shell.logout")}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className={cn(
+                "hidden md:inline-flex h-10 w-10 shrink-0 items-center justify-center",
+                "border-2 border-border bg-paper-0 text-ink",
+                "shadow-[2px_2px_0_var(--border)]",
+                "transition-[transform,background-color] duration-150",
+                "hover:bg-paper-1 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+              )}
+              aria-label={collapsed ? t("shell.expand") : t("shell.collapse")}
+              aria-pressed={collapsed}
+              title={collapsed ? t("shell.expand") : t("shell.collapse")}
+              onClick={toggleCollapsed}
+            >
+              <SidebarSimple size={18} weight={collapsed ? "fill" : "regular"} />
+            </button>
+          </div>
         </div>
       </aside>
     </>

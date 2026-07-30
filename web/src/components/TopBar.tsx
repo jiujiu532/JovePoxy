@@ -9,7 +9,6 @@ import {
   Key,
   List,
   Moon,
-  SignOut,
   SquaresFour,
   Stack,
   Sun,
@@ -28,7 +27,6 @@ export type TopBarProps = {
   readonly onMenuClick: () => void;
   readonly theme: "light" | "dark";
   readonly onToggleTheme: () => void;
-  readonly onLogout: () => void;
 };
 
 const ROUTE_ICONS: Record<NavRouteId, Icon> = {
@@ -104,7 +102,6 @@ export function TopBar({
   onMenuClick,
   theme,
   onToggleTheme,
-  onLogout,
 }: TopBarProps) {
   const { t, lang, setLang } = useI18n();
   const { pathname } = useLocation();
@@ -153,7 +150,7 @@ export function TopBar({
         </h1>
       </div>
 
-      {/* Right action cluster: Theme, Lang, GitHub, Logout, Version */}
+      {/* Right action cluster: Theme, Lang, GitHub, Version (logout lives in sidebar) */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <HeaderIconButton
           label={theme === "dark" ? t("shell.toLight") : t("shell.toDark")}
@@ -174,10 +171,6 @@ export function TopBar({
           href="https://github.com/jiujiu532/JovePoxy"
         >
           <GithubLogo size={18} />
-        </HeaderIconButton>
-
-        <HeaderIconButton label={t("shell.logout")} onClick={onLogout}>
-          <SignOut size={18} />
         </HeaderIconButton>
 
         <VersionBadge className="!h-9 !w-auto min-w-[4.5rem] shrink-0 px-2.5" />
