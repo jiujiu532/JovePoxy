@@ -5,13 +5,9 @@ import {
   Lightning,
   Pulse,
   Stack,
-  ArrowRight,
-  Key,
-  Globe,
-  ChartLine,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -468,29 +464,6 @@ export function OverviewPage() {
     },
   ];
 
-  const shortcuts = [
-    {
-      to: "/app/local-keys",
-      label: t("overview.quickActions.createLocalKeyLabel"),
-      icon: Key,
-    },
-    {
-      to: "/app/proxies",
-      label: t("overview.quickActions.configureProxyLabel"),
-      icon: Globe,
-    },
-    {
-      to: "/app/quotas",
-      label: t("overview.quickActions.quotaMonitorLabel"),
-      icon: ChartLine,
-    },
-    {
-      to: "/app/key-pool",
-      label: t("overview.zenPool.openPool"),
-      icon: Coins,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -701,35 +674,6 @@ export function OverviewPage() {
           </div>
         )}
       </SectionPanel>
-
-      {/* 6. 底部紧凑入口（不再占一整块英雄区） */}
-      <nav
-        aria-label={t("overview.quickActions.title")}
-        className="flex flex-wrap items-center gap-2 border-t-2 border-border pt-3"
-      >
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
-          {t("overview.quickActions.title")}
-        </span>
-        {shortcuts.map((item) => {
-          const IconComp = item.icon;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 border-2 border-border bg-paper-0 px-2.5 text-[12px] font-medium text-ink",
-                "shadow-[2px_2px_0_var(--border)]",
-                "transition-[transform,background-color] duration-150",
-                "hover:bg-accent-soft active:translate-x-px active:translate-y-px active:shadow-none",
-              )}
-            >
-              <IconComp size={14} weight="duotone" aria-hidden />
-              {item.label}
-              <ArrowRight size={12} weight="bold" className="text-ink-faint" aria-hidden />
-            </Link>
-          );
-        })}
-      </nav>
     </div>
   );
 }
