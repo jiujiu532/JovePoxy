@@ -20,7 +20,6 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { NavLink } from "react-router-dom";
 import { BrandMark } from "@/components/BrandMark";
-import { VersionBadge } from "@/components/VersionBadge";
 import { NAV_ROUTES, type NavRouteId } from "@/lib/routes";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -397,8 +396,6 @@ export function Sidebar({
               <SidebarSimple size={18} weight={collapsed ? "fill" : "regular"} />
             </button>
           </div>
-
-          {!collapsed ? <VersionBadge className="mt-2" /> : null}
         </div>
       </aside>
     </>
