@@ -1,8 +1,6 @@
 import {
   ChartLine,
-  CheckCircle,
   Cloud,
-  WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -240,45 +238,6 @@ export function QuotasPage() {
         </div>
       ) : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
-
-      {!loading && !error ? (
-        <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
-          <div className="flex items-center gap-4">
-            <span className={`flex h-12 w-12 shrink-0 items-center justify-center border-2 border-border text-black shadow-[2px_2px_0_var(--border)] ${tab === "opencode" ? "bg-accent-yellow" : "bg-accent-teal"}`}>
-              {tab === "opencode" ? <ChartLine size={24} weight="duotone" /> : <Cloud size={24} weight="duotone" />}
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-ink">{tab === "opencode" ? "OpenCode" : "Ollama"} {t("quotas.title")}</h2>
-                <span className="border border-border bg-paper-0 px-2 py-0.5 font-mono text-[11px] font-semibold text-ink-muted">
-                  {activeCount} {t("kpi.accounts")}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[12px] text-ink-muted">
-                {t("kpi.ok")}: {tab === "opencode" ? ocOk : olOk} / {activeCount}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2.5 border-2 border-border bg-accent-mint/20 px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)]">
-              <CheckCircle size={18} className="text-black" weight="bold" />
-              <div className="text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.ok")}</p>
-                <p className="font-mono text-base font-bold text-ink">{tab === "opencode" ? ocOk : olOk}</p>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-2.5 border-2 border-border px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)] ${(tab === "opencode" ? ocQuotas.length - ocOk : olQuotas.length - olOk) > 0 ? "bg-accent/30" : "bg-paper-0"}`}>
-              <WarningCircle size={18} className={(tab === "opencode" ? ocQuotas.length - ocOk : olQuotas.length - olOk) > 0 ? "text-accent" : "text-ink-faint"} weight="bold" />
-              <div className="text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.failed")}</p>
-                <p className="font-mono text-base font-bold text-ink">{tab === "opencode" ? ocQuotas.length - ocOk : olQuotas.length - olOk}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {!loading && !error && activeCount === 0 ? (
         <SectionPanel

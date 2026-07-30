@@ -468,44 +468,6 @@ export function AccountsPage() {
         }
       />
 
-      {!loading ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex items-center justify-between border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
-            <div className="flex items-center gap-3.5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-border bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]">
-                <UsersThree size={22} weight="duotone" />
-              </span>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">OpenCode {t("kpi.accounts")}</p>
-                <p className="mt-0.5 font-mono text-2xl font-bold text-ink">{ocAccounts.length}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <Badge kind={ocEnabled > 0 ? "healthy" : "neutral"}>
-                {t("kpi.enabled")}: {ocEnabled} / {ocAccounts.length}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
-            <div className="flex items-center gap-3.5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-border bg-accent-teal text-black shadow-[2px_2px_0_var(--border)]">
-                <Cloud size={22} weight="duotone" />
-              </span>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Ollama {t("kpi.accounts")}</p>
-                <p className="mt-0.5 font-mono text-2xl font-bold text-ink">{olAccounts.length}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <Badge kind={olEnabled > 0 ? "healthy" : "neutral"}>
-                {t("kpi.enabled")}: {olEnabled} / {olAccounts.length}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex flex-col overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[var(--shadow-hard)]">
         <div className="flex flex-col gap-2 border-b border-border bg-paper-0/35 px-3 py-2.5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">

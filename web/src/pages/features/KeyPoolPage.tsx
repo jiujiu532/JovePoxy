@@ -3,8 +3,6 @@ import {
   Key,
   PencilSimple,
   Plus,
-  Pulse,
-  Snowflake,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -312,53 +310,6 @@ export function KeyPoolPage() {
           </div>
         }
       />
-
-      {!loading && !listError ? (
-        <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
-          <div className="flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center border-2 border-border bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]">
-              <Key size={24} weight="duotone" />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-ink">{providerLabel} 密钥池</h2>
-                <span className="border border-border bg-paper-0 px-2 py-0.5 font-mono text-[11px] font-semibold text-ink-muted">
-                  {keys.length} 密钥
-                </span>
-              </div>
-              <p className="mt-0.5 text-[12px] text-ink-muted">
-                {t("kpi.filtered")}: {filtered.length} · {t("kpi.enabled")}: {enabled}/{keys.length}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2.5 border-2 border-border bg-accent-mint/20 px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)]">
-              <Pulse size={18} className="text-black" weight="bold" />
-              <div className="text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.enabled")}</p>
-                <p className="font-mono text-base font-bold text-ink">{enabled}</p>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-2.5 border-2 border-border px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)] ${cooling > 0 ? "bg-accent-yellow/30" : "bg-paper-0"}`}>
-              <Snowflake size={18} className={cooling > 0 ? "text-amber-700" : "text-ink-faint"} weight="bold" />
-              <div className="text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.cooling")}</p>
-                <p className="font-mono text-base font-bold text-ink">{cooling}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 border-2 border-border bg-accent-teal/20 px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)]">
-              <Coins size={18} className="text-black" weight="bold" />
-              <div className="text-left">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.weight")}</p>
-                <p className="font-mono text-base font-bold text-ink">{totalWeight}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {showAdd ? (
         <ComposerPanel

@@ -1,11 +1,6 @@
 import {
-  ChartBar,
-  CheckCircle,
   ClipboardText,
   Database,
-  Stack,
-  Timer,
-  WarningCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -165,29 +160,6 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent text-black font-bold shadow-[2px_2px_0_var(--border)]">
-              <ClipboardText size={20} weight="duotone" />
-            </span>
-            <div>
-              <span className="font-bold text-sm text-ink">{t("logs.gatewayTitle")}</span>
-              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} / {logs.length})</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <CheckCircle size={14} className="text-status-healthy" /> {t("kpi.ok")}: {ok}
-            </span>
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <WarningCircle size={14} className={rateLimited > 0 ? "text-amber-700" : "text-ink-faint"} /> 429限流: {rateLimited}
-            </span>
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <Timer size={14} className="text-accent-teal" /> {t("kpi.avgLatency")}: {logs.length ? formatLatency(avgLatency) : "-"}
-            </span>
-          </div>
-        </div>
         <SectionPanel
           title={t("logs.gatewayTitle")}
           description={t("logs.gatewayStats", {
@@ -335,7 +307,6 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
-        </>
       ) : null}
     </>
   );
@@ -450,26 +421,6 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent-yellow text-black font-bold shadow-[2px_2px_0_var(--border)]">
-              <Database size={20} weight="duotone" />
-            </span>
-            <div>
-              <span className="font-bold text-sm text-ink">{t("logs.usageOcTitle")}</span>
-              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} / {records.length})</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <ChartBar size={14} className="text-accent-teal" /> {t("logs.colInput")}: {totalIn.toLocaleString()}
-            </span>
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <Database size={14} className="text-status-healthy" /> {t("logs.colOutput")}: {totalOut.toLocaleString()}
-            </span>
-          </div>
-        </div>
         <SectionPanel
           title={t("logs.usageOcTitle")}
           description={t("logs.usageOcStats", { filtered: filtered.length, total: records.length, in: totalIn, out: totalOut })}
@@ -633,7 +584,6 @@ function UsagePanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
-        </>
       ) : null}
     </>
   );
@@ -732,26 +682,6 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent-teal text-black font-bold shadow-[2px_2px_0_var(--border)]">
-              <Database size={20} weight="duotone" />
-            </span>
-            <div>
-              <span className="font-bold text-sm text-ink">{t("logs.usageOlTitle")}</span>
-              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} {t("logs.colModel")})</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <Stack size={14} /> {t("kpi.accounts")}: {accounts.length}
-            </span>
-            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
-              <ChartBar size={14} className="text-accent-teal" /> {t("logs.colRequests")}: {totalReq.toLocaleString()}
-            </span>
-          </div>
-        </div>
         <SectionPanel
           title={t("logs.usageOlTitle")}
           description={t("logs.usageOlStats", { count: filtered.length, total: totalReq })}
@@ -859,7 +789,6 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
-        </>
       ) : null}
     </>
   );
