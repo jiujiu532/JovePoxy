@@ -191,15 +191,18 @@ export function LocalKeysPage() {
     }
   }
 
-  const active = keys.filter((k) => k.enabled && !k.revoked).length;
-  const disabled = keys.filter((k) => !k.revoked && !k.enabled).length;
-  const revoked = keys.filter((k) => k.revoked).length;
+  // 吊销为软删：后台仍记 revoked_at，管理台列表不再展示墓碑
+  const liveKeys = keys.filter((k) => !k.revoked);
+  const active = liveKeys.filter((k) => k.enabled).length;
+  const disabled = liveKeys.filter((k) => !k.enabled).length;
+  const limited = liveKeys.filter((k) => k.rpm_limit > 0 || k.daily_limit > 0).length;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = keys.filter((k) => {
-      if (status === "enabled" && (k.revoked || !k.enabled)) return false;
-      if (status === "disabled" && (k.revoked || k.enabled)) return false;
-      if (status === "revoked" && !k.revoked) return false;
+      if (k.revoked) return false;
+      if (status === "enabled" && !k.enabled) return false;
+      if (status === "disabled" && k.enabled) return false;
+      if (status === "revoked") return false;
       if (limitFilter === "unlimited" && (k.rpm_limit > 0 || k.daily_limit > 0)) {
         return false;
       }
@@ -401,7 +404,7 @@ export function LocalKeysPage() {
             </Button>
           }
         />
-      ) : keys.length === 0 ? (
+      ) : liveKeys.length === 0 ? (
         <PosterEmpty
           stamp={t("localkeys.posterStamp")}
           stampSub={t("localkeys.posterStampSub")}
@@ -441,7 +444,7 @@ export function LocalKeysPage() {
             items={[
               {
                 label: t("kpi.total"),
-                value: keys.length,
+                value: liveKeys.length,
                 hint: t("localkeys.railTotalHint"),
                 tone: "yellow",
               },
@@ -458,10 +461,10 @@ export function LocalKeysPage() {
                 tone: "white",
               },
               {
-                label: t("localkeys.statusRevoked"),
-                value: revoked,
-                hint: t("localkeys.railRevokedHint"),
-                tone: "accent",
+                label: t("localkeys.railLimitedLabel"),
+                value: limited,
+                hint: t("localkeys.railLimitedHint"),
+                tone: "mint",
               },
             ]}
           />
@@ -490,7 +493,6 @@ export function LocalKeysPage() {
                 { value: "all", label: t("common.all") },
                 { value: "enabled", label: t("localkeys.statusAvailable") },
                 { value: "disabled", label: t("common.disabled") },
-                { value: "revoked", label: t("localkeys.statusRevoked") },
               ]}
             />
           }
