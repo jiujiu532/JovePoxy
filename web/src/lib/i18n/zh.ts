@@ -81,11 +81,12 @@ export const zh = {
   "viewmode.tableShort": "表格",
 
   /* ===== pagination ===== */
-  "pagination.range": "显示第 {from} 条 - 第 {to} 条，共 {total} 条",
-  "pagination.pages": "总页数: {pages}",
   "pagination.prev": "上一页",
   "pagination.next": "下一页",
   "pagination.perPage": "每页",
+  "pagination.perPageOption": "{n} / 页",
+  "pagination.summary": "第 {page} / {pages} 页 · 共 {total} 条",
+  "pagination.goto": "第 {page} 页",
 
   /* ===== version ===== */
   "version.title": "版本",

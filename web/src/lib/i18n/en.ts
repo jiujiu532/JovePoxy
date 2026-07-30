@@ -82,11 +82,12 @@ export const en: Record<MessageKey, string> = {
   "viewmode.tableShort": "Table",
 
   /* ===== pagination ===== */
-  "pagination.range": "Showing {from} - {to} of {total}",
-  "pagination.pages": "Pages: {pages}",
-  "pagination.prev": "Previous page",
-  "pagination.next": "Next page",
+  "pagination.prev": "Previous",
+  "pagination.next": "Next",
   "pagination.perPage": "Per page",
+  "pagination.perPageOption": "{n} / page",
+  "pagination.summary": "Page {page} / {pages} · {total} total",
+  "pagination.goto": "Page {page}",
 
   /* ===== version ===== */
   "version.title": "Version",
