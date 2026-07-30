@@ -51,6 +51,8 @@ export const zh = {
   "shell.logout": "退出",
   "shell.github": "GitHub 仓库",
   "shell.switchLang": "Switch to English",
+  "shell.collapse": "折叠侧栏",
+  "shell.expand": "展开侧栏",
   "shell.navSection.data": "数据面",
   "shell.navSection.control": "控制面",
   "shell.navSection.observe": "观测",

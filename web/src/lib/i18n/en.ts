@@ -52,6 +52,8 @@ export const en: Record<MessageKey, string> = {
   "shell.logout": "Sign out",
   "shell.github": "GitHub repository",
   "shell.switchLang": "切换为中文",
+  "shell.collapse": "Collapse sidebar",
+  "shell.expand": "Expand sidebar",
   "shell.navSection.data": "Data Plane",
   "shell.navSection.control": "Control Plane",
   "shell.navSection.observe": "Observability",
