@@ -28,9 +28,15 @@ func (s *SQLiteStore) Update(ctx context.Context, id KeyID, input UpdateInput) e
 }
 
 func (s *SQLiteStore) List(ctx context.Context) (metadata []KeyMetadata, err error) {
+	// Drop legacy soft-revoked rows so older installs match hard-delete semantics.
+	if err := s.purgeSoftRevoked(ctx); err != nil {
+		return nil, err
+	}
 	rows, err := s.database.QueryContext(ctx, `
-		SELECT id, name, prefix, enabled, revoked_at, rpm_limit, daily_limit
-		FROM local_api_keys ORDER BY created_at ASC, id ASC`)
+		SELECT id, name, prefix, enabled, rpm_limit, daily_limit
+		FROM local_api_keys
+		WHERE revoked_at IS NULL
+		ORDER BY created_at ASC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query local API keys: %w", err)
 	}
@@ -42,20 +48,32 @@ func (s *SQLiteStore) List(ctx context.Context) (metadata []KeyMetadata, err err
 	for rows.Next() {
 		var item KeyMetadata
 		var enabled int
-		var revokedAt sql.NullString
 		if err := rows.Scan(
-			&item.ID, &item.Label, &item.Prefix, &enabled, &revokedAt, &item.RPMLimit, &item.DailyLimit,
+			&item.ID, &item.Label, &item.Prefix, &enabled, &item.RPMLimit, &item.DailyLimit,
 		); err != nil {
 			return nil, fmt.Errorf("scan local API key: %w", err)
 		}
 		item.Enabled = enabled != 0
-		item.Revoked = revokedAt.Valid
+		item.Revoked = false
 		metadata = append(metadata, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate local API keys: %w", err)
 	}
 	return metadata, nil
+}
+
+func (s *SQLiteStore) purgeSoftRevoked(ctx context.Context) error {
+	if _, err := s.database.ExecContext(ctx, `
+		UPDATE request_logs SET key_id = NULL
+		WHERE key_id IN (SELECT id FROM local_api_keys WHERE revoked_at IS NOT NULL)`); err != nil {
+		return fmt.Errorf("detach logs for soft-revoked local API keys: %w", err)
+	}
+	if _, err := s.database.ExecContext(ctx,
+		"DELETE FROM local_api_keys WHERE revoked_at IS NOT NULL"); err != nil {
+		return fmt.Errorf("purge soft-revoked local API keys: %w", err)
+	}
+	return nil
 }
 
 func requireAffectedRow(result sql.Result) error {

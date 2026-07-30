@@ -54,10 +54,16 @@ func (s *SQLiteStore) VerifyAndConsume(ctx context.Context, candidateHash string
 	return VerifiedKey{ID: record.id, Label: record.label, Prefix: record.prefix}, nil
 }
 
+// Revoke hard-deletes the key. local_key_usage cascades; request_logs.key_id is nulled.
 func (s *SQLiteStore) Revoke(ctx context.Context, id KeyID) error {
-	result, err := s.database.ExecContext(ctx, "UPDATE local_api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+	if _, err := s.database.ExecContext(ctx,
+		"UPDATE request_logs SET key_id = NULL WHERE key_id = ?", id,
+	); err != nil {
+		return fmt.Errorf("detach request logs for local API key: %w", err)
+	}
+	result, err := s.database.ExecContext(ctx, "DELETE FROM local_api_keys WHERE id = ?", id)
 	if err != nil {
-		return fmt.Errorf("mark local API key revoked: %w", err)
+		return fmt.Errorf("delete local API key: %w", err)
 	}
 	return requireAffectedRow(result)
 }

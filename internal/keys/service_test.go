@@ -85,26 +85,26 @@ func TestService_rejects_disabled_or_revoked_keys(t *testing.T) {
 	if err := service.SetEnabled(ctx, disabled.ID, false); err != nil {
 		t.Fatalf("SetEnabled(false) error = %v", err)
 	}
-	revoked, err := service.Create(ctx, keys.CreateInput{Label: "revoked"})
+	deleted, err := service.Create(ctx, keys.CreateInput{Label: "deleted"})
 	if err != nil {
-		t.Fatalf("Create(revoked) error = %v", err)
+		t.Fatalf("Create(deleted) error = %v", err)
 	}
-	if err := service.Revoke(ctx, revoked.ID); err != nil {
+	if err := service.Revoke(ctx, deleted.ID); err != nil {
 		t.Fatalf("Revoke() error = %v", err)
 	}
 	listed, err := service.List(ctx)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(listed) != 2 || !containsRevokedKey(listed, revoked.ID) || !containsDisabledKey(listed, disabled.ID) {
-		t.Fatalf("List() metadata = %+v, want masked key metadata", listed)
+	if len(listed) != 1 || !containsDisabledKey(listed, disabled.ID) || containsKeyID(listed, deleted.ID) {
+		t.Fatalf("List() metadata = %+v, want only disabled key (deleted gone)", listed)
 	}
 
 	// When / Then
-	for _, secret := range []string{disabled.Secret, revoked.Secret} {
+	for _, secret := range []string{disabled.Secret, deleted.Secret} {
 		_, err := service.Verify(ctx, keys.Credentials{APIKey: secret})
 		if !errors.Is(err, keys.ErrUnauthorized) {
-			t.Fatalf("Verify(disabled or revoked) error = %v, want ErrUnauthorized", err)
+			t.Fatalf("Verify(disabled or deleted) error = %v, want ErrUnauthorized", err)
 		}
 	}
 }
@@ -162,10 +162,10 @@ func (c *fakeClock) Now() time.Time { return c.now }
 
 func (c *fakeClock) Advance(duration time.Duration) { c.now = c.now.Add(duration) }
 
-func containsRevokedKey(metadata []keys.KeyMetadata, id keys.KeyID) bool {
+func containsKeyID(metadata []keys.KeyMetadata, id keys.KeyID) bool {
 	for _, item := range metadata {
 		if item.ID == id {
-			return item.Revoked && item.Prefix != ""
+			return true
 		}
 	}
 	return false
