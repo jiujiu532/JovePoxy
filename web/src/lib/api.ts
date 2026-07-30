@@ -23,13 +23,14 @@ export type LocalKeyCreatedDTO = {
 };
 export type KeyProvider = "opencode" | "ollama";
 
-export type ZenKeyStatus = "active" | "cooling" | "disabled";
+export type ZenKeyStatus = "active" | "cooling" | "benched" | "disabled";
 
 export type ZenPoolProviderSummaryDTO = {
   readonly total: number;
   readonly enabled: number;
   readonly healthy: number;
   readonly cooled: number;
+  readonly benched?: number;
   readonly disabled: number;
 };
 
@@ -38,6 +39,7 @@ export type ZenPoolSummaryDTO = {
   readonly enabled: number;
   readonly healthy: number;
   readonly cooled: number;
+  readonly benched?: number;
   readonly disabled: number;
   readonly by_provider?: Readonly<Record<string, ZenPoolProviderSummaryDTO>>;
 };
@@ -51,7 +53,7 @@ export type ZenKeyDTO = {
   readonly provider?: KeyProvider;
   readonly cooldown_until?: string;
   readonly created_at?: string;
-  /** active | cooling | disabled — derived server-side */
+  /** active | cooling | benched | disabled — derived server-side */
   readonly status?: ZenKeyStatus;
   /** Traffic share within the same provider eligible set (0–100). */
   readonly traffic_pct?: number;
@@ -154,6 +156,10 @@ export type SettingsDTO = {
   readonly password_custom: boolean;
   readonly http_proxy_configured: boolean;
   readonly https_proxy_configured: boolean;
+  /** zenpool selection: spread | sticky */
+  readonly load_policy?: "spread" | "sticky" | string;
+  /** ProxyPaid attempts per request (2..4) */
+  readonly max_failover_attempts?: number;
 };
 export type OverviewQuotaNarrativeDTO = {
   readonly effective_remaining: number;
@@ -163,6 +169,22 @@ export type OverviewQuotaNarrativeDTO = {
   readonly burn_per_day?: number | null;
   readonly note?: string;
 };
+
+/** Time-window ops KPIs from reqlog metadata (no bodies). Owned by overview-ops-kpis. */
+export type OpsWindow = "1h" | "24h" | "7d";
+
+export type OpsKPIsDTO = {
+  readonly window: OpsWindow | string;
+  readonly requests: number;
+  /** 0..1; null/undefined when requests==0 */
+  readonly success_rate?: number | null;
+  readonly latency_p50_ms?: number | null;
+  readonly latency_p95_ms?: number | null;
+  readonly status_2xx: number;
+  readonly status_429: number;
+  readonly status_5xx: number;
+};
+
 export type OverviewDTO = {
   readonly requests_today: number;
   readonly tokens_today: number;
@@ -187,6 +209,8 @@ export type OverviewDTO = {
   readonly quota_narrative?: OverviewQuotaNarrativeDTO;
   /** Zen key pool health summary (secret-free). */
   readonly zen_pool?: ZenPoolSummaryDTO;
+  /** Time-window request KPIs (reqlog; owned by overview-ops-kpis). */
+  readonly ops_kpis?: OpsKPIsDTO;
   readonly updated_at?: string;
 };
 export type MetricsDTO = {
@@ -233,7 +257,12 @@ export const api = {
     }),
   logout: () => request<{ ok: boolean }>("/api/admin/logout", { method: "POST" }),
   me: () => request<{ ok: boolean; role: string }>("/api/admin/me"),
-  overview: () => request<OverviewDTO>("/api/admin/overview"),
+  overview: (window?: OpsWindow) =>
+    request<OverviewDTO>(
+      window
+        ? `/api/admin/overview?window=${encodeURIComponent(window)}`
+        : "/api/admin/overview",
+    ),
   models: () => request<{ models: ModelDTO[]; stale: boolean }>("/api/admin/models"),
   refreshModels: () =>
     request<{ models: ModelDTO[]; stale: boolean }>("/api/admin/models/refresh", {
@@ -400,6 +429,14 @@ export const api = {
   logs: () => request<{ logs: LogDTO[] }>("/api/admin/logs?limit=100"),
   metrics: () => request<MetricsDTO>("/api/admin/metrics"),
   settings: () => request<SettingsDTO>("/api/admin/settings"),
+  patchSettings: (body: {
+    load_policy?: "spread" | "sticky";
+    max_failover_attempts?: number;
+  }) =>
+    request<SettingsDTO>("/api/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: boolean }>("/api/admin/password", {
       method: "POST",

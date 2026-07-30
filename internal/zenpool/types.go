@@ -16,7 +16,17 @@ const (
 	ProviderOllama   Provider = "ollama"
 )
 
-// ErrNoHealthyKey is returned when no enabled, non-cooling key is available.
+// LoadPolicy controls how healthy keys are chosen for paid traffic.
+type LoadPolicy string
+
+const (
+	// LoadPolicySpread is weighted round-robin (default, matches legacy behavior).
+	LoadPolicySpread LoadPolicy = "spread"
+	// LoadPolicySticky pins a conversation affinity hash to one healthy key via weighted rendezvous.
+	LoadPolicySticky LoadPolicy = "sticky"
+)
+
+// ErrNoHealthyKey is returned when no enabled, non-cooling, non-benched key is available.
 var ErrNoHealthyKey = errors.New("zenpool: no healthy zen key available")
 
 // CreateInput is the boundary input for adding an upstream key.
@@ -58,8 +68,14 @@ type Cooldown struct {
 	Duration time.Duration
 }
 
-// Default cooldown policy from the locked plan: 60s general, 5m for 401.
+// Default cooldown / bench / failover policy.
 const (
-	DefaultCooldown   = 60 * time.Second
+	DefaultCooldown      = 60 * time.Second
 	UnauthorizedCooldown = 5 * time.Minute
+	// DefaultBenchDuration is process-memory bench window after 401 (independent of SQLite cooldown).
+	DefaultBenchDuration = 10 * time.Minute
+	// DefaultMaxAttempts is primary + one failover (legacy ProxyPaid semantics).
+	DefaultMaxAttempts = 2
+	MinMaxAttempts     = 2
+	MaxMaxAttempts     = 4
 )

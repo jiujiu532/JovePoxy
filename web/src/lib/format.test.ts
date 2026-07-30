@@ -60,7 +60,7 @@ describe("formatTrafficPct", () => {
 describe("zenKeyStatus", () => {
   const now = Date.parse("2026-07-30T12:00:00.000Z");
 
-  it("classifies disabled / active / cooling", () => {
+  it("classifies disabled / active / cooling / benched", () => {
     expect(zenKeyStatus({ enabled: false }, now)).toBe("disabled");
     expect(zenKeyStatus({ enabled: true }, now)).toBe("active");
     expect(
@@ -75,6 +75,7 @@ describe("zenKeyStatus", () => {
         now,
       ),
     ).toBe("active");
+    expect(zenKeyStatus({ enabled: true, status: "benched" }, now)).toBe("benched");
   });
 });
 

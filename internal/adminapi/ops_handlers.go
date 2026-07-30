@@ -7,15 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"jovepoxy/internal/analytics"
 	"jovepoxy/internal/auth"
 	"jovepoxy/internal/quota"
+	"jovepoxy/internal/reqlog"
 	"jovepoxy/internal/zenpool"
 )
 
 func (server server) overview(writer http.ResponseWriter, request *http.Request) {
+	window := analytics.NormalizeWindow(request.URL.Query().Get("window"))
 	if server.analytics == nil {
 		resp := overviewResponse{ByModel: nil}
 		resp.ZenPool = server.zenPoolSummary(request)
+		resp.OpsKPIs = server.buildOpsKPIs(request, window)
 		writeJSON(writer, http.StatusOK, resp)
 		return
 	}
@@ -30,7 +34,26 @@ func (server server) overview(writer http.ResponseWriter, request *http.Request)
 	}
 	resp := mapOverview(overview)
 	resp.ZenPool = server.zenPoolSummary(request)
+	resp.OpsKPIs = server.buildOpsKPIs(request, window)
 	writeJSON(writer, http.StatusOK, resp)
+}
+
+// buildOpsKPIs aggregates reqlog metadata for the requested window.
+// Prefer persisted List; fall back to in-memory Recent. Never panics on empty logs.
+func (server server) buildOpsKPIs(request *http.Request, window string) *analytics.OpsKPIs {
+	now := time.Now().UTC()
+	const limit = 5000
+	var entries []reqlog.Entry
+	if server.logs != nil {
+		listed, err := server.logs.List(request.Context(), limit, 0)
+		if err != nil {
+			entries = server.logs.Recent(limit)
+		} else {
+			entries = listed
+		}
+	}
+	kpis := analytics.AggregateOpsKPIs(entries, window, now)
+	return &kpis
 }
 
 func (server server) zenPoolSummary(request *http.Request) *zenPoolSummaryDTO {
@@ -44,7 +67,8 @@ func (server server) zenPoolSummary(request *http.Request) *zenPoolSummaryDTO {
 		empty := mapZenPoolSummary(zenpool.PoolSummary{})
 		return &empty
 	}
-	sum := mapZenPoolSummary(zenpool.Summarize(list, time.Now().UTC()))
+	now := time.Now().UTC()
+	sum := mapZenPoolSummary(zenpool.Summarize(list, now, server.pool.BenchedSnapshot(now)))
 	return &sum
 }
 
@@ -178,6 +202,12 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 	if server.auth != nil {
 		passwordCustom = server.auth.PasswordIsCustom(request.Context())
 	}
+	loadPolicy := string(zenpool.LoadPolicySpread)
+	maxAttempts := zenpool.DefaultMaxAttempts
+	if server.pool != nil {
+		loadPolicy = string(server.pool.LoadPolicy())
+		maxAttempts = server.pool.MaxAttempts()
+	}
 	writeJSON(writer, http.StatusOK, settingsResponse{
 		ModelCacheTTLSeconds: int(server.cfg.ModelCacheTTL.Seconds()),
 		ShowAllModels:        server.cfg.ShowAllModels,
@@ -191,5 +221,41 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 		PasswordCustom:       passwordCustom,
 		HTTPProxyConfigured:  server.cfg.HTTPProxy != nil,
 		HTTPSProxyConfigured: server.cfg.HTTPSProxy != nil,
+		LoadPolicy:           loadPolicy,
+		MaxFailoverAttempts:  maxAttempts,
 	})
+}
+
+func (server server) patchSettings(writer http.ResponseWriter, request *http.Request) {
+	if server.pool == nil {
+		writeError(writer, http.StatusServiceUnavailable, "zen pool unavailable")
+		return
+	}
+	var body patchSettingsRequest
+	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if body.LoadPolicy == nil && body.MaxFailoverAttempts == nil {
+		writeError(writer, http.StatusBadRequest, "no settings fields to update")
+		return
+	}
+	if body.LoadPolicy != nil {
+		policy := zenpool.LoadPolicy(strings.TrimSpace(*body.LoadPolicy))
+		if policy != zenpool.LoadPolicySpread && policy != zenpool.LoadPolicySticky {
+			writeError(writer, http.StatusBadRequest, "load_policy must be spread or sticky")
+			return
+		}
+		server.pool.SetLoadPolicy(policy)
+	}
+	if body.MaxFailoverAttempts != nil {
+		n := *body.MaxFailoverAttempts
+		if n < zenpool.MinMaxAttempts || n > zenpool.MaxMaxAttempts {
+			writeError(writer, http.StatusBadRequest, "max_failover_attempts must be 2..4")
+			return
+		}
+		server.pool.SetMaxAttempts(n)
+	}
+	// Return updated snapshot (same shape as GET).
+	server.getSettings(writer, request)
 }

@@ -49,7 +49,7 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 		writeAnthropicError(writer, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
-	response, err := server.forwardChat(request.Context(), openAIBody, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, openAIBody, parsed.Stream, free)
 	if err != nil {
 		if writePaidRouteAnthropicError(writer, request.Context(), server.pool, err) {
 			return

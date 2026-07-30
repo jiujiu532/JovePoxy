@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"jovepoxy/internal/zenpool"
 )
@@ -25,7 +26,8 @@ func (server server) listZenKeys(writer http.ResponseWriter, request *http.Reque
 		writeError(writer, http.StatusInternalServerError, "list keys failed")
 		return
 	}
-	writeJSON(writer, http.StatusOK, mapZenKeys(list))
+	now := time.Now().UTC()
+	writeJSON(writer, http.StatusOK, mapZenKeysAt(list, now, server.pool.BenchedSnapshot(now)))
 }
 
 func (server server) createZenKey(writer http.ResponseWriter, request *http.Request) {

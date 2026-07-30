@@ -10,7 +10,7 @@ import (
 	"jovepoxy/internal/zenpool"
 )
 
-func (server server) forwardChat(ctx context.Context, body json.RawMessage, stream bool, free bool) (*http.Response, error) {
+func (server server) forwardChat(ctx context.Context, request *http.Request, body json.RawMessage, stream bool, free bool) (*http.Response, error) {
 	if free {
 		// Free models are IP-limited; rotate egress proxies when configured.
 		return proxypool.ProxyFree(ctx, server.proxies, server.zen, body, stream)
@@ -18,7 +18,8 @@ func (server server) forwardChat(ctx context.Context, body json.RawMessage, stre
 	if server.pool == nil {
 		return nil, zenpool.ErrNoHealthyKey
 	}
-	return zenpool.ProxyPaid(ctx, server.pool, server.zen, body, stream)
+	affinity := zenpool.ConversationAffinityKey(request.Header, body)
+	return zenpool.ProxyPaid(ctx, server.pool, server.zen, body, stream, affinity)
 }
 
 func paidRouteFailure(ctx context.Context, pool *zenpool.Service, err error) (int, string, bool) {

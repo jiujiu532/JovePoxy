@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +71,15 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 	keyService := keys.NewService(database, nil)
 	pool := zenpool.NewService(database, box, nil)
+	// Optional process env for paid-pool scheduling (runtime still mutable via PATCH /settings).
+	if policy := strings.TrimSpace(os.Getenv("ZEN_LOAD_POLICY")); policy != "" {
+		pool.SetLoadPolicy(zenpool.LoadPolicy(policy))
+	}
+	if raw := strings.TrimSpace(os.Getenv("ZEN_MAX_ATTEMPTS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			pool.SetMaxAttempts(n)
+		}
+	}
 	proxies := proxypool.NewService(database, box, nil)
 	logs := reqlog.NewService(database, nil)
 	authService, err := auth.NewService(auth.Config{Database: database, Password: cfg.AdminPassword})

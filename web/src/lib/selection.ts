@@ -72,7 +72,7 @@ export function useRowSelection(visibleIds: readonly string[]) {
   } as const;
 }
 
-export type StatusFilter = "all" | "enabled" | "disabled" | "cooling" | "revoked";
+export type StatusFilter = "all" | "enabled" | "disabled" | "cooling" | "benched" | "revoked";
 
 export type WeightFilter = "all" | "1" | "ge2" | "ge5";
 export type LimitFilter = "all" | "unlimited" | "has_rpm" | "has_daily";

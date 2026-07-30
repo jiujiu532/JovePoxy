@@ -117,6 +117,7 @@ func New(dependencies Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/admin/logs", server.requireAuth(server.listLogs))
 	mux.HandleFunc("GET /api/admin/metrics", server.requireAuth(server.metrics))
 	mux.HandleFunc("GET /api/admin/settings", server.requireAuth(server.getSettings))
+	mux.HandleFunc("PATCH /api/admin/settings", server.requireAuth(server.patchSettings))
 	return mux
 }
 

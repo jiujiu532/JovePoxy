@@ -38,6 +38,8 @@ import {
   ApiError,
   type LogDTO,
   type MetricsDTO,
+  type OpsKPIsDTO,
+  type OpsWindow,
   type OverviewDTO,
   type UsageRecordDTO,
   type ZenPoolSummaryDTO,
@@ -105,6 +107,175 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
+}
+
+const OPS_WINDOWS: ReadonlyArray<OpsWindow> = ["1h", "24h", "7d"];
+
+function windowLabelKey(window: OpsWindow): "overview.opsKpis.window1h" | "overview.opsKpis.window24h" | "overview.opsKpis.window7d" {
+  switch (window) {
+    case "1h":
+      return "overview.opsKpis.window1h";
+    case "7d":
+      return "overview.opsKpis.window7d";
+    default:
+      return "overview.opsKpis.window24h";
+  }
+}
+
+function formatSuccessRate(rate: number | null | undefined, requests: number): string {
+  if (requests <= 0 || rate == null) return "-";
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+function formatLatencyMs(
+  t: Translate,
+  value: number | null | undefined,
+): string {
+  if (value == null) return "-";
+  return t("overview.opsKpis.ms", { n: value });
+}
+
+function OpsKpisPanel({
+  kpis,
+  window,
+  onWindowChange,
+  loading,
+  t,
+}: {
+  readonly kpis?: OpsKPIsDTO | undefined;
+  readonly window: OpsWindow;
+  readonly onWindowChange: (w: OpsWindow) => void;
+  readonly loading: boolean;
+  readonly t: Translate;
+}) {
+  const requests = kpis?.requests ?? 0;
+  const s2xx = kpis?.status_2xx ?? 0;
+  const s429 = kpis?.status_429 ?? 0;
+  const s5xx = kpis?.status_5xx ?? 0;
+
+  return (
+    <SectionPanel
+      title={t("overview.opsKpis.title")}
+      description={t("overview.opsKpis.description")}
+      icon={ChartLineUp}
+      iconTone="teal"
+      actions={
+        <div
+          role="group"
+          aria-label={t("overview.opsKpis.window")}
+          className="inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5"
+        >
+          {OPS_WINDOWS.map((w) => {
+            const active = window === w;
+            return (
+              <button
+                key={w}
+                type="button"
+                aria-pressed={active}
+                disabled={loading}
+                className={cn(
+                  "inline-flex h-8 items-center rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color] duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-paper-0",
+                  active
+                    ? "bg-paper-1 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
+                    : "text-ink-muted hover:bg-paper-1/70 hover:text-ink",
+                  loading && "opacity-60",
+                )}
+                onClick={() => onWindowChange(w)}
+              >
+                {t(windowLabelKey(w))}
+              </button>
+            );
+          })}
+        </div>
+      }
+    >
+      {requests === 0 ? (
+        <EmptyState
+          compact
+          icon={ChartLineUp}
+          title={t("overview.opsKpis.noData")}
+          description={t("overview.opsKpis.description")}
+        />
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                label: t("overview.opsKpis.requests"),
+                value: requests,
+                tone: "bg-accent-teal",
+              },
+              {
+                label: t("overview.opsKpis.successRate"),
+                value: formatSuccessRate(kpis?.success_rate, requests),
+                tone: "bg-accent-mint",
+              },
+              {
+                label: t("overview.opsKpis.latencyP50"),
+                value: formatLatencyMs(t, kpis?.latency_p50_ms),
+                tone: "bg-accent-yellow",
+              },
+              {
+                label: t("overview.opsKpis.latencyP95"),
+                value: formatLatencyMs(t, kpis?.latency_p95_ms),
+                tone: "bg-accent-soft",
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
+              >
+                <span
+                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
+                  aria-hidden
+                />
+                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
+                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4">
+            <StatusStackBar
+              ariaLabel={t("overview.opsKpis.title")}
+              segments={[
+                {
+                  label: t("overview.opsKpis.status2xx"),
+                  value: s2xx,
+                  color: "var(--accent-teal)",
+                },
+                {
+                  label: t("overview.opsKpis.status429"),
+                  value: s429,
+                  color: "var(--accent-yellow)",
+                },
+                {
+                  label: t("overview.opsKpis.status5xx"),
+                  value: s5xx,
+                  color: "var(--accent)",
+                },
+              ]}
+            />
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {[
+                { label: t("overview.opsKpis.status2xx"), value: s2xx },
+                { label: t("overview.opsKpis.status429"), value: s429 },
+                { label: t("overview.opsKpis.status5xx"), value: s5xx },
+              ].map((item) => (
+                <p key={item.label} className="text-[12px] text-ink-muted">
+                  <span className="font-semibold text-ink">{item.label}</span>
+                  {": "}
+                  <span className="tabular-nums">{item.value}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </SectionPanel>
+  );
 }
 
 function ZenPoolCard({
@@ -261,12 +432,14 @@ export function OverviewPage() {
   const [tokenTrend, setTokenTrend] = useState<TrendPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [opsWindow, setOpsWindow] = useState<OpsWindow>("24h");
+  const [opsLoading, setOpsLoading] = useState(false);
 
-  async function load() {
+  async function load(window: OpsWindow = opsWindow) {
     setLoading(true);
     try {
       const [overview, metricsPayload] = await Promise.all([
-        api.overview(),
+        api.overview(window),
         api.metrics(),
       ]);
       setData(overview);
@@ -297,8 +470,29 @@ export function OverviewPage() {
     }
   }
 
+  async function changeOpsWindow(next: OpsWindow) {
+    if (next === opsWindow) return;
+    setOpsWindow(next);
+    setOpsLoading(true);
+    try {
+      const overview = await api.overview(next);
+      setData(overview);
+      setError(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setSessionHint(false);
+        void navigate("/login");
+        return;
+      }
+      setError(err instanceof Error ? err.message : t("common.loadFailed"));
+    } finally {
+      setOpsLoading(false);
+    }
+  }
+
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial mount only
   }, [navigate]);
 
   if (loading) {
@@ -325,7 +519,7 @@ export function OverviewPage() {
         title={t("overview.loadFailed")}
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load()}>
+          <Button variant="secondary" onClick={() => void load(opsWindow)}>
             {t("common.retry")}
           </Button>
         }
@@ -433,11 +627,19 @@ export function OverviewPage() {
           time: formatUpdatedAt(lang, t, data.updated_at),
         })}
         actions={
-          <Button variant="secondary" onClick={() => void load()}>
+          <Button variant="secondary" onClick={() => void load(opsWindow)}>
             <Pulse size={16} weight="bold" className="mr-1.5" aria-hidden />
             {t("common.refresh")}
           </Button>
         }
+      />
+
+      <OpsKpisPanel
+        kpis={data.ops_kpis}
+        window={opsWindow}
+        onWindowChange={(w) => void changeOpsWindow(w)}
+        loading={opsLoading}
+        t={t}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

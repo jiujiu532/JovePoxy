@@ -1,4 +1,4 @@
-import { GearSix, Lock, Stack, TerminalWindow } from "@phosphor-icons/react";
+import { GearSix, Lock, Stack, TerminalWindow, ArrowsClockwise } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -137,11 +137,19 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [loadPolicy, setLoadPolicy] = useState<"spread" | "sticky">("spread");
+  const [maxAttempts, setMaxAttempts] = useState(2);
+  const [savingPool, setSavingPool] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      setSettings(await api.settings());
+      const next = await api.settings();
+      setSettings(next);
+      const policy = next.load_policy === "sticky" ? "sticky" : "spread";
+      setLoadPolicy(policy);
+      const attempts = next.max_failover_attempts ?? 2;
+      setMaxAttempts(attempts < 2 ? 2 : attempts > 4 ? 4 : attempts);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -184,6 +192,31 @@ export function SettingsPage() {
       }
     } finally {
       setSavingPassword(false);
+    }
+  }
+
+  async function onSavePool(event: FormEvent) {
+    event.preventDefault();
+    setSavingPool(true);
+    try {
+      const next = await api.patchSettings({
+        load_policy: loadPolicy,
+        max_failover_attempts: maxAttempts,
+      });
+      setSettings(next);
+      setLoadPolicy(next.load_policy === "sticky" ? "sticky" : "spread");
+      const attempts = next.max_failover_attempts ?? maxAttempts;
+      setMaxAttempts(attempts < 2 ? 2 : attempts > 4 ? 4 : attempts);
+      push(t("settings.poolSaved"), "success");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setSessionHint(false);
+        void navigate("/login");
+        return;
+      }
+      push(err instanceof Error ? err.message : t("settings.errUpdateFailed"), "error");
+    } finally {
+      setSavingPool(false);
     }
   }
 
@@ -258,6 +291,57 @@ export function SettingsPage() {
           </SectionPanel>
 
           <SectionPanel
+            title={t("settings.poolTitle")}
+            description={t("settings.poolDescription")}
+            icon={ArrowsClockwise}
+            iconTone="accent"
+            bodyClassName="!p-4 sm:!p-5"
+          >
+            <form
+              className="grid max-w-xl gap-3"
+              onSubmit={(e) => void onSavePool(e)}
+            >
+              <label className="grid gap-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink">
+                  {t("settings.loadPolicy")}
+                  <HelpTip content={t("settings.loadPolicyTip")} label={t("settings.loadPolicy")} />
+                </span>
+                <select
+                  className="h-9 rounded-none border border-border bg-paper-0 px-2 text-[13px] text-ink"
+                  value={loadPolicy}
+                  onChange={(e) => setLoadPolicy(e.target.value === "sticky" ? "sticky" : "spread")}
+                >
+                  <option value="spread">{t("settings.loadPolicySpread")}</option>
+                  <option value="sticky">{t("settings.loadPolicySticky")}</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink">
+                  {t("settings.maxFailoverAttempts")}
+                  <HelpTip
+                    content={t("settings.maxFailoverAttemptsTip")}
+                    label={t("settings.maxFailoverAttempts")}
+                  />
+                </span>
+                <select
+                  className="h-9 rounded-none border border-border bg-paper-0 px-2 text-[13px] text-ink"
+                  value={String(maxAttempts)}
+                  onChange={(e) => setMaxAttempts(Number(e.target.value))}
+                >
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </label>
+              <div className="flex justify-end pt-1">
+                <Button type="submit" size="sm" loading={savingPool}>
+                  {t("settings.savePool")}
+                </Button>
+              </div>
+            </form>
+          </SectionPanel>
+
+          <SectionPanel
             title={t("settings.serviceTitle")}
             icon={GearSix}
             iconTone="yellow"
@@ -292,6 +376,8 @@ export function SettingsPage() {
                   ["SHOW_ALL_MODELS", t("settings.envShowAllModels")],
                   ["COOKIE_SECURE", t("settings.envCookieSecure")],
                   ["MODEL_CACHE_TTL", t("settings.envModelCacheTtl")],
+                  ["ZEN_LOAD_POLICY", t("settings.envZenLoadPolicy")],
+                  ["ZEN_MAX_ATTEMPTS", t("settings.envZenMaxAttempts")],
                 ] as const
               ).map(([env, tip]) => (
                 <div

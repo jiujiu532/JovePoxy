@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,12 +24,30 @@ type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
 
+// AcquireOptions configures key selection for a single paid attempt.
+type AcquireOptions struct {
+	// Provider defaults to ProviderOpenCode (paid OpenCode routing).
+	Provider Provider
+	// Excluded key IDs already tried in this request (sticky + failover).
+	Excluded []KeyID
+	// AffinityKey is a hashed conversation key; only used when policy is sticky.
+	AffinityKey string
+	// Policy empty uses the service LoadPolicy().
+	Policy LoadPolicy
+}
+
 // Service manages encrypted Zen API keys and weighted healthy selection.
 type Service struct {
 	store Store
 	box   *crypto.Box
 	clock Clock
 	rr    atomic.Uint64
+
+	loadPolicy  atomic.Value // LoadPolicy
+	maxAttempts atomic.Int32
+
+	benchMu sync.Mutex
+	benched map[KeyID]time.Time // until
 }
 
 // NewService constructs a SQLite-backed pool service.
@@ -41,7 +60,66 @@ func NewServiceWithStore(store Store, box *crypto.Box, clock Clock) *Service {
 	if clock == nil {
 		clock = systemClock{}
 	}
-	return &Service{store: store, box: box, clock: clock}
+	service := &Service{
+		store:   store,
+		box:     box,
+		clock:   clock,
+		benched: make(map[KeyID]time.Time),
+	}
+	service.loadPolicy.Store(LoadPolicySpread)
+	service.maxAttempts.Store(int32(DefaultMaxAttempts))
+	return service
+}
+
+// LoadPolicy returns the current selection policy (spread|sticky).
+func (service *Service) LoadPolicy() LoadPolicy {
+	if service == nil {
+		return LoadPolicySpread
+	}
+	value, _ := service.loadPolicy.Load().(LoadPolicy)
+	if value != LoadPolicySticky && value != LoadPolicySpread {
+		return LoadPolicySpread
+	}
+	return value
+}
+
+// SetLoadPolicy updates the selection policy. Unknown values fall back to spread.
+func (service *Service) SetLoadPolicy(policy LoadPolicy) {
+	if service == nil {
+		return
+	}
+	switch policy {
+	case LoadPolicySticky:
+		service.loadPolicy.Store(LoadPolicySticky)
+	default:
+		service.loadPolicy.Store(LoadPolicySpread)
+	}
+}
+
+// MaxAttempts returns how many different keys ProxyPaid may try (clamped 2..4).
+func (service *Service) MaxAttempts() int {
+	if service == nil {
+		return DefaultMaxAttempts
+	}
+	return clampMaxAttempts(int(service.maxAttempts.Load()))
+}
+
+// SetMaxAttempts sets failover attempts; values outside 2..4 are clamped.
+func (service *Service) SetMaxAttempts(n int) {
+	if service == nil {
+		return
+	}
+	service.maxAttempts.Store(int32(clampMaxAttempts(n)))
+}
+
+func clampMaxAttempts(n int) int {
+	if n < MinMaxAttempts {
+		return MinMaxAttempts
+	}
+	if n > MaxMaxAttempts {
+		return MaxMaxAttempts
+	}
+	return n
 }
 
 // Create encrypts and stores an upstream API key. The secret is never returned again.
@@ -169,24 +247,111 @@ func (service *Service) MarkCooldown(ctx context.Context, id KeyID, duration tim
 	return service.store.SetCooldown(ctx, id, &until)
 }
 
-// Acquire selects the next healthy key using weighted round-robin.
+// MarkBench puts a key into process-memory bench after 401. Auto-expires; never deletes the key.
+func (service *Service) MarkBench(id KeyID, duration time.Duration) {
+	if service == nil || id == "" {
+		return
+	}
+	if duration <= 0 {
+		duration = DefaultBenchDuration
+	}
+	until := service.clock.Now().UTC().Add(duration)
+	service.benchMu.Lock()
+	defer service.benchMu.Unlock()
+	if service.benched == nil {
+		service.benched = make(map[KeyID]time.Time)
+	}
+	service.benched[id] = until
+}
+
+// IsBenched reports whether id is still within its bench window at now.
+func (service *Service) IsBenched(id KeyID, now time.Time) bool {
+	if service == nil || id == "" {
+		return false
+	}
+	service.benchMu.Lock()
+	defer service.benchMu.Unlock()
+	until, ok := service.benched[id]
+	if !ok {
+		return false
+	}
+	if !now.Before(until) {
+		delete(service.benched, id)
+		return false
+	}
+	return true
+}
+
+// BenchedSnapshot returns a copy of still-active bench deadlines (and purges expired entries).
+func (service *Service) BenchedSnapshot(now time.Time) map[KeyID]time.Time {
+	if service == nil {
+		return nil
+	}
+	service.benchMu.Lock()
+	defer service.benchMu.Unlock()
+	if len(service.benched) == 0 {
+		return nil
+	}
+	out := make(map[KeyID]time.Time, len(service.benched))
+	for id, until := range service.benched {
+		if now.Before(until) {
+			out[id] = until
+			continue
+		}
+		delete(service.benched, id)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// Acquire selects the next healthy key using the service load policy (default spread RR).
 func (service *Service) Acquire(ctx context.Context) (Selected, error) {
-	return service.AcquireExcluding(ctx, "")
+	return service.AcquireFor(ctx, AcquireOptions{})
 }
 
 // AcquireExcluding selects the next healthy OpenCode key that is not excluded.
 // Paid OpenCode routing only draws from the opencode provider pool.
 func (service *Service) AcquireExcluding(ctx context.Context, excluded KeyID) (Selected, error) {
-	records, err := service.store.ListByProvider(ctx, ProviderOpenCode)
+	var list []KeyID
+	if excluded != "" {
+		list = []KeyID{excluded}
+	}
+	return service.AcquireFor(ctx, AcquireOptions{Excluded: list})
+}
+
+// AcquireFor selects a healthy key under the given options (provider, exclusions, affinity, policy).
+func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Selected, error) {
+	provider := opts.Provider
+	if provider == "" {
+		provider = ProviderOpenCode
+	}
+	records, err := service.store.ListByProvider(ctx, provider)
 	if err != nil {
 		return Selected{}, err
 	}
 	now := service.clock.Now().UTC()
+	excluded := make(map[KeyID]struct{}, len(opts.Excluded))
+	for _, id := range opts.Excluded {
+		if id != "" {
+			excluded[id] = struct{}{}
+		}
+	}
+	benched := service.BenchedSnapshot(now)
 	candidates := make([]storedKey, 0, len(records))
 	totalWeight := 0
 	for _, record := range records {
-		if record.id == excluded || !record.enabled || record.weight <= 0 {
+		if _, skip := excluded[record.id]; skip {
 			continue
+		}
+		if !record.enabled || record.weight <= 0 {
+			continue
+		}
+		if benched != nil {
+			if until, ok := benched[record.id]; ok && now.Before(until) {
+				continue
+			}
 		}
 		if cooling, err := isCooling(record.cooldownUntil, now); err != nil {
 			return Selected{}, err
@@ -196,17 +361,27 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded KeyID) (S
 		candidates = append(candidates, record)
 		totalWeight += record.weight
 	}
-	if totalWeight == 0 {
+	if totalWeight == 0 || len(candidates) == 0 {
 		return Selected{}, ErrNoHealthyKey
 	}
-	slot := int(service.rr.Add(1) % uint64(totalWeight))
-	cumulative := 0
+
+	policy := opts.Policy
+	if policy == "" {
+		policy = service.LoadPolicy()
+	}
 	var chosen storedKey
-	for _, candidate := range candidates {
-		cumulative += candidate.weight
-		if slot < cumulative {
-			chosen = candidate
-			break
+	if policy == LoadPolicySticky && strings.TrimSpace(opts.AffinityKey) != "" {
+		chosen = weightedRendezvousPick(candidates, opts.AffinityKey)
+	} else {
+		// spread: weighted round-robin (also sticky fallback when affinity material is missing)
+		slot := int(service.rr.Add(1) % uint64(totalWeight))
+		cumulative := 0
+		for _, candidate := range candidates {
+			cumulative += candidate.weight
+			if slot < cumulative {
+				chosen = candidate
+				break
+			}
 		}
 	}
 	secret, err := service.box.Open(chosen.ciphertext)

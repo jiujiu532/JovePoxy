@@ -102,6 +102,7 @@ type zenPoolProviderSummaryDTO struct {
 	Enabled  int `json:"enabled"`
 	Healthy  int `json:"healthy"`
 	Cooled   int `json:"cooled"`
+	Benched  int `json:"benched"`
 	Disabled int `json:"disabled"`
 }
 
@@ -111,6 +112,7 @@ type zenPoolSummaryDTO struct {
 	Enabled    int                                  `json:"enabled"`
 	Healthy    int                                  `json:"healthy"`
 	Cooled     int                                  `json:"cooled"`
+	Benched    int                                  `json:"benched"`
 	Disabled   int                                  `json:"disabled"`
 	ByProvider map[string]zenPoolProviderSummaryDTO `json:"by_provider,omitempty"`
 }
@@ -238,6 +240,15 @@ type settingsResponse struct {
 	PasswordCustom       bool   `json:"password_custom"`
 	HTTPProxyConfigured  bool   `json:"http_proxy_configured"`
 	HTTPSProxyConfigured bool   `json:"https_proxy_configured"`
+	// LoadPolicy is zenpool selection: spread (default) | sticky.
+	LoadPolicy string `json:"load_policy"`
+	// MaxFailoverAttempts is ProxyPaid attempts per request (2..4, default 2).
+	MaxFailoverAttempts int `json:"max_failover_attempts"`
+}
+
+type patchSettingsRequest struct {
+	LoadPolicy          *string `json:"load_policy"`
+	MaxFailoverAttempts *int    `json:"max_failover_attempts"`
 }
 
 type overviewResponse struct {
@@ -251,7 +262,9 @@ type overviewResponse struct {
 	// QuotaNarrative is owned by the quota burn/headroom surface.
 	QuotaNarrative *analytics.QuotaNarrative `json:"quota_narrative,omitempty"`
 	// ZenPool is owned by the zenpool status surface; do not merge quota narrative here.
-	ZenPool   *zenPoolSummaryDTO `json:"zen_pool,omitempty"`
+	ZenPool *zenPoolSummaryDTO `json:"zen_pool,omitempty"`
+	// OpsKPIs is owned by the overview-ops-kpis surface (reqlog time-window aggregates).
+	OpsKPIs   *analytics.OpsKPIs `json:"ops_kpis,omitempty"`
 	UpdatedAt time.Time          `json:"updated_at"`
 }
 
@@ -278,12 +291,13 @@ func mapLocalKeyCreated(created keys.Creation) localKeyCreatedDTO {
 	return localKeyCreatedDTO{ID: string(created.ID), Prefix: created.Prefix, Secret: created.Secret}
 }
 
+// mapZenKeys maps without benched state (create/update single-key DTOs).
 func mapZenKeys(list []zenpool.Metadata) zenKeysResponse {
-	return mapZenKeysAt(list, time.Now().UTC())
+	return mapZenKeysAt(list, time.Now().UTC(), nil)
 }
 
-func mapZenKeysAt(list []zenpool.Metadata, now time.Time) zenKeysResponse {
-	views := zenpool.DeriveViews(list, now)
+func mapZenKeysAt(list []zenpool.Metadata, now time.Time, benched map[zenpool.KeyID]time.Time) zenKeysResponse {
+	views := zenpool.DeriveViews(list, now, benched)
 	out := make([]zenKeyDTO, 0, len(views))
 	for _, view := range views {
 		provider := string(view.Provider)
@@ -300,21 +314,21 @@ func mapZenKeysAt(list []zenpool.Metadata, now time.Time) zenKeysResponse {
 			CooldownRemainingSec: view.CooldownRemainingSec,
 		})
 	}
-	summary := mapZenPoolSummary(zenpool.Summarize(list, now))
+	summary := mapZenPoolSummary(zenpool.Summarize(list, now, benched))
 	return zenKeysResponse{Keys: out, Summary: &summary}
 }
 
 func mapZenPoolSummary(sum zenpool.PoolSummary) zenPoolSummaryDTO {
 	dto := zenPoolSummaryDTO{
 		Total: sum.Total, Enabled: sum.Enabled, Healthy: sum.Healthy,
-		Cooled: sum.Cooled, Disabled: sum.Disabled,
+		Cooled: sum.Cooled, Benched: sum.Benched, Disabled: sum.Disabled,
 	}
 	if len(sum.ByProvider) > 0 {
 		dto.ByProvider = make(map[string]zenPoolProviderSummaryDTO, len(sum.ByProvider))
 		for provider, item := range sum.ByProvider {
 			dto.ByProvider[provider] = zenPoolProviderSummaryDTO{
 				Total: item.Total, Enabled: item.Enabled, Healthy: item.Healthy,
-				Cooled: item.Cooled, Disabled: item.Disabled,
+				Cooled: item.Cooled, Benched: item.Benched, Disabled: item.Disabled,
 			}
 		}
 	}

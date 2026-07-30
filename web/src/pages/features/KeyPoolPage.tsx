@@ -205,6 +205,7 @@ export function KeyPoolPage() {
 
   const enabled = keys.filter((k) => k.enabled).length;
   const cooling = keys.filter((k) => zenKeyStatus(k, nowMs) === "cooling").length;
+  const benched = keys.filter((k) => zenKeyStatus(k, nowMs) === "benched").length;
   const totalWeight = keys
     .filter((k) => zenKeyStatus(k, nowMs) === "active" && k.weight > 0)
     .reduce((s, k) => s + k.weight, 0);
@@ -216,6 +217,7 @@ export function KeyPoolPage() {
       if (status === "enabled" && !k.enabled) return false;
       if (status === "disabled" && k.enabled) return false;
       if (status === "cooling" && keyStatus !== "cooling") return false;
+      if (status === "benched" && keyStatus !== "benched") return false;
       if (!matchWeight(k.weight, weightFilter)) return false;
       if (!q) return true;
       return (
@@ -229,7 +231,10 @@ export function KeyPoolPage() {
         weight: (x) => x.weight,
         statusRank: (x) => {
           const s = zenKeyStatus(x, nowMs);
-          return s === "cooling" ? 2 : s === "active" ? 0 : 1;
+          if (s === "active") return 0;
+          if (s === "cooling") return 2;
+          if (s === "benched") return 3;
+          return 1;
         },
       }),
     );
@@ -479,10 +484,16 @@ export function KeyPoolPage() {
                 tone: "mint",
               },
               {
+                label: t("kpi.benched"),
+                value: benched,
+                hint: t("keypool.railBenchedHint"),
+                tone: "accent",
+              },
+              {
                 label: t("kpi.weight"),
                 value: totalWeight,
                 hint: t("keypool.railWeightHint"),
-                tone: "accent",
+                tone: "yellow",
               },
             ]}
           />
@@ -513,6 +524,7 @@ export function KeyPoolPage() {
                     { value: "enabled", label: t("common.enabled") },
                     { value: "disabled", label: t("common.disabled") },
                     { value: "cooling", label: t("keypool.statusCooling") },
+                    { value: "benched", label: t("keypool.statusBenched") },
                   ]}
                 />
               }
@@ -625,6 +637,8 @@ export function KeyPoolPage() {
                         badge={
                           keyStatus === "cooling" ? (
                             <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
+                          ) : keyStatus === "benched" ? (
+                            <Badge kind="warning">{t("keypool.statusBenched")}</Badge>
                           ) : keyStatus === "active" ? (
                             <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                           ) : (
@@ -789,6 +803,8 @@ export function KeyPoolPage() {
                             <td className="whitespace-nowrap px-3 py-2.5">
                               {keyStatus === "cooling" ? (
                                 <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
+                              ) : keyStatus === "benched" ? (
+                                <Badge kind="warning">{t("keypool.statusBenched")}</Badge>
                               ) : keyStatus === "active" ? (
                                 <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                               ) : (

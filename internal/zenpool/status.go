@@ -6,31 +6,35 @@ import "time"
 type KeyStatus string
 
 const (
-	// StatusActive is enabled and not in cooldown.
+	// StatusActive is enabled, not cooling, and not benched.
 	StatusActive KeyStatus = "active"
 	// StatusCooling is enabled but resting until CooldownUntil.
 	StatusCooling KeyStatus = "cooling"
+	// StatusBenched is enabled but process-benched after 401 (memory only).
+	StatusBenched KeyStatus = "benched"
 	// StatusDisabled is not eligible for selection.
 	StatusDisabled KeyStatus = "disabled"
 )
 
-// ProviderSummary is healthy/cooled counts for one provider pool.
+// ProviderSummary is healthy/cooled/benched counts for one provider pool.
 type ProviderSummary struct {
 	Total    int `json:"total"`
 	Enabled  int `json:"enabled"`
 	Healthy  int `json:"healthy"`
 	Cooled   int `json:"cooled"`
+	Benched  int `json:"benched"`
 	Disabled int `json:"disabled"`
 }
 
 // PoolSummary aggregates secret-free pool health for overview / list.
 type PoolSummary struct {
-	Total      int                         `json:"total"`
-	Enabled    int                         `json:"enabled"`
-	Healthy    int                         `json:"healthy"`
-	Cooled     int                         `json:"cooled"`
-	Disabled   int                         `json:"disabled"`
-	ByProvider map[string]ProviderSummary  `json:"by_provider,omitempty"`
+	Total      int                        `json:"total"`
+	Enabled    int                        `json:"enabled"`
+	Healthy    int                        `json:"healthy"`
+	Cooled     int                        `json:"cooled"`
+	Benched    int                        `json:"benched"`
+	Disabled   int                        `json:"disabled"`
+	ByProvider map[string]ProviderSummary `json:"by_provider,omitempty"`
 }
 
 // KeyView is Metadata plus pure display fields for admin DTOs.
@@ -42,9 +46,13 @@ type KeyView struct {
 }
 
 // DeriveStatus classifies a key for admin surfaces.
-func DeriveStatus(meta Metadata, now time.Time) KeyStatus {
+// benched is process-memory state (401); priority: disabled > benched > cooling > active.
+func DeriveStatus(meta Metadata, now time.Time, benched bool) KeyStatus {
 	if !meta.Enabled {
 		return StatusDisabled
+	}
+	if benched {
+		return StatusBenched
 	}
 	if isCoolingMeta(meta.CooldownUntil, now) {
 		return StatusCooling
@@ -71,21 +79,21 @@ func CooldownRemainingSec(meta Metadata, now time.Time) int {
 
 // TrafficShares returns per-index traffic percentages for one provider pool.
 //
-// Aligns with AcquireExcluding selection:
-//   - eligible = enabled && not cooling && weight > 0
+// Aligns with AcquireFor selection:
+//   - eligible = enabled && not cooling && not benched && weight > 0
 //   - traffic_pct(k) = weight(k)/totalWeight*100 for eligible, else 0
-//   - if totalWeight == 0 (all disabled/cooling/zero-weight): all 0
+//   - if totalWeight == 0 (all disabled/cooling/benched/zero-weight): all 0
 //
 // Callers that hold mixed providers must group first; shares are relative to
-// the given list only.
-func TrafficShares(list []Metadata, now time.Time) []float64 {
+// the given list only. benched may be nil.
+func TrafficShares(list []Metadata, now time.Time, benched map[KeyID]time.Time) []float64 {
 	out := make([]float64, len(list))
 	if len(list) == 0 {
 		return out
 	}
 	totalWeight := 0
 	for _, meta := range list {
-		if !isTrafficEligible(meta, now) {
+		if !isTrafficEligible(meta, now, benched) {
 			continue
 		}
 		totalWeight += meta.Weight
@@ -94,7 +102,7 @@ func TrafficShares(list []Metadata, now time.Time) []float64 {
 		return out
 	}
 	for i, meta := range list {
-		if !isTrafficEligible(meta, now) {
+		if !isTrafficEligible(meta, now, benched) {
 			continue
 		}
 		out[i] = float64(meta.Weight) / float64(totalWeight) * 100
@@ -103,7 +111,8 @@ func TrafficShares(list []Metadata, now time.Time) []float64 {
 }
 
 // DeriveViews attaches status, remaining cooldown, and per-provider traffic %.
-func DeriveViews(list []Metadata, now time.Time) []KeyView {
+// benched maps key id → bench-until; nil means no benched keys.
+func DeriveViews(list []Metadata, now time.Time, benched map[KeyID]time.Time) []KeyView {
 	views := make([]KeyView, len(list))
 	// Group indices by provider so traffic % is within each pool.
 	groups := make(map[Provider][]int, 2)
@@ -113,9 +122,15 @@ func DeriveViews(list []Metadata, now time.Time) []KeyView {
 			provider = ProviderOpenCode
 		}
 		groups[provider] = append(groups[provider], i)
+		isBenched := false
+		if benched != nil {
+			if until, ok := benched[meta.ID]; ok && now.Before(until) {
+				isBenched = true
+			}
+		}
 		views[i] = KeyView{
 			Metadata:             meta,
-			Status:               DeriveStatus(meta, now),
+			Status:               DeriveStatus(meta, now, isBenched),
 			CooldownRemainingSec: CooldownRemainingSec(meta, now),
 		}
 		// Normalize empty provider for DTO consumers.
@@ -128,7 +143,7 @@ func DeriveViews(list []Metadata, now time.Time) []KeyView {
 		for j, idx := range indices {
 			subset[j] = list[idx]
 		}
-		shares := TrafficShares(subset, now)
+		shares := TrafficShares(subset, now, benched)
 		for j, idx := range indices {
 			views[idx].TrafficPct = shares[j]
 		}
@@ -137,7 +152,8 @@ func DeriveViews(list []Metadata, now time.Time) []KeyView {
 }
 
 // Summarize builds pool health counters (no secrets).
-func Summarize(list []Metadata, now time.Time) PoolSummary {
+// healthy excludes cooling and benched keys.
+func Summarize(list []Metadata, now time.Time, benched map[KeyID]time.Time) PoolSummary {
 	summary := PoolSummary{
 		ByProvider: map[string]ProviderSummary{},
 	}
@@ -150,11 +166,22 @@ func Summarize(list []Metadata, now time.Time) PoolSummary {
 		ps.Total++
 		summary.Total++
 
-		status := DeriveStatus(meta, now)
+		isBenched := false
+		if benched != nil {
+			if until, ok := benched[meta.ID]; ok && now.Before(until) {
+				isBenched = true
+			}
+		}
+		status := DeriveStatus(meta, now, isBenched)
 		switch status {
 		case StatusDisabled:
 			ps.Disabled++
 			summary.Disabled++
+		case StatusBenched:
+			ps.Enabled++
+			ps.Benched++
+			summary.Enabled++
+			summary.Benched++
 		case StatusCooling:
 			ps.Enabled++
 			ps.Cooled++
@@ -174,9 +201,14 @@ func Summarize(list []Metadata, now time.Time) PoolSummary {
 	return summary
 }
 
-func isTrafficEligible(meta Metadata, now time.Time) bool {
+func isTrafficEligible(meta Metadata, now time.Time, benched map[KeyID]time.Time) bool {
 	if !meta.Enabled || meta.Weight <= 0 {
 		return false
+	}
+	if benched != nil {
+		if until, ok := benched[meta.ID]; ok && now.Before(until) {
+			return false
+		}
 	}
 	return !isCoolingMeta(meta.CooldownUntil, now)
 }

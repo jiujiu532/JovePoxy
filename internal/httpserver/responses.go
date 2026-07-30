@@ -49,7 +49,7 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 		writeOpenAIError(writer, http.StatusBadRequest, err.Error(), "invalid_request_error", "", "invalid_request_error")
 		return
 	}
-	response, err := server.forwardChat(request.Context(), chatBody, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, chatBody, parsed.Stream, free)
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err) {
 			return

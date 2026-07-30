@@ -115,7 +115,7 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.model = parsed.Model
 	meta.stream = parsed.Stream
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
-	response, err := server.forwardChat(request.Context(), body, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free)
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err) {
 			return

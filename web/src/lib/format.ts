@@ -35,6 +35,9 @@ export function validatePasswordInput(password: string, t: Translate): string | 
 
 /** Derive zen key status when server field is missing (client fallback). */
 export function zenKeyStatus(key: Pick<ZenKeyDTO, "enabled" | "status" | "cooldown_until">, nowMs = Date.now()): ZenKeyStatus {
+  if (!key.enabled) return "disabled";
+  // Process-memory 401 bench is server-authoritative (no client until timestamp).
+  if (key.status === "benched") return "benched";
   if (key.status === "active" || key.status === "cooling" || key.status === "disabled") {
     // Re-check cooling against client clock for countdown UX.
     if (key.status === "cooling" || key.cooldown_until) {
@@ -45,7 +48,6 @@ export function zenKeyStatus(key: Pick<ZenKeyDTO, "enabled" | "status" | "cooldo
     }
     return key.status;
   }
-  if (!key.enabled) return "disabled";
   if (key.cooldown_until) {
     const until = Date.parse(key.cooldown_until);
     if (Number.isFinite(until) && until > nowMs) return "cooling";
