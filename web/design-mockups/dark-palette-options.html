@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JovePoxy · Dark Palette Options</title>
+  <style>
+    :root {
+      --font: "Geist", "Segoe UI", system-ui, sans-serif;
+      --mono: "Geist Mono", "Cascadia Code", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      background: #0d0d0d;
+      color: #f2f2f2;
+      padding: 28px 20px 80px;
+    }
+
+    .page-head {
+      max-width: 1280px;
+      margin: 0 auto 22px;
+    }
+    .page-head h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+    .page-head p {
+      margin: 0;
+      max-width: 68ch;
+      color: #bdbdbd;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .hint {
+      margin-top: 10px;
+      display: inline-flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #9a9a9a;
+    }
+    .hint code {
+      border: 2px solid #444;
+      background: #1a1a1a;
+      padding: 2px 6px;
+      font-family: var(--mono);
+      color: #e8e8e8;
+    }
+
+    .grid {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 22px;
+    }
+    @media (min-width: 1100px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .option {
+      border: 3px solid #2a2a2a;
+      background: #141414;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .option.selected {
+      border-color: #ff6b6b;
+      box-shadow: 6px 6px 0 #ff6b6b;
+    }
+    .option-meta {
+      padding: 14px 16px 12px;
+      border-bottom: 2px solid #2a2a2a;
+      display: grid;
+      gap: 8px;
+    }
+    .option-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .option-id {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #8f8f8f;
+    }
+    .option-title {
+      margin: 2px 0 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .option-desc {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #b5b5b5;
+    }
+    .swatches {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #000;
+      box-shadow: 2px 2px 0 #000;
+    }
+    .pick {
+      border: 2px solid #000;
+      background: #ffe66d;
+      color: #000;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 8px 12px;
+      cursor: pointer;
+      box-shadow: 3px 3px 0 #000;
+      white-space: nowrap;
+    }
+    .pick:active { transform: translate(2px, 2px); box-shadow: none; }
+    .option.selected .pick {
+      background: #ff6b6b;
+      color: #000;
+    }
+
+    /* ---- Mini shell mock ---- */
+    .mock {
+      --p0: #121212;
+      --p1: #1e1e1e;
+      --p2: #2c2c2c;
+      --ink: #fafafa;
+      --ink-m: #d0d0d0;
+      --ink-f: #9a9a9a;
+      --bd: #e5e5e5;
+      --acc: #ff7a7a;
+      --acc-soft: #3f1518;
+      --teal: #5ad9d0;
+      --yellow: #ffe97a;
+      --mint: #a8eadc;
+      --shadow: 3px 3px 0 var(--bd);
+      background: var(--p0);
+      color: var(--ink);
+      min-height: 360px;
+      display: grid;
+      grid-template-columns: 88px 1fr;
+    }
+    .side {
+      background: var(--p1);
+      border-right: 2px solid var(--bd);
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .brand {
+      height: 28px;
+      border: 2px solid var(--bd);
+      background: var(--acc);
+      color: #000;
+      font-weight: 800;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.04em;
+    }
+    .nav {
+      border: 2px solid transparent;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 6px;
+      font-size: 10px;
+      color: var(--ink-m);
+    }
+    .nav.active {
+      border-color: var(--bd);
+      background: var(--acc-soft);
+      color: var(--ink);
+    }
+    .nav .dot {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--bd);
+      background: var(--p0);
+      flex-shrink: 0;
+    }
+    .nav.active .dot { background: var(--acc); }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .top {
+      height: 40px;
+      border-bottom: 2px solid var(--bd);
+      background: var(--p1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+    .top-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .top-icon {
+      width: 22px;
+      height: 22px;
+      border: 2px solid var(--bd);
+      background: var(--acc);
+      box-shadow: 2px 2px 0 var(--bd);
+    }
+    .top-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      width: 22px;
+      height: 22px;
+      border: 2px solid var(--bd);
+      background: var(--p0);
+      box-shadow: 2px 2px 0 var(--bd);
+    }
+
+    .content {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .meta {
+      font-size: 11px;
+      color: var(--ink-f);
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stat {
+      background: var(--p1);
+      border: 2px solid var(--bd);
+      box-shadow: var(--shadow);
+      padding: 10px;
+      position: relative;
+      min-height: 72px;
+    }
+    .stat::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--bar, var(--bd));
+    }
+    .stat .lab {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-m);
+      font-weight: 700;
+    }
+    .stat .val {
+      margin-top: 6px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat .hint {
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--ink-f);
+    }
+    .stat .ico {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      width: 22px;
+      height: 22px;
+      border: 2px solid var(--bd);
+      background: var(--ico-bg, var(--p0));
+      box-shadow: 2px 2px 0 var(--bd);
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 8px;
+    }
+    .panel {
+      background: var(--p1);
+      border: 2px solid var(--bd);
+      box-shadow: var(--shadow);
+      min-height: 110px;
+      overflow: hidden;
+    }
+    .panel-h {
+      border-bottom: 2px solid var(--bd);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .panel-h .mark {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--bd);
+      background: var(--yellow);
+      box-shadow: 2px 2px 0 var(--bd);
+    }
+    .panel-b {
+      padding: 16px 10px;
+      text-align: center;
+      color: var(--ink-f);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .empty-art {
+      width: 36px;
+      height: 36px;
+      margin: 0 auto 8px;
+      border: 2px solid var(--bd);
+      background: var(--yellow);
+      box-shadow: 3px 3px 0 var(--bd);
+      display: grid;
+      place-items: center;
+      color: #000;
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .cta-row {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      border: 2px solid var(--bd);
+      background: var(--acc);
+      color: #000;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 8px 12px;
+      box-shadow: var(--shadow);
+    }
+    .btn.sec {
+      background: var(--p0);
+      color: var(--ink);
+    }
+
+    .tokens {
+      border-top: 2px solid #2a2a2a;
+      background: #101010;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.55;
+      color: #a8a8a8;
+      white-space: pre-wrap;
+    }
+
+    .footer-pick {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: #111;
+      border-top: 3px solid #ff6b6b;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 20;
+    }
+    .footer-pick strong { color: #ffe66d; }
+    .footer-pick span { color: #bdbdbd; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <h1>Dark Palette 选型</h1>
+    <p>
+      深色模式不必是标准黑。下面 6 套都保留 Neo-Brutalist（直角 / 硬边 / 硬 offset / 五色点缀），
+      只换底色气质。点「选这套」后告诉我编号，我再写进 <code>index.css</code>。
+    </p>
+    <div class="hint">
+      <span>约束：</span>
+      <code>paper 三层台阶</code>
+      <code>硬边非纯白 chalk</code>
+      <code>accent-soft 有品牌色</code>
+      <code>五色仍可读</code>
+    </div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="footer-pick">
+    <span>当前选择：<strong id="sel">未选</strong></span>
+    <span style="font-size:12px;color:#8f8f8f">回消息发编号即可，例如「选 D」</span>
+  </div>
+
+  <script>
+    const SCHEMES = [
+      {
+        id: "A",
+        name: "Ink Console",
+        tag: "当前基线 · 中性炭灰",
+        desc: "冷静运维台。中性炭灰台阶，奶油硬边。最接近现在线上，偏安全但气质偏「默认 dark」。",
+        tokens: {
+          p0: "#121212", p1: "#1e1e1e", p2: "#2c2c2c",
+          ink: "#fafafa", inkM: "#d0d0d0", inkF: "#9a9a9a",
+          bd: "#e5e5e5", acc: "#ff7a7a", soft: "#3f1518",
+          teal: "#5ad9d0", yellow: "#ffe97a", mint: "#a8eadc",
+        },
+      },
+      {
+        id: "B",
+        name: "Espresso Night",
+        tag: "已采用 · 暖褐深色",
+        desc: "咖啡壳 / 焦糖夜。暖褐底 + 奶油边，和 playful red 更亲。少「丧黑」，多「纸墨」感。已写入 index.css。",
+        tokens: {
+          p0: "#1a1410", p1: "#261e18", p2: "#342a22",
+          ink: "#f7f1ea", inkM: "#d4c4b4", inkF: "#a08f7e",
+          bd: "#e8d7c4", acc: "#ff7a6e", soft: "#4a221c",
+          teal: "#6fd9c8", yellow: "#ffd978", mint: "#b4e6d6",
+        },
+      },
+      {
+        id: "C",
+        name: "Slate Ops",
+        tag: "冷灰蓝 · 监控台",
+        desc: "冷 slate 蓝灰。更像机房/监控大屏，硬边偏冷银。冷静、干净，偏工程。",
+        tokens: {
+          p0: "#12161c", p1: "#1b222c", p2: "#273140",
+          ink: "#eef3f8", inkM: "#b7c3d1", inkF: "#8492a6",
+          bd: "#c8d2de", acc: "#ff7b7b", soft: "#3a1d24",
+          teal: "#5fd4cc", yellow: "#ffe27a", mint: "#9fe0d4",
+        },
+      },
+      {
+        id: "D",
+        name: "Pine Terminal",
+        tag: "推荐 · 松林终端",
+        desc: "深松绿底。终端 / 运维感，但比纯黑有空气。黄/mint 点缀在绿底上特别跳。",
+        tokens: {
+          p0: "#101814", p1: "#18241c", p2: "#24352a",
+          ink: "#eef7f0", inkM: "#b7cebc", inkF: "#82998a",
+          bd: "#c5d8c8", acc: "#ff7a72", soft: "#3d221c",
+          teal: "#5fd8c4", yellow: "#ffe66d", mint: "#9fe8d4",
+        },
+      },
+      {
+        id: "E",
+        name: "Plum Console",
+        tag: "紫褐 · 偏设计感",
+        desc: "深紫褐，不是霓虹紫。偏设计工具气质，和 coral/red 仍同温。注意：别做成 AI 紫。",
+        tokens: {
+          p0: "#161218", p1: "#221c26", p2: "#312836",
+          ink: "#f6f0f8", inkM: "#cbbdd4", inkF: "#9686a1",
+          bd: "#d9cce0", acc: "#ff7a86", soft: "#45202a",
+          teal: "#63d6cf", yellow: "#ffe27a", mint: "#a8e2d8",
+        },
+      },
+      {
+        id: "F",
+        name: "Navy Harbor",
+        tag: "午夜海军蓝",
+        desc: "深海军蓝港湾。稳、厚、夜航感。边框用冷奶油银，stat 彩条在蓝底上很清楚。",
+        tokens: {
+          p0: "#0f1520", p1: "#172033", p2: "#24304a",
+          ink: "#eef3fb", inkM: "#b5c3db", inkF: "#8393b0",
+          bd: "#c3cee2", acc: "#ff7d7d", soft: "#3a1e2a",
+          teal: "#5fd4cf", yellow: "#ffe66d", mint: "#9fe0d8",
+        },
+      },
+    ];
+
+    function swatch(c) {
+      return `<span class="swatch" style="background:${c}" title="${c}"></span>`;
+    }
+
+    function mock(t) {
+      return `
+      <div class="mock" style="
+        --p0:${t.p0};--p1:${t.p1};--p2:${t.p2};
+        --ink:${t.ink};--ink-m:${t.inkM};--ink-f:${t.inkF};
+        --bd:${t.bd};--acc:${t.acc};--acc-soft:${t.soft};
+        --teal:${t.teal};--yellow:${t.yellow};--mint:${t.mint};
+        --shadow:3px 3px 0 ${t.bd};
+      ">
+        <aside class="side">
+          <div class="brand">JP</div>
+          <div class="nav active"><span class="dot"></span>概览</div>
+          <div class="nav"><span class="dot"></span>模型</div>
+          <div class="nav"><span class="dot"></span>密钥</div>
+          <div class="nav"><span class="dot"></span>账号</div>
+        </aside>
+        <section class="main">
+          <div class="top">
+            <div class="top-left"><span class="top-icon"></span>概览中心</div>
+            <div class="top-actions">
+              <span class="icon-btn"></span>
+              <span class="icon-btn"></span>
+              <span class="icon-btn"></span>
+            </div>
+          </div>
+          <div class="content">
+            <div class="meta">更新于 07/30 20:16 · 进程内</div>
+            <div class="stats">
+              <div class="stat" style="--bar:${t.acc};--ico-bg:${t.acc}">
+                <div class="lab">今日请求</div>
+                <div class="val">0</div>
+                <div class="hint">当天完成的代理请求</div>
+                <span class="ico"></span>
+              </div>
+              <div class="stat" style="--bar:${t.yellow};--ico-bg:${t.yellow}">
+                <div class="lab">今日 TOKEN</div>
+                <div class="val">0</div>
+                <div class="hint">输入 + 输出合计</div>
+                <span class="ico"></span>
+              </div>
+              <div class="stat" style="--bar:${t.teal};--ico-bg:${t.teal}">
+                <div class="lab">累计请求</div>
+                <div class="val">0</div>
+                <div class="hint">历史总量</div>
+                <span class="ico"></span>
+              </div>
+            </div>
+            <div class="panels">
+              <div class="panel">
+                <div class="panel-h"><span class="mark"></span>请求趋势</div>
+                <div class="panel-b">
+                  <div class="empty-art">0</div>
+                  暂无请求日志<br/>发起代理后会出现趋势
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-h"><span class="mark" style="background:${t.teal}"></span>Token 消耗</div>
+                <div class="panel-b">
+                  <div class="empty-art" style="background:${t.mint}">T</div>
+                  同步用量后出现柱状图
+                </div>
+              </div>
+            </div>
+            <div class="cta-row">
+              <button class="btn" type="button">刷新</button>
+              <button class="btn sec" type="button">发放密钥</button>
+            </div>
+          </div>
+        </section>
+      </div>`;
+    }
+
+    const grid = document.getElementById("grid");
+    const selEl = document.getElementById("sel");
+    let selected = null;
+
+    function render() {
+      grid.innerHTML = SCHEMES.map((s) => {
+        const t = s.tokens;
+        const tokenText = [
+          `--paper-0: ${t.p0}`,
+          `--paper-1: ${t.p1}`,
+          `--paper-2: ${t.p2}`,
+          `--border:  ${t.bd}`,
+          `--accent:  ${t.acc}`,
+          `--accent-soft: ${t.soft}`,
+        ].join("\n");
+        return `
+          <article class="option ${selected === s.id ? "selected" : ""}" data-id="${s.id}">
+            <div class="option-meta">
+              <div class="option-top">
+                <div>
+                  <div class="option-id">${s.id} · ${s.tag}</div>
+                  <h2 class="option-title">${s.name}</h2>
+                </div>
+                <button class="pick" type="button" data-pick="${s.id}">
+                  ${selected === s.id ? "已选 ✓" : "选这套"}
+                </button>
+              </div>
+              <p class="option-desc">${s.desc}</p>
+              <div class="swatches">
+                ${swatch(t.p0)}${swatch(t.p1)}${swatch(t.p2)}${swatch(t.bd)}${swatch(t.acc)}${swatch(t.yellow)}${swatch(t.teal)}${swatch(t.mint)}
+              </div>
+            </div>
+            ${mock(t)}
+            <div class="tokens">${tokenText}</div>
+          </article>`;
+      }).join("");
+
+      grid.querySelectorAll("[data-pick]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selected = btn.getAttribute("data-pick");
+          const hit = SCHEMES.find((x) => x.id === selected);
+          selEl.textContent = hit ? `${hit.id} · ${hit.name}` : "未选";
+          render();
+        });
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>

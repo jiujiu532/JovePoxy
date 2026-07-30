@@ -108,90 +108,85 @@
 }
 
 /*
- * Dark — Ink Console
- * 目标：清晰三层 elevation、奶油硬边（非刺眼纯白）、accent-soft 保持品牌红可读。
- * 禁止纯 #000 铺底 + 死灰 soft；保留 Neo-Brutalist 直角/硬 offset。
+ * Dark — Espresso Night（选型 B）
+ * 暖褐/焦糖夜：咖啡壳底 + 奶油边，与 playful red 同温。
+ * 三层 elevation 明确；禁止纯 #000 / 死灰 soft；保留硬边 + 硬 offset。
  */
 html.dark {
   color-scheme: dark;
 
-  /* Surfaces: 明确台阶，避免卡片融进背景 */
-  --paper-0: #121212;
-  --paper-1: #1e1e1e;
-  --paper-2: #2c2c2c;
+  --paper-0: #1a1410;
+  --paper-1: #261e18;
+  --paper-2: #342a22;
 
-  /* Ink: 主文近白，次级可分层（仍高对比） */
-  --ink: #fafafa;
-  --ink-muted: #d0d0d0;
-  --ink-faint: #9a9a9a;
+  --ink: #f7f1ea;
+  --ink-muted: #d4c4b4;
+  --ink-faint: #a08f7e;
 
-  /* Borders: 奶油白，比 #fff 更不刺眼 */
-  --border: #e5e5e5;
-  --border-strong: #f5f5f5;
+  --border: #e8d7c4;
+  --border-strong: #f3e6d6;
 
-  /* Accent: 深色里略提亮，soft 用深砖红块而非灰 */
-  --accent: #ff7a7a;
-  --accent-hover: #ff9191;
+  --accent: #ff7a6e;
+  --accent-hover: #ff9188;
   --accent-fg: #000000;
-  --accent-soft: #3f1518;
+  --accent-soft: #4a221c;
 
-  --accent-teal: #5ad9d0;
-  --accent-yellow: #ffe97a;
-  --accent-mint: #a8eadc;
-  --accent-coral: #ff8f8f;
+  --accent-teal: #6fd9c8;
+  --accent-yellow: #ffd978;
+  --accent-mint: #b4e6d6;
+  --accent-coral: #ff8f86;
 
-  --status-success: #5ad9d0;
-  --status-warning: #ffe97a;
-  --status-error: #ff7a7a;
-  --status-info: #a8eadc;
+  --status-success: #6fd9c8;
+  --status-warning: #ffd978;
+  --status-error: #ff7a6e;
+  --status-info: #b4e6d6;
 
-  --focus-ring: #ffe97a;
+  --focus-ring: #ffd978;
 
-  /* Hard shadow 跟 border 同色阶，避免纯白 chalk outline */
-  --shadow-hard: 4px 4px 0 #e5e5e5;
-  --shadow-paper: 4px 4px 0 #e5e5e5;
-  --shadow-accent-red: 4px 4px 0 #ff7a7a;
-  --shadow-accent-teal: 4px 4px 0 #5ad9d0;
-  --shadow-accent-yellow: 4px 4px 0 #ffe97a;
+  --shadow-hard: 4px 4px 0 #e8d7c4;
+  --shadow-paper: 4px 4px 0 #e8d7c4;
+  --shadow-accent-red: 4px 4px 0 #ff7a6e;
+  --shadow-accent-teal: 4px 4px 0 #6fd9c8;
+  --shadow-accent-yellow: 4px 4px 0 #ffd978;
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --paper-0: #121212;
-    --paper-1: #1e1e1e;
-    --paper-2: #2c2c2c;
+    --paper-0: #1a1410;
+    --paper-1: #261e18;
+    --paper-2: #342a22;
 
-    --ink: #fafafa;
-    --ink-muted: #d0d0d0;
-    --ink-faint: #9a9a9a;
+    --ink: #f7f1ea;
+    --ink-muted: #d4c4b4;
+    --ink-faint: #a08f7e;
 
-    --border: #e5e5e5;
-    --border-strong: #f5f5f5;
+    --border: #e8d7c4;
+    --border-strong: #f3e6d6;
 
-    --accent: #ff7a7a;
-    --accent-hover: #ff9191;
+    --accent: #ff7a6e;
+    --accent-hover: #ff9188;
     --accent-fg: #000000;
-    --accent-soft: #3f1518;
+    --accent-soft: #4a221c;
 
-    --accent-teal: #5ad9d0;
-    --accent-yellow: #ffe97a;
-    --accent-mint: #a8eadc;
-    --accent-coral: #ff8f8f;
+    --accent-teal: #6fd9c8;
+    --accent-yellow: #ffd978;
+    --accent-mint: #b4e6d6;
+    --accent-coral: #ff8f86;
 
-    --status-success: #5ad9d0;
-    --status-warning: #ffe97a;
-    --status-error: #ff7a7a;
-    --status-info: #a8eadc;
+    --status-success: #6fd9c8;
+    --status-warning: #ffd978;
+    --status-error: #ff7a6e;
+    --status-info: #b4e6d6;
 
-    --focus-ring: #ffe97a;
+    --focus-ring: #ffd978;
 
-    --shadow-hard: 4px 4px 0 #e5e5e5;
-    --shadow-paper: 4px 4px 0 #e5e5e5;
-    --shadow-accent-red: 4px 4px 0 #ff7a7a;
-    --shadow-accent-teal: 4px 4px 0 #5ad9d0;
-    --shadow-accent-yellow: 4px 4px 0 #ffe97a;
+    --shadow-hard: 4px 4px 0 #e8d7c4;
+    --shadow-paper: 4px 4px 0 #e8d7c4;
+    --shadow-accent-red: 4px 4px 0 #ff7a6e;
+    --shadow-accent-teal: 4px 4px 0 #6fd9c8;
+    --shadow-accent-yellow: 4px 4px 0 #ffd978;
   }
 }
 
