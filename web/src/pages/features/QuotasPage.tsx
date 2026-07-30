@@ -1,17 +1,17 @@
 import {
   ChartLine,
-  Cloud,
+  Plus,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Button,
   EmptyState,
-  ErrorState,
+  MetricRail,
   PageHeader,
   Pagination,
+  PosterEmpty,
   QuotaAccountViews,
-  SectionPanel,
   Skeleton,
   Tabs,
   ViewModeToggle,
@@ -187,6 +187,13 @@ export function QuotasPage() {
 
   const ocOk = ocQuotas.filter((q) => q.success).length;
   const olOk = olQuotas.filter((q) => q.success).length;
+  const activeRaw = tab === "opencode" ? ocQuotas : olQuotas;
+  const activeOk = tab === "opencode" ? ocOk : olOk;
+  const activeFail = Math.max(0, activeRaw.length - activeOk);
+  const successRate =
+    activeRaw.length === 0
+      ? "—"
+      : `${Math.round((activeOk / activeRaw.length) * 100)}%`;
 
   const activeItems = useMemo(
     () => (tab === "opencode" ? toOpenCodeViews(t, ocQuotas) : toOllamaViews(t, olQuotas)),
@@ -237,41 +244,100 @@ export function QuotasPage() {
           <Skeleton className="h-44 w-full" />
         </div>
       ) : null}
-      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
+      {!loading && error ? (
+        <EmptyState
+          icon={ChartLine}
+          title={t("common.loadFailed")}
+          description={error}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("common.retry")}
+            </Button>
+          }
+        />
+      ) : null}
 
       {!loading && !error && activeCount === 0 ? (
-        <SectionPanel
-          title={t("quotas.resultsTitle")}
-          icon={ChartLine}
-          iconTone="yellow"
-          bodyClassName="p-0"
-        >
-          <EmptyState
-            icon={tab === "opencode" ? ChartLine : Cloud}
-            title={t("quotas.emptyTitle")}
-            description={
-              tab === "opencode"
-                ? t("quotas.emptyOpencodeDescription")
-                : t("quotas.emptyOllamaDescription")
-            }
-            action={
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  void navigate(
-                    tab === "opencode" ? "/app/accounts" : "/app/accounts?tab=ollama",
-                  )
-                }
-              >
-                {t("quotas.emptyAction")}
-              </Button>
-            }
-          />
-        </SectionPanel>
+        <PosterEmpty
+          stamp={
+            tab === "opencode"
+              ? t("quotas.posterStampOc")
+              : t("quotas.posterStampOl")
+          }
+          stampSub={t("quotas.posterStampSub")}
+          title={t("quotas.emptyTitle")}
+          description={
+            tab === "opencode"
+              ? t("quotas.emptyOpencodeDescription")
+              : t("quotas.emptyOllamaDescription")
+          }
+          note={t("quotas.posterNote")}
+          action={
+            <Button
+              className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+              onClick={() =>
+                void navigate(
+                  tab === "opencode" ? "/app/accounts" : "/app/accounts?tab=ollama",
+                )
+              }
+            >
+              <Plus size={16} className="mr-1" weight="bold" />
+              {t("quotas.emptyAction")}
+            </Button>
+          }
+          bars={[
+            {
+              label: t("quotas.barScrapeLabel"),
+              detail:
+                tab === "opencode"
+                  ? t("quotas.barScrapeDetailOc")
+                  : t("quotas.barScrapeDetailOl"),
+              tone: tab === "opencode" ? "accent" : "coral",
+            },
+            {
+              label: t("quotas.barCookieLabel"),
+              detail: t("quotas.barCookieDetail"),
+              tone: "teal",
+            },
+            {
+              label: t("quotas.barViewLabel"),
+              detail: t("quotas.barViewDetail"),
+              tone: "mint",
+            },
+          ]}
+        />
       ) : null}
 
       {!loading && !error && activeCount > 0 ? (
         <div className="flex flex-col gap-3">
+          <MetricRail
+            items={[
+              {
+                label: t("kpi.total"),
+                value: activeCount,
+                hint: t("quotas.railTotalHint"),
+                tone: "yellow",
+              },
+              {
+                label: t("common.enabled"),
+                value: activeOk,
+                hint: t("quotas.railOkHint"),
+                tone: "teal",
+              },
+              {
+                label: t("common.loadFailed"),
+                value: activeFail,
+                hint: t("quotas.railFailHint"),
+                tone: "accent",
+              },
+              {
+                label: "%",
+                value: successRate,
+                hint: t("quotas.railRateHint"),
+                tone: "mint",
+              },
+            ]}
+          />
           <QuotaAccountViews
             mode={viewMode}
             items={pagedItems}
@@ -288,7 +354,7 @@ export function QuotasPage() {
                 }
               : {})}
           />
-          <div className="overflow-hidden rounded-none border border-border bg-paper-1">
+          <div className="overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[4px_4px_0_var(--border)]">
             <Pagination
               total={activeCount}
               page={page}

@@ -14,10 +14,10 @@ import {
   Dialog,
   EmptyState,
   EntityMark,
-  ErrorState,
-  MetaChip,
+  MetricRail,
   PageHeader,
   Pagination,
+  PosterEmpty,
   SearchField,
   SegmentedFilter,
   SelectionStrip,
@@ -121,6 +121,10 @@ export function AccountsPage() {
 
   const ocEnabled = ocAccounts.filter((a) => a.enabled).length;
   const olEnabled = olAccounts.filter((a) => a.enabled).length;
+  const activeAccounts = tab === "opencode" ? ocAccounts : olAccounts;
+  const activeEnabled = tab === "opencode" ? ocEnabled : olEnabled;
+  const activeDisabled = Math.max(0, activeAccounts.length - activeEnabled);
+  const otherPoolCount = tab === "opencode" ? olAccounts.length : ocAccounts.length;
 
   const filteredOc = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -449,12 +453,6 @@ export function AccountsPage() {
             ]}
           />
         }
-        meta={
-          <>
-            <MetaChip>{t("accounts.metaTotal", { n: ocAccounts.length + olAccounts.length })}</MetaChip>
-            <MetaChip>{t("accounts.metaEnabled", { n: ocEnabled + olEnabled })}</MetaChip>
-          </>
-        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void navigate("/app/quotas")}>
@@ -467,6 +465,116 @@ export function AccountsPage() {
           </div>
         }
       />
+
+      {loading ? (
+        <div className="space-y-2 border-2 border-border bg-paper-0 p-3 shadow-[4px_4px_0_var(--border)]">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      ) : error && activeAccounts.length === 0 && ocAccounts.length + olAccounts.length === 0 ? (
+        <EmptyState
+          icon={UsersThree}
+          title={t("common.loadFailed")}
+          description={error}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("common.retry")}
+            </Button>
+          }
+        />
+      ) : activeAccounts.length === 0 ? (
+        <PosterEmpty
+          stamp={
+            tab === "opencode"
+              ? t("accounts.posterStampOc")
+              : t("accounts.posterStampOl")
+          }
+          stampSub={t("accounts.posterStampSub")}
+          title={
+            tab === "opencode"
+              ? t("accounts.emptyTitleOc")
+              : t("accounts.emptyTitleOl")
+          }
+          description={
+            tab === "opencode"
+              ? t("accounts.emptyDescOc")
+              : t("accounts.emptyDescOl")
+          }
+          note={t("accounts.posterNote")}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+                onClick={() => setDialog("add")}
+              >
+                <Plus size={16} className="mr-1" weight="bold" />
+                {tab === "opencode"
+                  ? t("accounts.addCtaOc")
+                  : t("accounts.addCtaOl")}
+              </Button>
+              <Button
+                variant="secondary"
+                className="!px-4 !py-3 !text-[14px] !font-bold shadow-[4px_4px_0_var(--border)]"
+                onClick={() => setDialog("import")}
+              >
+                {t("accounts.importJson")}
+              </Button>
+            </div>
+          }
+          bars={[
+            {
+              label: t("accounts.barQuotaLabel"),
+              detail:
+                tab === "opencode"
+                  ? t("accounts.barQuotaDetailOc")
+                  : t("accounts.barQuotaDetailOl"),
+              tone: tab === "opencode" ? "accent" : "coral",
+            },
+            {
+              label: t("accounts.barCredLabel"),
+              detail:
+                tab === "opencode"
+                  ? t("accounts.barCredDetailOc")
+                  : t("accounts.barCredDetailOl"),
+              tone: "teal",
+            },
+            {
+              label: t("accounts.barIoLabel"),
+              detail: t("accounts.barIoDetail"),
+              tone: "mint",
+            },
+          ]}
+        />
+      ) : (
+        <>
+          <MetricRail
+            items={[
+              {
+                label: t("kpi.total"),
+                value: activeAccounts.length,
+                hint: t("accounts.railTotalHint"),
+                tone: "yellow",
+              },
+              {
+                label: t("common.enabled"),
+                value: activeEnabled,
+                hint: t("accounts.railEnabledHint"),
+                tone: "teal",
+              },
+              {
+                label: t("common.disabled"),
+                value: activeDisabled,
+                hint: t("accounts.railDisabledHint"),
+                tone: "white",
+              },
+              {
+                label: tab === "opencode" ? "Ollama" : "OpenCode",
+                value: otherPoolCount,
+                hint: t("accounts.railOtherHint"),
+                tone: "mint",
+              },
+            ]}
+          />
 
       <div className="flex flex-col overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[var(--shadow-hard)]">
         <div className="flex flex-col gap-2 border-b border-border bg-paper-0/35 px-3 py-2.5">
@@ -573,36 +681,14 @@ export function AccountsPage() {
           </p>
         ) : null}
 
-        {loading ? (
-          <div className="p-3">
-            <Skeleton className="h-40 w-full" />
-          </div>
-        ) : null}
-
-        {!loading &&
-        error &&
-        rows.length === 0 &&
-        ocAccounts.length + olAccounts.length === 0 ? (
-          <ErrorState title={t("common.loadFailed")} description={error} />
-        ) : null}
-
-        {!loading && rows.length === 0 ? (
+        {rows.length === 0 ? (
           <EmptyState
+            compact
             icon={tab === "opencode" ? UsersThree : Cloud}
-            title={tab === "opencode" ? t("accounts.emptyTitleOc") : t("accounts.emptyTitleOl")}
-            description={t("accounts.emptyDescription")}
-            action={
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={() => setDialog("add")}>{t("accounts.addAccount")}</Button>
-                <Button variant="secondary" onClick={() => setDialog("import")}>
-                  {t("accounts.importJson")}
-                </Button>
-              </div>
-            }
+            title={t("accounts.noMatchTitle")}
+            description={t("accounts.noMatchDesc")}
           />
-        ) : null}
-
-        {!loading && rows.length > 0 ? (
+        ) : (
           <div className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[28rem] text-left text-sm md:min-w-[40rem]">
@@ -750,8 +836,10 @@ export function AccountsPage() {
               }}
             />
           </div>
-        ) : null}
+        )}
       </div>
+        </>
+      )}
 
       <Dialog
         open={dialog === "add"}

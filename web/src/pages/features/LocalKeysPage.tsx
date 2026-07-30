@@ -18,10 +18,11 @@ import {
   FilterSelect,
   HelpTip,
   ListToolbar,
-  MetaChip,
+  MetricRail,
   MobileEntityCard,
   PageHeader,
   Pagination,
+  PosterEmpty,
   ResponsiveList,
   SectionPanel,
   SegmentedFilter,
@@ -191,6 +192,8 @@ export function LocalKeysPage() {
   }
 
   const active = keys.filter((k) => k.enabled && !k.revoked).length;
+  const disabled = keys.filter((k) => !k.revoked && !k.enabled).length;
+  const revoked = keys.filter((k) => k.revoked).length;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = keys.filter((k) => {
@@ -282,13 +285,6 @@ export function LocalKeysPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("localkeys.title")}
-        meta={
-          <>
-            <MetaChip>{t("localkeys.metaCount", { n: keys.length })}</MetaChip>
-            <MetaChip>{t("localkeys.metaAvailable", { n: active })}</MetaChip>
-            <HelpTip content={t("localkeys.limitTip")} label={t("localkeys.limitTipLabel")} />
-          </>
-        }
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
@@ -388,9 +384,89 @@ export function LocalKeysPage() {
         </ComposerPanel>
       ) : null}
 
+      {loading ? (
+        <div className="space-y-2 border-2 border-border bg-paper-0 p-3 shadow-[4px_4px_0_var(--border)]">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      ) : listError ? (
+        <EmptyState
+          icon={Key}
+          title={t("localkeys.loadFailedTitle")}
+          description={listError}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("common.retry")}
+            </Button>
+          }
+        />
+      ) : keys.length === 0 ? (
+        <PosterEmpty
+          stamp={t("localkeys.posterStamp")}
+          stampSub={t("localkeys.posterStampSub")}
+          title={t("localkeys.emptyTitle")}
+          description={t("localkeys.emptyDesc")}
+          note={t("localkeys.posterNote")}
+          action={
+            <Button
+              className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+              onClick={() => setShowAdd(true)}
+            >
+              <Plus size={16} className="mr-1" weight="bold" />
+              {t("localkeys.addCta")}
+            </Button>
+          }
+          bars={[
+            {
+              label: t("localkeys.barClientLabel"),
+              detail: t("localkeys.barClientDetail"),
+              tone: "accent",
+            },
+            {
+              label: t("localkeys.barLimitLabel"),
+              detail: t("localkeys.barLimitDetail"),
+              tone: "teal",
+            },
+            {
+              label: t("localkeys.barHashLabel"),
+              detail: t("localkeys.barHashDetail"),
+              tone: "mint",
+            },
+          ]}
+        />
+      ) : (
+        <>
+          <MetricRail
+            items={[
+              {
+                label: t("kpi.total"),
+                value: keys.length,
+                hint: t("localkeys.railTotalHint"),
+                tone: "yellow",
+              },
+              {
+                label: t("localkeys.statusAvailable"),
+                value: active,
+                hint: t("localkeys.railActiveHint"),
+                tone: "teal",
+              },
+              {
+                label: t("common.disabled"),
+                value: disabled,
+                hint: t("localkeys.railDisabledHint"),
+                tone: "white",
+              },
+              {
+                label: t("localkeys.statusRevoked"),
+                value: revoked,
+                hint: t("localkeys.railRevokedHint"),
+                tone: "accent",
+              },
+            ]}
+          />
       <SectionPanel
         title={t("localkeys.listTitle")}
-        description={t("localkeys.listDesc", { filtered: filtered.length, total: keys.length })}
         icon={Key}
         iconTone="accent"
         bodyClassName="p-0"
@@ -465,37 +541,7 @@ export function LocalKeysPage() {
             </>
           }
         />
-        {loading ? (
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ) : listError ? (
-          <EmptyState
-            compact
-            icon={Key}
-            title={t("localkeys.loadFailedTitle")}
-            description={listError}
-            action={
-              <Button variant="secondary" size="sm" onClick={() => void load()}>
-                {t("common.retry")}
-              </Button>
-            }
-          />
-        ) : keys.length === 0 ? (
-          <EmptyState
-            compact
-            icon={Key}
-            title={t("localkeys.emptyTitle")}
-            description={t("localkeys.emptyDesc")}
-            action={
-              <Button size="sm" onClick={() => setShowAdd(true)}>
-                <Plus size={14} className="mr-1" />
-                {t("localkeys.issue")}
-              </Button>
-            }
-          />
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <EmptyState
             compact
             icon={Key}
@@ -731,6 +777,8 @@ export function LocalKeysPage() {
           </div>
         )}
       </SectionPanel>
+        </>
+      )}
 
       <Dialog
         open={editing !== null}

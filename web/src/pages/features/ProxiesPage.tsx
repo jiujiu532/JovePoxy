@@ -18,9 +18,11 @@ import {
   HelpTip,
   ListToolbar,
   MetaChip,
+  MetricRail,
   MobileEntityCard,
   PageHeader,
   Pagination,
+  PosterEmpty,
   ResponsiveList,
   SectionPanel,
   SegmentedFilter,
@@ -221,6 +223,7 @@ export function ProxiesPage() {
 
   const enabled = rows.filter((r) => r.enabled).length;
   const cooling = rows.filter((r) => r.cooldown_until).length;
+  const totalWeight = rows.filter((r) => r.enabled).reduce((sum, r) => sum + r.weight, 0);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = rows.filter((r) => {
@@ -311,14 +314,6 @@ export function ProxiesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={t("proxies.title")}
-        meta={
-          <>
-            <MetaChip>{t("proxies.metaNodes", { n: rows.length })}</MetaChip>
-            <MetaChip>{t("proxies.metaEnabled", { n: enabled })}</MetaChip>
-            <MetaChip>{t("proxies.metaCooling", { n: cooling })}</MetaChip>
-            <HelpTip content={t("proxies.behaviorTip")} label={t("proxies.behaviorTipLabel")} />
-          </>
-        }
         actions={
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
@@ -377,14 +372,89 @@ export function ProxiesPage() {
         </ComposerPanel>
       ) : null}
 
+      {loading ? (
+        <div className="space-y-2 border-2 border-border bg-paper-0 p-3 shadow-[4px_4px_0_var(--border)]">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      ) : listError ? (
+        <EmptyState
+          icon={Globe}
+          title={t("proxies.loadFailedTitle")}
+          description={listError}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("common.retry")}
+            </Button>
+          }
+        />
+      ) : rows.length === 0 ? (
+        <PosterEmpty
+          stamp={t("proxies.posterStamp")}
+          stampSub={t("proxies.posterStampSub")}
+          title={t("proxies.emptyTitle")}
+          description={t("proxies.emptyDescription")}
+          note={t("proxies.posterNote")}
+          action={
+            <Button
+              className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+              onClick={() => setShowAdd(true)}
+            >
+              <Plus size={16} className="mr-1" weight="bold" />
+              {t("proxies.addCta")}
+            </Button>
+          }
+          bars={[
+            {
+              label: t("proxies.barRouteLabel"),
+              detail: t("proxies.barRouteDetail"),
+              tone: "accent",
+            },
+            {
+              label: t("proxies.barIpLabel"),
+              detail: t("proxies.barIpDetail"),
+              tone: "teal",
+            },
+            {
+              label: t("proxies.barWeightLabel"),
+              detail: t("proxies.barWeightDetail"),
+              tone: "mint",
+            },
+          ]}
+        />
+      ) : (
+        <>
+          <MetricRail
+            items={[
+              {
+                label: t("kpi.total"),
+                value: rows.length,
+                hint: t("proxies.railTotalHint"),
+                tone: "yellow",
+              },
+              {
+                label: t("kpi.enabled"),
+                value: enabled,
+                hint: t("proxies.railEnabledHint"),
+                tone: "teal",
+              },
+              {
+                label: t("kpi.cooling"),
+                value: cooling,
+                hint: t("proxies.railCoolingHint"),
+                tone: "mint",
+              },
+              {
+                label: t("kpi.weight"),
+                value: totalWeight,
+                hint: t("proxies.railWeightHint"),
+                tone: "accent",
+              },
+            ]}
+          />
       <SectionPanel
         title={t("proxies.listTitle")}
-        description={t("proxies.listStats", {
-          filtered: filtered.length,
-          total: rows.length,
-          enabled,
-          cooling,
-        })}
         icon={Globe}
         iconTone="teal"
         bodyClassName="p-0"
@@ -472,37 +542,7 @@ export function ProxiesPage() {
             </>
           }
         />
-        {loading ? (
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ) : listError ? (
-          <EmptyState
-            compact
-            icon={Globe}
-            title={t("proxies.loadFailedTitle")}
-            description={listError}
-            action={
-              <Button variant="secondary" size="sm" onClick={() => void load()}>
-                {t("common.retry")}
-              </Button>
-            }
-          />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            compact
-            icon={Globe}
-            title={t("proxies.emptyTitle")}
-            description={t("proxies.emptyDescription")}
-            action={
-              <Button size="sm" onClick={() => setShowAdd(true)}>
-                <Plus size={14} className="mr-1" />
-                {t("proxies.addBatch")}
-              </Button>
-            }
-          />
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <EmptyState
             compact
             icon={Globe}
@@ -763,6 +803,8 @@ export function ProxiesPage() {
           </div>
         )}
       </SectionPanel>
+        </>
+      )}
 
       <Dialog
         open={editing !== null}
