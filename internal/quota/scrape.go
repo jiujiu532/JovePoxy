@@ -110,6 +110,10 @@ func (scraper *Scraper) FetchAll(ctx context.Context, targets []ScrapeTarget) []
 // FetchAccount scrapes one dashboard page and returns a per-account result.
 func (scraper *Scraper) FetchAccount(ctx context.Context, target ScrapeTarget) AccountQuota {
 	now := scraper.now().UTC()
+	// demo_* accounts (seed_demo) never hit the real dashboard — return stable windows for UI preview.
+	if isDemoAccount(target) {
+		return demoAccountQuota(target, now)
+	}
 	cookie, err := normalizeAuthCookie(target.AuthCookie)
 	if err != nil {
 		return failedQuota(target, now, "invalid auth cookie")
@@ -169,5 +173,52 @@ func failedQuota(target ScrapeTarget, now time.Time, message string) AccountQuot
 	return AccountQuota{
 		AccountID: target.Account.ID, Name: target.Account.Name,
 		WorkspaceID: target.Account.WorkspaceID, Success: false, UpdatedAt: now, Error: message,
+	}
+}
+
+func isDemoAccount(target ScrapeTarget) bool {
+	id := strings.TrimSpace(string(target.Account.ID))
+	if strings.HasPrefix(id, "demo_") {
+		return true
+	}
+	return strings.Contains(target.AuthCookie, "demo_cookie")
+}
+
+// demoAccountQuota builds realistic rolling/weekly/monthly windows for seed accounts.
+func demoAccountQuota(target ScrapeTarget, now time.Time) AccountQuota {
+	// Stable but varied per account id so cards don't look identical.
+	seed := 0
+	for _, r := range string(target.Account.ID) {
+		seed = (seed*31 + int(r)) % 97
+	}
+	rolling := clampPercent(18 + float64(seed%55))
+	weekly := clampPercent(28 + float64((seed*3)%60))
+	monthly := clampPercent(12 + float64((seed*7)%50))
+	// Keep one "busy" account near the ceiling so narrative headroom lights up.
+	if strings.Contains(string(target.Account.ID), "bob") {
+		weekly = 86.5
+		rolling = 72.0
+	}
+	if strings.Contains(string(target.Account.ID), "alice") {
+		rolling = 41.2
+		monthly = 22.5
+	}
+	if strings.Contains(string(target.Account.ID), "carol") {
+		rolling = 9.5
+		weekly = 34.0
+		monthly = 58.0
+	}
+	windows := []Window{
+		normalizeWindow(LabelRolling, rolling, 2*3600+15*60, now),
+		normalizeWindow(LabelWeekly, weekly, 3*24*3600+8*3600, now),
+		normalizeWindow(LabelMonthly, monthly, 17*24*3600, now),
+	}
+	return AccountQuota{
+		AccountID:   target.Account.ID,
+		Name:        target.Account.Name,
+		WorkspaceID: target.Account.WorkspaceID,
+		Success:     true,
+		UpdatedAt:   now,
+		Windows:     FilterWindows(windows, target.Account),
 	}
 }

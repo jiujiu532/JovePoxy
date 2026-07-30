@@ -489,12 +489,6 @@ export function KeyPoolPage() {
                 hint: t("keypool.railBenchedHint"),
                 tone: "accent",
               },
-              {
-                label: t("kpi.weight"),
-                value: totalWeight,
-                hint: t("keypool.railWeightHint"),
-                tone: "yellow",
-              },
             ]}
           />
 

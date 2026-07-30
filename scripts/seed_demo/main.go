@@ -51,8 +51,8 @@ func main() {
 		log.Fatalf("seed: %v", err)
 	}
 	fmt.Printf("demo seed ok → %s\n", *dbPath)
-	fmt.Println("refresh admin UI: overview / key-pool / accounts / logs / opencode usage")
-	fmt.Println("note: quota windows still need live cookie scrape; process 429 is in-memory only")
+	fmt.Println("refresh admin UI: overview / key-pool / accounts / logs / quotas")
+	fmt.Println("note: demo_* quota scrapes return synthetic windows (no live cookie needed); process 429 is in-memory only")
 }
 
 func envOr(key, fallback string) string {
@@ -70,6 +70,7 @@ func cleanDemo(db *sql.DB) error {
 		`DELETE FROM local_api_keys WHERE id LIKE 'demo_%'`,
 		`DELETE FROM zen_keys WHERE id LIKE 'demo_%'`,
 		`DELETE FROM opencode_accounts WHERE id LIKE 'demo_%'`,
+		`DELETE FROM ollama_accounts WHERE id LIKE 'demo_%'`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -152,6 +153,29 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 			INSERT INTO usage_sync_state (account_id, cursor, updated_at) VALUES (?, '3', ?)
 		`, a.id, now.Add(-30*time.Minute).Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("sync state %s: %w", a.id, err)
+		}
+	}
+
+	// --- Ollama accounts (quota UI Ollama tab) ---
+	type olAcc struct {
+		id, name string
+	}
+	ollamaAccounts := []olAcc{
+		{"demo_ol_acc_nova", "nova-cloud"},
+		{"demo_ol_acc_orbit", "orbit-dev"},
+	}
+	for i, a := range ollamaAccounts {
+		ct, err := box.Seal("demo_session=not_real_" + a.id)
+		if err != nil {
+			return err
+		}
+		created := now.Add(-time.Duration(7-i) * 24 * time.Hour).Format(time.RFC3339Nano)
+		if _, err := db.Exec(`
+			INSERT INTO ollama_accounts
+			  (id, name, session_cookie_ciphertext, show_session, show_weekly, enabled, created_at)
+			VALUES (?, ?, ?, 1, 1, 1, ?)
+		`, a.id, a.name, ct, created); err != nil {
+			return fmt.Errorf("ollama account %s: %w", a.id, err)
 		}
 	}
 
@@ -261,7 +285,7 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 		}
 	}
 
-	fmt.Printf("  zen_keys: %d  accounts: %d  usage: %d  request_logs: %d\n",
-		len(zenKeys), len(accounts), nUsage, nLog)
+	fmt.Printf("  zen_keys: %d  accounts: %d  ollama_accounts: %d  usage: %d  request_logs: %d\n",
+		len(zenKeys), len(accounts), len(ollamaAccounts), nUsage, nLog)
 	return nil
 }

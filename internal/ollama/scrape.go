@@ -100,6 +100,10 @@ func (scraper *Scraper) FetchAll(ctx context.Context, accounts []Account, cookie
 // FetchAccount scrapes one settings page.
 func (scraper *Scraper) FetchAccount(ctx context.Context, account Account, sessionCookie string) AccountQuota {
 	now := scraper.now().UTC()
+	// demo_* accounts (seed_demo) never hit ollama.com — return stable windows for UI preview.
+	if isDemoAccount(account, sessionCookie) {
+		return demoAccountQuota(account, now)
+	}
 	cookie, err := NormalizeSessionCookie(sessionCookie)
 	if err != nil {
 		return AccountQuota{AccountID: account.ID, Name: account.Name, Success: false, UpdatedAt: now, Error: "invalid session cookie"}
@@ -145,4 +149,89 @@ func (scraper *Scraper) FetchAccount(ctx context.Context, account Account, sessi
 	return AccountQuota{
 		AccountID: account.ID, Name: account.Name, Success: true, UpdatedAt: now, Plan: plan, Windows: filtered,
 	}
+}
+
+func isDemoAccount(account Account, sessionCookie string) bool {
+	id := string(account.ID)
+	if len(id) >= 5 && id[:5] == "demo_" {
+		return true
+	}
+	return containsDemo(sessionCookie)
+}
+
+func containsDemo(s string) bool {
+	return indexOf(s, "demo_cookie") >= 0 || indexOf(s, "demo_session") >= 0
+}
+
+func indexOf(s, sub string) int {
+	if sub == "" || len(sub) > len(s) {
+		return -1
+	}
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+func demoAccountQuota(account Account, now time.Time) AccountQuota {
+	seed := 0
+	for _, r := range string(account.ID) {
+		seed = (seed*31 + int(r)) % 89
+	}
+	sessionUsed := 22 + float64(seed%50)
+	weeklyUsed := 15 + float64((seed*5)%55)
+	if sessionUsed > 95 {
+		sessionUsed = 95
+	}
+	if weeklyUsed > 95 {
+		weeklyUsed = 95
+	}
+	plan := "Pro"
+	if seed%3 == 0 {
+		plan = "Plus"
+	}
+	if seed%5 == 0 {
+		plan = "Team"
+	}
+	windows := []Window{
+		{
+			Label: LabelSession, Used: sessionUsed, Remaining: 100 - sessionUsed, Total: 100, Unit: "%",
+			ResetAt: now.Add(4 * time.Hour).Format(time.RFC3339), ResetInSec: 4 * 3600,
+			StatusText: "Session · demo",
+			Models: []ModelUsage{
+				{Model: "gpt-oss:120b", Requests: 12 + seed%20, SharePercent: pct(48)},
+				{Model: "deepseek-v3.1", Requests: 6 + seed%10, SharePercent: pct(32)},
+				{Model: "qwen3-coder", Requests: 3 + seed%8, SharePercent: pct(20)},
+			},
+		},
+		{
+			Label: LabelWeekly, Used: weeklyUsed, Remaining: 100 - weeklyUsed, Total: 100, Unit: "%",
+			ResetAt: now.Add(5 * 24 * time.Hour).Format(time.RFC3339), ResetInSec: 5 * 24 * 3600,
+			StatusText: "Weekly · demo",
+			Models: []ModelUsage{
+				{Model: "gpt-oss:120b", Requests: 40 + seed%30, SharePercent: pct(55)},
+				{Model: "kimi-k2.5", Requests: 18 + seed%15, SharePercent: pct(45)},
+			},
+		},
+	}
+	filtered := make([]Window, 0, len(windows))
+	for _, window := range windows {
+		if window.Label == LabelSession && !account.ShowSession {
+			continue
+		}
+		if window.Label == LabelWeekly && !account.ShowWeekly {
+			continue
+		}
+		filtered = append(filtered, window)
+	}
+	return AccountQuota{
+		AccountID: account.ID, Name: account.Name, Success: true, UpdatedAt: now, Plan: plan, Windows: filtered,
+	}
+}
+
+func pct(v float64) *float64 {
+	x := v
+	return &x
 }
