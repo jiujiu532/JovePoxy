@@ -391,6 +391,7 @@ export function ProxiesPage() {
         />
       ) : rows.length === 0 ? (
         <PosterEmpty
+          theme="foam"
           stamp={t("proxies.posterStamp")}
           stampSub={t("proxies.posterStampSub")}
           title={t("proxies.emptyTitle")}
@@ -398,7 +399,7 @@ export function ProxiesPage() {
           note={t("proxies.posterNote")}
           action={
             <Button
-              className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+              className="!bg-accent-mint !px-5 !py-3 !text-[15px] !font-black text-black shadow-[6px_6px_0_var(--border)]"
               onClick={() => setShowAdd(true)}
             >
               <Plus size={16} className="mr-1" weight="bold" />
@@ -409,7 +410,7 @@ export function ProxiesPage() {
             {
               label: t("proxies.barRouteLabel"),
               detail: t("proxies.barRouteDetail"),
-              tone: "accent",
+              tone: "mint",
             },
             {
               label: t("proxies.barIpLabel"),
@@ -419,7 +420,7 @@ export function ProxiesPage() {
             {
               label: t("proxies.barWeightLabel"),
               detail: t("proxies.barWeightDetail"),
-              tone: "mint",
+              tone: "coral",
             },
           ]}
         />

@@ -7,6 +7,14 @@ export type PosterInfoBar = {
   readonly tone: "accent" | "teal" | "mint" | "yellow" | "coral";
 };
 
+/** Visual language for scheme-B empty posters — pick per page so empties don't clone. */
+export type PosterTheme =
+  | "sun" // Key pool — yellow + mint diagonals
+  | "rose" // Accounts — coral/rose + mint (mockup accounts)
+  | "teal" // Quotas — teal-led bands
+  | "coral" // Local keys — coral stamp / warm bands
+  | "foam"; // Proxies — mint/foam egress feel
+
 export type PosterEmptyProps = {
   readonly stamp: string;
   readonly stampSub?: string;
@@ -16,6 +24,7 @@ export type PosterEmptyProps = {
   readonly note?: ReactNode;
   readonly bars?: ReadonlyArray<PosterInfoBar>;
   readonly giant?: string;
+  readonly theme?: PosterTheme;
   readonly className?: string;
 };
 
@@ -25,6 +34,57 @@ const barTone: Record<PosterInfoBar["tone"], string> = {
   mint: "bg-accent-mint text-black",
   yellow: "bg-accent-yellow text-black",
   coral: "bg-accent-coral text-black",
+};
+
+type ThemeSkin = {
+  skew: string;
+  stamp: string;
+  stampRotate: string;
+  giantShadow: string;
+  gridOpacity: string;
+};
+
+const themes: Record<PosterTheme, ThemeSkin> = {
+  sun: {
+    // Key pool default — yellow + mint
+    skew: "linear-gradient(115deg, transparent 0 28%, var(--accent-yellow) 28% 42%, transparent 42% 58%, var(--accent-mint) 58% 66%, transparent 66% 100%)",
+    stamp: "bg-accent-yellow",
+    stampRotate: "-rotate-[8deg]",
+    giantShadow: "4px 4px 0 var(--accent)",
+    gridOpacity: "opacity-40",
+  },
+  rose: {
+    // Accounts mockup — rose + mint, foam stamp
+    skew: "linear-gradient(115deg, transparent 0 34%, var(--accent-coral) 34% 48%, transparent 48% 62%, var(--accent-teal) 62% 72%, transparent 72% 100%)",
+    stamp: "bg-accent-mint",
+    stampRotate: "rotate-[6deg]",
+    giantShadow: "4px 4px 0 var(--accent-teal)",
+    gridOpacity: "opacity-35",
+  },
+  teal: {
+    // Quotas — teal-led reverse bands
+    skew: "linear-gradient(125deg, transparent 0 22%, var(--accent-teal) 22% 36%, transparent 36% 54%, var(--accent-yellow) 54% 64%, transparent 64% 100%)",
+    stamp: "bg-accent-teal",
+    stampRotate: "-rotate-[5deg]",
+    giantShadow: "4px 4px 0 var(--accent-yellow)",
+    gridOpacity: "opacity-45",
+  },
+  coral: {
+    // Local keys — coral stamp, warm coral + yellow
+    skew: "linear-gradient(108deg, transparent 0 30%, var(--accent) 30% 40%, transparent 40% 55%, var(--accent-yellow) 55% 68%, transparent 68% 100%)",
+    stamp: "bg-accent",
+    stampRotate: "rotate-[7deg]",
+    giantShadow: "4px 4px 0 var(--accent-mint)",
+    gridOpacity: "opacity-40",
+  },
+  foam: {
+    // Proxies — mint/foam egress
+    skew: "linear-gradient(118deg, transparent 0 26%, var(--accent-mint) 26% 40%, transparent 40% 56%, var(--accent-coral) 56% 66%, transparent 66% 100%)",
+    stamp: "bg-accent-mint",
+    stampRotate: "-rotate-[10deg]",
+    giantShadow: "4px 4px 0 var(--accent-coral)",
+    gridOpacity: "opacity-38",
+  },
 };
 
 /** Full-bleed neo-brutal empty poster (scheme B). */
@@ -37,8 +97,11 @@ export function PosterEmpty({
   note,
   bars,
   giant = "0",
+  theme = "sun",
   className,
 }: PosterEmptyProps) {
+  const skin = themes[theme];
+
   return (
     <div
       className={cn(
@@ -46,18 +109,21 @@ export function PosterEmpty({
         "shadow-[4px_4px_0_var(--border)]",
         className,
       )}
+      data-poster-theme={theme}
     >
       <div
         className="pointer-events-none absolute inset-[-20%_-10%] z-0 opacity-95"
         style={{
-          background:
-            "linear-gradient(115deg, transparent 0 28%, var(--accent-yellow) 28% 42%, transparent 42% 58%, var(--accent-mint) 58% 66%, transparent 66% 100%)",
+          background: skin.skew,
           transform: "skewY(-6deg)",
         }}
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute inset-0 z-0 opacity-40 mix-blend-multiply"
+        className={cn(
+          "pointer-events-none absolute inset-0 z-0 mix-blend-multiply",
+          skin.gridOpacity,
+        )}
         style={{
           backgroundImage:
             "linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)",
@@ -70,9 +136,11 @@ export function PosterEmpty({
         <div className="flex items-start justify-between gap-3">
           <div
             className={cn(
-              "inline-block -rotate-[8deg] border-[3px] border-border bg-accent-yellow px-3 py-2",
+              "inline-block border-[3px] border-border px-3 py-2",
               "font-mono text-[11px] font-black uppercase leading-tight tracking-[0.12em]",
               "shadow-[4px_4px_0_var(--border)]",
+              skin.stamp,
+              skin.stampRotate,
             )}
           >
             {stamp}
@@ -84,7 +152,7 @@ export function PosterEmpty({
           </div>
           <span
             className="select-none font-mono text-[clamp(3.5rem,10vw,5.5rem)] font-black leading-none tracking-tighter text-ink"
-            style={{ textShadow: "4px 4px 0 var(--accent)" }}
+            style={{ textShadow: skin.giantShadow }}
             aria-hidden
           >
             {giant}

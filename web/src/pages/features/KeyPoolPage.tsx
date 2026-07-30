@@ -375,6 +375,7 @@ export function KeyPoolPage() {
         />
       ) : keys.length === 0 ? (
         <PosterEmpty
+          theme="sun"
           stamp={
             provider === "opencode"
               ? t("keypool.posterStampOc")

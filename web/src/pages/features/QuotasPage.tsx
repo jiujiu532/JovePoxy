@@ -259,6 +259,7 @@ export function QuotasPage() {
 
       {!loading && !error && activeCount === 0 ? (
         <PosterEmpty
+          theme="teal"
           stamp={
             tab === "opencode"
               ? t("quotas.posterStampOc")
@@ -292,12 +293,12 @@ export function QuotasPage() {
                 tab === "opencode"
                   ? t("quotas.barScrapeDetailOc")
                   : t("quotas.barScrapeDetailOl"),
-              tone: tab === "opencode" ? "accent" : "coral",
+              tone: "teal",
             },
             {
               label: t("quotas.barCookieLabel"),
               detail: t("quotas.barCookieDetail"),
-              tone: "teal",
+              tone: "yellow",
             },
             {
               label: t("quotas.barViewLabel"),

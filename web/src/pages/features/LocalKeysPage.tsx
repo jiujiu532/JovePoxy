@@ -406,6 +406,7 @@ export function LocalKeysPage() {
         />
       ) : liveKeys.length === 0 ? (
         <PosterEmpty
+          theme="coral"
           stamp={t("localkeys.posterStamp")}
           stampSub={t("localkeys.posterStampSub")}
           title={t("localkeys.emptyTitle")}
@@ -429,7 +430,7 @@ export function LocalKeysPage() {
             {
               label: t("localkeys.barLimitLabel"),
               detail: t("localkeys.barLimitDetail"),
-              tone: "teal",
+              tone: "yellow",
             },
             {
               label: t("localkeys.barHashLabel"),

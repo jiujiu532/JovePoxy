@@ -484,6 +484,7 @@ export function AccountsPage() {
         />
       ) : activeAccounts.length === 0 ? (
         <PosterEmpty
+          theme="rose"
           stamp={
             tab === "opencode"
               ? t("accounts.posterStampOc")
@@ -502,7 +503,7 @@ export function AccountsPage() {
           }
           note={t("accounts.posterNote")}
           action={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 md:justify-end">
               <Button
                 className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
                 onClick={() => setDialog("add")}
@@ -513,8 +514,7 @@ export function AccountsPage() {
                   : t("accounts.addCtaOl")}
               </Button>
               <Button
-                variant="secondary"
-                className="!px-4 !py-3 !text-[14px] !font-bold shadow-[4px_4px_0_var(--border)]"
+                className="!bg-accent-yellow !px-4 !py-3 !text-[14px] !font-black text-black shadow-[6px_6px_0_var(--border)]"
                 onClick={() => setDialog("import")}
               >
                 {t("accounts.importJson")}
@@ -528,7 +528,7 @@ export function AccountsPage() {
                 tab === "opencode"
                   ? t("accounts.barQuotaDetailOc")
                   : t("accounts.barQuotaDetailOl"),
-              tone: tab === "opencode" ? "accent" : "coral",
+              tone: "teal",
             },
             {
               label: t("accounts.barCredLabel"),
@@ -536,12 +536,12 @@ export function AccountsPage() {
                 tab === "opencode"
                   ? t("accounts.barCredDetailOc")
                   : t("accounts.barCredDetailOl"),
-              tone: "teal",
+              tone: "mint",
             },
             {
               label: t("accounts.barIoLabel"),
               detail: t("accounts.barIoDetail"),
-              tone: "mint",
+              tone: "accent",
             },
           ]}
         />
