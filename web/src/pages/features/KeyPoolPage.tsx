@@ -1,4 +1,12 @@
-import { Coins, Key, PencilSimple, Plus } from "@phosphor-icons/react";
+import {
+  Coins,
+  Key,
+  PencilSimple,
+  Plus,
+  Pulse,
+  Snowflake,
+  Stack,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -7,6 +15,7 @@ import {
   DeleteButton,
   Dialog,
   EmptyState,
+  EntityMark,
   FilterSelect,
   CompactField,
   ComposerPanel,
@@ -21,6 +30,7 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
+  StatCard,
   Tabs,
   TextInput,
   fieldInputClass,
@@ -305,6 +315,36 @@ export function KeyPoolPage() {
         }
       />
 
+      {!loading && !listError ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("kpi.total")}
+            value={keys.length}
+            hint={t("kpi.filtered") + ` ${filtered.length}`}
+            icon={Stack}
+            tone="default"
+          />
+          <StatCard
+            label={t("kpi.enabled")}
+            value={enabled}
+            icon={Pulse}
+            tone="success"
+          />
+          <StatCard
+            label={t("kpi.cooling")}
+            value={cooling}
+            icon={Snowflake}
+            tone={cooling > 0 ? "warning" : "default"}
+          />
+          <StatCard
+            label={t("kpi.weight")}
+            value={totalWeight}
+            icon={Coins}
+            tone="yellow"
+          />
+        </div>
+      ) : null}
+
       {showAdd ? (
         <ComposerPanel
           title={t("keypool.addDialogTitle", { provider: providerLabel })}
@@ -361,6 +401,8 @@ export function KeyPoolPage() {
       <SectionPanel
         title={t("keypool.listTitle")}
         description={t("keypool.listDesc", { filtered: filtered.length, total: keys.length })}
+        icon={Key}
+        iconTone="yellow"
         bodyClassName="p-0"
       >
         <ListToolbar
@@ -470,7 +512,12 @@ export function KeyPoolPage() {
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title={t("keypool.noMatchTitle")} description={t("keypool.noMatchDesc")} />
+          <EmptyState
+            compact
+            icon={Key}
+            title={t("keypool.noMatchTitle")}
+            description={t("keypool.noMatchDesc")}
+          />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -509,7 +556,12 @@ export function KeyPoolPage() {
                             aria-label={t("keypool.selectRowAria", { label: key.label })}
                           />
                         }
-                        title={key.label}
+                        title={
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            <EntityMark name={key.label} size="sm" />
+                            <span className="truncate">{key.label}</span>
+                          </span>
+                        }
                         subtitle={
                           <span className="font-mono text-[11px]">{key.prefix}</span>
                         }
@@ -582,7 +634,7 @@ export function KeyPoolPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-left text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
@@ -637,7 +689,10 @@ export function KeyPoolPage() {
                             <td
                               className={`whitespace-nowrap px-3 py-2.5 font-medium ${key.enabled ? "text-ink" : "text-ink-faint"}`}
                             >
-                              {key.label}
+                              <span className="inline-flex min-w-0 items-center gap-2.5">
+                                <EntityMark name={key.label} size="sm" />
+                                <span className="truncate">{key.label}</span>
+                              </span>
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                               {key.prefix}

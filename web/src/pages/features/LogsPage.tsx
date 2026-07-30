@@ -1,10 +1,20 @@
-import { ClipboardText, Database } from "@phosphor-icons/react";
+import {
+  ChartBar,
+  CheckCircle,
+  ClipboardText,
+  Database,
+  Pulse,
+  Stack,
+  Timer,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
   Button,
   EmptyState,
+  EntityMark,
   ErrorState,
   FilterSelect,
   FilterStrip,
@@ -13,6 +23,7 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
+  StatCard,
   Tabs,
   slicePage,
 } from "@/components";
@@ -156,6 +167,23 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
+        <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label={t("kpi.total")} value={logs.length} icon={Stack} tone="default" />
+          <StatCard label={t("kpi.ok")} value={ok} icon={CheckCircle} tone="success" />
+          <StatCard
+            label={t("kpi.rateLimited")}
+            value={rateLimited}
+            icon={WarningCircle}
+            tone={rateLimited > 0 ? "yellow" : "default"}
+          />
+          <StatCard
+            label={t("kpi.avgLatency")}
+            value={logs.length ? formatLatency(avgLatency) : t("common.none")}
+            icon={Timer}
+            tone="teal"
+          />
+        </div>
         <SectionPanel
           title={t("logs.gatewayTitle")}
           description={t("logs.gatewayStats", {
@@ -165,6 +193,8 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
             rateLimited,
             latency: logs.length ? formatLatency(avgLatency) : t("common.none"),
           })}
+          icon={ClipboardText}
+          iconTone="accent"
           bodyClassName="p-0"
           actions={
             <Button variant="secondary" size="sm" onClick={() => void load()}>
@@ -234,6 +264,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
             <EmptyState
               icon={ClipboardText}
               title={t("logs.emptyGatewayTitle")}
+              description={t("logs.emptyGatewayDescription")}
             />
           ) : filtered.length === 0 ? (
             <EmptyState compact title={t("logs.noMatchTitle")} description={t("logs.noMatchDescription")} />
@@ -242,7 +273,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[52rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
                       <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.routeLabel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
@@ -256,7 +287,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                     {paged.map((row) => (
                       <tr
                         key={row.id}
-                        className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
+                        className="border-b-2 border-border last:border-b-0 hover:bg-accent-soft"
                       >
                         <td className="px-4 py-3 text-[12px] text-ink-muted whitespace-nowrap">
                           {row.created_at}
@@ -265,7 +296,10 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                           {row.route}
                         </td>
                         <td className="px-4 py-3 font-mono text-[13px] text-ink">
-                          {row.model || t("common.none")}
+                          <span className="inline-flex min-w-0 items-center gap-2.5">
+                            <EntityMark name={row.model || row.route} size="sm" />
+                            <span className="truncate">{row.model || t("common.none")}</span>
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <Badge kind={statusKind(row.status)}>{row.status}</Badge>
@@ -297,6 +331,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
+        </>
       ) : null}
     </>
   );
@@ -411,9 +446,18 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
+        <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label={t("kpi.total")} value={records.length} icon={Stack} tone="default" />
+          <StatCard label={t("kpi.filtered")} value={filtered.length} icon={Pulse} tone="yellow" />
+          <StatCard label={t("logs.colInput")} value={totalIn.toLocaleString()} icon={ChartBar} tone="teal" />
+          <StatCard label={t("logs.colOutput")} value={totalOut.toLocaleString()} icon={Database} tone="success" />
+        </div>
         <SectionPanel
           title={t("logs.usageOcTitle")}
           description={t("logs.usageOcStats", { filtered: filtered.length, total: records.length, in: totalIn, out: totalOut })}
+          icon={Database}
+          iconTone="yellow"
           bodyClassName="p-0"
           actions={
             <div className="flex flex-wrap gap-1.5">
@@ -524,7 +568,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[44rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
                       <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colInput")}</th>
@@ -537,10 +581,15 @@ function UsagePanel({ t }: { readonly t: Translate }) {
                     {paged.map((row) => (
                       <tr
                         key={row.id}
-                        className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
+                        className="border-b-2 border-border last:border-b-0 hover:bg-accent-soft"
                       >
                         <td className="px-4 py-3 text-[12px] text-ink-muted">{row.recorded_at}</td>
-                        <td className="px-4 py-3 font-mono text-[13px] text-ink">{row.model}</td>
+                        <td className="px-4 py-3 font-mono text-[13px] text-ink">
+                          <span className="inline-flex min-w-0 items-center gap-2.5">
+                            <EntityMark name={row.model} size="sm" />
+                            <span className="truncate">{row.model}</span>
+                          </span>
+                        </td>
                         <td className="px-4 py-3 tabular-nums text-ink">{row.input_tokens}</td>
                         <td className="px-4 py-3 tabular-nums text-ink">{row.output_tokens}</td>
                         <td className="px-4 py-3 tabular-nums text-ink-muted">
@@ -567,6 +616,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
+        </>
       ) : null}
     </>
   );
@@ -665,9 +715,18 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
       {loading ? <Skeleton className="h-48 w-full" /> : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
+        <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label={t("kpi.accounts")} value={accounts.length} icon={Stack} tone="default" />
+          <StatCard label={t("kpi.filtered")} value={filtered.length} icon={Pulse} tone="yellow" />
+          <StatCard label={t("logs.colRequests")} value={totalReq.toLocaleString()} icon={ChartBar} tone="teal" />
+          <StatCard label={t("kpi.total")} value={rows.length} icon={Database} tone="success" />
+        </div>
         <SectionPanel
           title={t("logs.usageOlTitle")}
           description={t("logs.usageOlStats", { count: filtered.length, total: totalReq })}
+          icon={Database}
+          iconTone="teal"
           bodyClassName="p-0"
           actions={
             <Button
@@ -716,6 +775,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
             <EmptyState
               icon={Database}
               title={t("logs.emptyUsageOlTitle")}
+              description={t("logs.emptyUsageOlDescription")}
               action={
                 <Button variant="secondary" onClick={() => void navigate("/app/accounts?tab=ollama")}>
                   {t("logs.goAddAccount")}
@@ -729,7 +789,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[36rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
                       <th className="px-4 py-2.5 font-medium">{t("logs.accountLabel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colWindow")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
@@ -740,9 +800,14 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
                     {paged.map((row) => (
                       <tr
                         key={`${row.accountId}-${row.windowLabel}-${row.model}`}
-                        className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
+                        className="border-b-2 border-border last:border-b-0 hover:bg-accent-soft"
                       >
-                        <td className="px-4 py-3 font-medium text-ink">{row.accountName}</td>
+                        <td className="px-4 py-3 font-medium text-ink">
+                          <span className="inline-flex min-w-0 items-center gap-2.5">
+                            <EntityMark name={row.accountName} size="sm" />
+                            <span className="truncate">{row.accountName}</span>
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-ink-muted">{row.windowLabel}</td>
                         <td className="px-4 py-3 font-mono text-[13px] text-ink">{row.model}</td>
                         <td className="px-4 py-3 tabular-nums text-ink">{row.requests}</td>
@@ -764,6 +829,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
             </div>
           )}
         </SectionPanel>
+        </>
       ) : null}
     </>
   );

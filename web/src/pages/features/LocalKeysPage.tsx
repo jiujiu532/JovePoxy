@@ -1,4 +1,13 @@
-import { Copy, Key, PencilSimple, Plus } from "@phosphor-icons/react";
+import {
+  Copy,
+  Gauge,
+  Key,
+  PencilSimple,
+  Plus,
+  Pulse,
+  Stack,
+  Trash,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -9,6 +18,7 @@ import {
   DeleteButton,
   Dialog,
   EmptyState,
+  EntityMark,
   FilterSelect,
   HelpTip,
   ListToolbar,
@@ -20,6 +30,7 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
+  StatCard,
   TextInput,
   fieldInputClass,
   slicePage,
@@ -185,6 +196,8 @@ export function LocalKeysPage() {
   }
 
   const active = keys.filter((k) => k.enabled && !k.revoked).length;
+  const revoked = keys.filter((k) => k.revoked).length;
+  const limited = keys.filter((k) => !k.revoked && (k.rpm_limit > 0 || k.daily_limit > 0)).length;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = keys.filter((k) => {
@@ -296,6 +309,36 @@ export function LocalKeysPage() {
         }
       />
 
+      {!loading && !listError ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("kpi.total")}
+            value={keys.length}
+            hint={t("kpi.filtered") + ` ${filtered.length}`}
+            icon={Stack}
+            tone="default"
+          />
+          <StatCard
+            label={t("kpi.available")}
+            value={active}
+            icon={Pulse}
+            tone="success"
+          />
+          <StatCard
+            label={t("kpi.limited")}
+            value={limited}
+            icon={Gauge}
+            tone="yellow"
+          />
+          <StatCard
+            label={t("kpi.revoked")}
+            value={revoked}
+            icon={Trash}
+            tone={revoked > 0 ? "accent" : "default"}
+          />
+        </div>
+      ) : null}
+
       {createdSecret ? (
         <ComposerPanel
           title={t("localkeys.newSecretTitle")}
@@ -385,6 +428,8 @@ export function LocalKeysPage() {
       <SectionPanel
         title={t("localkeys.listTitle")}
         description={t("localkeys.listDesc", { filtered: filtered.length, total: keys.length })}
+        icon={Key}
+        iconTone="accent"
         bodyClassName="p-0"
       >
         <ListToolbar
@@ -479,6 +524,7 @@ export function LocalKeysPage() {
             compact
             icon={Key}
             title={t("localkeys.emptyTitle")}
+            description={t("localkeys.emptyDesc")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
@@ -487,7 +533,12 @@ export function LocalKeysPage() {
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title={t("localkeys.noMatchTitle")} description={t("localkeys.noMatchDesc")} />
+          <EmptyState
+            compact
+            icon={Key}
+            title={t("localkeys.noMatchTitle")}
+            description={t("localkeys.noMatchDesc")}
+          />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -522,7 +573,12 @@ export function LocalKeysPage() {
                             aria-label={t("localkeys.selectRowAria", { label: key.label })}
                           />
                         }
-                        title={key.label}
+                        title={
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            <EntityMark name={key.label} size="sm" />
+                            <span className="truncate">{key.label}</span>
+                          </span>
+                        }
                         subtitle={
                           <span className="font-mono text-[11px]">{key.prefix}</span>
                         }
@@ -581,7 +637,7 @@ export function LocalKeysPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-left text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
@@ -630,7 +686,10 @@ export function LocalKeysPage() {
                             <td
                               className={`whitespace-nowrap px-3 py-2.5 font-medium ${inactive ? "text-ink-faint" : "text-ink"}`}
                             >
-                              {key.label}
+                              <span className="inline-flex min-w-0 items-center gap-2.5">
+                                <EntityMark name={key.label} size="sm" />
+                                <span className="truncate">{key.label}</span>
+                              </span>
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                               {key.prefix}

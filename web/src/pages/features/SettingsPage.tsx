@@ -1,3 +1,4 @@
+import { GearSix, Lock, Stack, TerminalWindow } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -214,6 +215,8 @@ export function SettingsPage() {
                 ? t("settings.authCustomDescription")
                 : t("settings.authEnvDescription")
             }
+            icon={Lock}
+            iconTone="accent"
             bodyClassName="!p-4 sm:!p-5"
           >
             <form
@@ -256,6 +259,8 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.serviceTitle")}
+            icon={GearSix}
+            iconTone="yellow"
             bodyClassName="p-0"
           >
             <InfoList rows={serviceRows(t, settings)} />
@@ -263,6 +268,8 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.modelTitle")}
+            icon={Stack}
+            iconTone="teal"
             bodyClassName="p-0"
           >
             <InfoList rows={modelRows(t, settings)} />
@@ -270,6 +277,8 @@ export function SettingsPage() {
 
           <SectionPanel
             title={t("settings.envTitle")}
+            icon={TerminalWindow}
+            iconTone="mint"
             bodyClassName="!p-4 sm:!p-5"
           >
             <div className="grid gap-2 sm:grid-cols-2">

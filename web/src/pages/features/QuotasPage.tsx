@@ -1,4 +1,10 @@
-import { ChartLine, Cloud } from "@phosphor-icons/react";
+import {
+  ChartLine,
+  CheckCircle,
+  Cloud,
+  Stack,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -10,6 +16,7 @@ import {
   QuotaAccountViews,
   SectionPanel,
   Skeleton,
+  StatCard,
   Tabs,
   ViewModeToggle,
   slicePage,
@@ -236,8 +243,50 @@ export function QuotasPage() {
       ) : null}
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
 
+      {!loading && !error ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("kpi.accounts")}
+            value={activeCount}
+            icon={Stack}
+            tone="default"
+          />
+          <StatCard
+            label={t("kpi.ok")}
+            value={tab === "opencode" ? ocOk : olOk}
+            icon={CheckCircle}
+            tone="success"
+          />
+          <StatCard
+            label={t("kpi.failed")}
+            value={
+              tab === "opencode"
+                ? ocQuotas.length - ocOk
+                : olQuotas.length - olOk
+            }
+            icon={WarningCircle}
+            tone={
+              (tab === "opencode" ? ocQuotas.length - ocOk : olQuotas.length - olOk) > 0
+                ? "accent"
+                : "default"
+            }
+          />
+          <StatCard
+            label={tab === "opencode" ? "OpenCode" : "Ollama"}
+            value={tab === "opencode" ? ocQuotas.length : olQuotas.length}
+            icon={tab === "opencode" ? ChartLine : Cloud}
+            tone={tab === "opencode" ? "yellow" : "teal"}
+          />
+        </div>
+      ) : null}
+
       {!loading && !error && activeCount === 0 ? (
-        <SectionPanel title={t("quotas.resultsTitle")} bodyClassName="p-0">
+        <SectionPanel
+          title={t("quotas.resultsTitle")}
+          icon={ChartLine}
+          iconTone="yellow"
+          bodyClassName="p-0"
+        >
           <EmptyState
             icon={tab === "opencode" ? ChartLine : Cloud}
             title={t("quotas.emptyTitle")}

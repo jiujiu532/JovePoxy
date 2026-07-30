@@ -2,6 +2,8 @@ import {
   Cloud,
   DownloadSimple,
   Plus,
+  Pulse,
+  Stack,
   UploadSimple,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -13,6 +15,7 @@ import {
   DeleteButton,
   Dialog,
   EmptyState,
+  EntityMark,
   ErrorState,
   MetaChip,
   PageHeader,
@@ -22,6 +25,7 @@ import {
   SelectionStrip,
   SecretInput,
   Skeleton,
+  StatCard,
   Tabs,
   TextInput,
   slicePage,
@@ -467,7 +471,39 @@ export function AccountsPage() {
         }
       />
 
-      <div className="flex flex-col overflow-hidden rounded-none border border-border bg-paper-1">
+      {!loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("kpi.accounts")}
+            value={ocAccounts.length + olAccounts.length}
+            hint={`OC ${ocAccounts.length} · OL ${olAccounts.length}`}
+            icon={Stack}
+            tone="default"
+          />
+          <StatCard
+            label="OpenCode"
+            value={ocAccounts.length}
+            hint={`${t("kpi.enabled")} ${ocEnabled}`}
+            icon={UsersThree}
+            tone="yellow"
+          />
+          <StatCard
+            label="Ollama"
+            value={olAccounts.length}
+            hint={`${t("kpi.enabled")} ${olEnabled}`}
+            icon={Cloud}
+            tone="teal"
+          />
+          <StatCard
+            label={t("kpi.enabled")}
+            value={ocEnabled + olEnabled}
+            icon={Pulse}
+            tone="success"
+          />
+        </div>
+      ) : null}
+
+      <div className="flex flex-col overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[var(--shadow-hard)]">
         <div className="flex flex-col gap-2 border-b border-border bg-paper-0/35 px-3 py-2.5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -589,6 +625,7 @@ export function AccountsPage() {
           <EmptyState
             icon={tab === "opencode" ? UsersThree : Cloud}
             title={tab === "opencode" ? t("accounts.emptyTitleOc") : t("accounts.emptyTitleOl")}
+            description={t("accounts.emptyDescription")}
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => setDialog("add")}>{t("accounts.addAccount")}</Button>
@@ -605,7 +642,7 @@ export function AccountsPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[28rem] text-left text-sm md:min-w-[40rem]">
                 <thead>
-                  <tr className="border-b border-border bg-paper-0/70 text-caption text-ink-muted">
+                  <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
                     <th className="w-10 px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -638,7 +675,12 @@ export function AccountsPage() {
                               aria-label={t("accounts.selectRowAria", { name: account.name })}
                             />
                           </td>
-                          <td className="px-3 py-2.5 font-medium text-ink">{account.name}</td>
+                          <td className="px-3 py-2.5 font-medium text-ink">
+                            <span className="inline-flex min-w-0 items-center gap-2.5">
+                              <EntityMark name={account.name} size="sm" />
+                              <span className="truncate">{account.name}</span>
+                            </span>
+                          </td>
                           <td className="px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                             {account.workspace_id}
                           </td>
@@ -689,7 +731,12 @@ export function AccountsPage() {
                               aria-label={t("accounts.selectRowAria", { name: account.name })}
                             />
                           </td>
-                          <td className="px-3 py-2.5 font-medium text-ink">{account.name}</td>
+                          <td className="px-3 py-2.5 font-medium text-ink">
+                            <span className="inline-flex min-w-0 items-center gap-2.5">
+                              <EntityMark name={account.name} size="sm" />
+                              <span className="truncate">{account.name}</span>
+                            </span>
+                          </td>
                           <td className="px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                             {account.masked_cookie}
                           </td>

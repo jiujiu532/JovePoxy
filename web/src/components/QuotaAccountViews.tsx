@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
+import { EntityMark } from "@/components/EntityMark";
 import { ProgressBar, ProgressRing } from "@/components/ProgressRing";
 import { viewModeGridClass } from "@/components/ViewModeToggle";
 import { useI18n } from "@/lib/i18n";
@@ -260,18 +261,21 @@ function CardShell({
       )}
     >
       <header className="mb-2.5 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3
-            className={cn(
-              "truncate font-semibold tracking-tight text-ink",
-              dense ? "text-[13px]" : "text-[14px]",
-            )}
-          >
-            {item.name}
-          </h3>
-          {item.subtitle ? (
-            <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint">{item.subtitle}</p>
-          ) : null}
+        <div className="flex min-w-0 items-start gap-2.5">
+          <EntityMark name={item.name} size="sm" />
+          <div className="min-w-0">
+            <h3
+              className={cn(
+                "truncate font-semibold tracking-tight text-ink",
+                dense ? "text-[13px]" : "text-[14px]",
+              )}
+            >
+              {item.name}
+            </h3>
+            {item.subtitle ? (
+              <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint">{item.subtitle}</p>
+            ) : null}
+          </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {item.badge ? <Badge kind="free">{item.badge}</Badge> : null}
@@ -354,7 +358,12 @@ function DefaultTableCells({ item }: { readonly item: QuotaAccountView }) {
   const { t } = useI18n();
   return (
     <>
-      <td className="px-3 py-2.5 font-medium text-ink">{item.name}</td>
+      <td className="px-3 py-2.5 font-medium text-ink">
+        <span className="inline-flex min-w-0 items-center gap-2.5">
+          <EntityMark name={item.name} size="sm" />
+          <span className="truncate">{item.name}</span>
+        </span>
+      </td>
       <td className="px-3 py-2.5 text-ink-muted">
         {item.badge ? <Badge kind="free">{item.badge}</Badge> : item.subtitle ? (
           <span className="font-mono text-[12px]">{item.subtitle}</span>

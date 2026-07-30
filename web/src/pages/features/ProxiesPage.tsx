@@ -1,4 +1,12 @@
-import { Globe, Path, PencilSimple, Plus } from "@phosphor-icons/react";
+import {
+  Globe,
+  Path,
+  PencilSimple,
+  Plus,
+  Pulse,
+  Snowflake,
+  Stack,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,6 +16,7 @@ import {
   DeleteButton,
   Dialog,
   EmptyState,
+  EntityMark,
   FilterSelect,
   HelpTip,
   ListToolbar,
@@ -19,6 +28,7 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
+  StatCard,
   TextInput,
   fieldInputClass,
   slicePage,
@@ -215,6 +225,10 @@ export function ProxiesPage() {
 
   const enabled = rows.filter((r) => r.enabled).length;
   const cooling = rows.filter((r) => r.cooldown_until).length;
+  const schemeCount = useMemo(
+    () => new Set(rows.map((r) => r.scheme)).size,
+    [rows],
+  );
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = rows.filter((r) => {
@@ -326,6 +340,36 @@ export function ProxiesPage() {
         }
       />
 
+      {!loading && !listError ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("kpi.nodes")}
+            value={rows.length}
+            hint={t("kpi.filtered") + ` ${filtered.length}`}
+            icon={Stack}
+            tone="default"
+          />
+          <StatCard
+            label={t("kpi.enabled")}
+            value={enabled}
+            icon={Pulse}
+            tone="success"
+          />
+          <StatCard
+            label={t("kpi.cooling")}
+            value={cooling}
+            icon={Snowflake}
+            tone={cooling > 0 ? "warning" : "default"}
+          />
+          <StatCard
+            label={t("kpi.schemes")}
+            value={schemeCount}
+            icon={Globe}
+            tone="teal"
+          />
+        </div>
+      ) : null}
+
       {showAdd ? (
         <ComposerPanel
           title={t("proxies.composerTitle")}
@@ -379,6 +423,8 @@ export function ProxiesPage() {
           enabled,
           cooling,
         })}
+        icon={Globe}
+        iconTone="teal"
         bodyClassName="p-0"
       >
         <ListToolbar
@@ -486,6 +532,7 @@ export function ProxiesPage() {
             compact
             icon={Globe}
             title={t("proxies.emptyTitle")}
+            description={t("proxies.emptyDescription")}
             action={
               <Button size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} className="mr-1" />
@@ -494,7 +541,12 @@ export function ProxiesPage() {
             }
           />
         ) : filtered.length === 0 ? (
-          <EmptyState compact title={t("proxies.noMatchTitle")} description={t("proxies.noMatchDescription")} />
+          <EmptyState
+            compact
+            icon={Globe}
+            title={t("proxies.noMatchTitle")}
+            description={t("proxies.noMatchDescription")}
+          />
         ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
@@ -527,7 +579,12 @@ export function ProxiesPage() {
                           aria-label={t("proxies.selectRowAria", { label: row.label })}
                         />
                       }
-                      title={row.label}
+                      title={
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <EntityMark name={row.label} size="sm" />
+                          <span className="truncate">{row.label}</span>
+                        </span>
+                      }
                       subtitle={
                         <span className="font-mono text-[11px]">
                           {row.scheme} · {row.host}
@@ -597,7 +654,7 @@ export function ProxiesPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-left text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
+                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
@@ -646,7 +703,10 @@ export function ProxiesPage() {
                           <td
                             className={`whitespace-nowrap px-3 py-2.5 font-medium ${row.enabled ? "text-ink" : "text-ink-faint"}`}
                           >
-                            {row.label}
+                            <span className="inline-flex min-w-0 items-center gap-2.5">
+                              <EntityMark name={row.label} size="sm" />
+                              <span className="truncate">{row.label}</span>
+                            </span>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                             {row.scheme}
