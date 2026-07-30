@@ -6,6 +6,8 @@ export { DeleteButton } from "@/components/DeleteButton";
 export { Dialog } from "@/components/Dialog";
 export { EmptyState } from "@/components/EmptyState";
 export { EntityMark } from "@/components/EntityMark";
+export { MetricRail } from "@/components/MetricRail";
+export { PosterEmpty } from "@/components/PosterEmpty";
 export { ErrorState } from "@/components/ErrorState";
 export { Grain } from "@/components/Grain";
 export { HelpTip } from "@/components/HelpTip";

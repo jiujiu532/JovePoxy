@@ -18,10 +18,11 @@ import {
   ComposerPanel,
   HelpTip,
   ListToolbar,
-  MetaChip,
+  MetricRail,
   MobileEntityCard,
   PageHeader,
   Pagination,
+  PosterEmpty,
   ResponsiveList,
   SecretInput,
   SectionPanel,
@@ -289,15 +290,6 @@ export function KeyPoolPage() {
             ]}
           />
         }
-        meta={
-          <>
-            <MetaChip>{t("keypool.metaCount", { n: keys.length })}</MetaChip>
-            <MetaChip>{t("keypool.metaEnabled", { n: enabled })}</MetaChip>
-            <MetaChip>{t("keypool.metaCooling", { n: cooling })}</MetaChip>
-            <MetaChip>{t("keypool.metaWeight", { n: totalWeight })}</MetaChip>
-            <HelpTip content={t("keypool.pollTip")} label={t("keypool.pollTipLabel")} />
-          </>
-        }
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => void load()}>
@@ -364,127 +356,176 @@ export function KeyPoolPage() {
         </ComposerPanel>
       ) : null}
 
-      <SectionPanel
-        title={t("keypool.listTitle")}
-        description={t("keypool.listDesc", { filtered: filtered.length, total: keys.length })}
-        icon={Key}
-        iconTone="yellow"
-        bodyClassName="p-0"
-      >
-        <ListToolbar
-          search={query}
-          onSearchChange={setQuery}
-          searchPlaceholder={t("keypool.searchPlaceholder")}
-          selectedCount={selection.selected.size}
-          totalVisible={paged.length}
-          allSelected={selection.allSelected}
-          onSelectAll={selection.toggleAll}
-          onInvert={selection.invert}
-          onClear={selection.clear}
-          filters={
-            <SegmentedFilter
-              aria-label={t("keypool.statusAria")}
-              value={status}
-              onChange={(v) => setStatus(v as StatusFilter)}
-              options={[
-                { value: "all", label: t("common.all") },
-                { value: "enabled", label: t("common.enabled") },
-                { value: "disabled", label: t("common.disabled") },
-                { value: "cooling", label: t("keypool.statusCooling") },
-              ]}
-            />
-          }
-          trailing={
-            <>
-              <FilterSelect
-                label={t("keypool.weightFilterLabel")}
-                value={weightFilter}
-                onChange={(v) => setWeightFilter(v as WeightFilter)}
-                options={[
-                  { value: "all", label: t("common.all") },
-                  { value: "1", label: t("keypool.weightEq1") },
-                  { value: "ge2", label: t("keypool.weightGe2") },
-                  { value: "ge5", label: t("keypool.weightGe5") },
-                ]}
-              />
-              <FilterSelect
-                label={t("keypool.sortLabel")}
-                value={sort}
-                onChange={(v) => setSort(v as SortKey)}
-                options={[
-                  { value: "label_asc", label: t("keypool.sortLabelAsc") },
-                  { value: "label_desc", label: t("keypool.sortLabelDesc") },
-                  { value: "weight_desc", label: t("keypool.sortWeightDesc") },
-                  { value: "weight_asc", label: t("keypool.sortWeightAsc") },
-                  { value: "status", label: t("keypool.sortStatus") },
-                ]}
-              />
-            </>
-          }
-          bulkActions={
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={bulkBusy}
-                onClick={() => void bulkSetEnabled(true)}
-              >
-                {t("common.enable")}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={bulkBusy}
-                onClick={() => void bulkSetEnabled(false)}
-              >
-                {t("common.disable")}
-              </Button>
-              <DeleteButton loading={bulkBusy} onClick={() => void bulkDelete()} />
-            </>
+      {loading ? (
+        <div className="space-y-2 border-2 border-border bg-paper-0 p-3 shadow-[4px_4px_0_var(--border)]">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      ) : listError ? (
+        <EmptyState
+          icon={Key}
+          title={t("keypool.loadFailedTitle")}
+          description={listError}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("common.retry")}
+            </Button>
           }
         />
-        {loading ? (
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ) : listError ? (
-          <EmptyState
-            compact
-            icon={Key}
-            title={t("keypool.loadFailedTitle")}
-            description={listError}
-            action={
-              <Button variant="secondary" size="sm" onClick={() => void load()}>
-                {t("common.retry")}
-              </Button>
-            }
+      ) : keys.length === 0 ? (
+        <PosterEmpty
+          stamp={t("keypool.posterStamp")}
+          stampSub={t("keypool.posterStampSub")}
+          title={t("keypool.emptyTitle")}
+          description={
+            provider === "opencode" ? t("keypool.emptyDescOc") : t("keypool.emptyDescOl")
+          }
+          note={t("keypool.posterNote")}
+          action={
+            <Button
+              className="!px-5 !py-3 !text-[15px] !font-black shadow-[6px_6px_0_var(--border)]"
+              onClick={() => setShowAdd(true)}
+            >
+              <Plus size={16} className="mr-1" weight="bold" />
+              {t("keypool.addKeyCta")}
+            </Button>
+          }
+          bars={[
+            {
+              label: t("keypool.barPaidLabel"),
+              detail: t("keypool.barPaidDetail"),
+              tone: "accent",
+            },
+            {
+              label: t("keypool.barKeyLabel"),
+              detail: t("keypool.barKeyDetail"),
+              tone: "teal",
+            },
+            {
+              label: t("keypool.barWeightLabel"),
+              detail: t("keypool.barWeightDetail"),
+              tone: "mint",
+            },
+          ]}
+        />
+      ) : (
+        <>
+          <MetricRail
+            items={[
+              {
+                label: t("kpi.total"),
+                value: keys.length,
+                hint: t("keypool.railTotalHint"),
+                tone: "yellow",
+              },
+              {
+                label: t("kpi.enabled"),
+                value: enabled,
+                hint: t("keypool.railEnabledHint"),
+                tone: "teal",
+              },
+              {
+                label: t("kpi.cooling"),
+                value: cooling,
+                hint: t("keypool.railCoolingHint"),
+                tone: "mint",
+              },
+              {
+                label: t("kpi.weight"),
+                value: totalWeight,
+                hint: t("keypool.railWeightHint"),
+                tone: "accent",
+              },
+            ]}
           />
-        ) : keys.length === 0 ? (
-          <EmptyState
-            compact
+
+          <SectionPanel
+            title={t("keypool.listTitle")}
             icon={Key}
-            title={t("keypool.emptyTitle")}
-            description={
-              provider === "opencode"
-                ? t("keypool.emptyDescOc")
-                : t("keypool.emptyDescOl")
-            }
-            action={
-              <Button size="sm" onClick={() => setShowAdd(true)}>
-                <Plus size={14} className="mr-1" />
-                {t("keypool.addKey")}
-              </Button>
-            }
-          />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            compact
-            icon={Key}
-            title={t("keypool.noMatchTitle")}
-            description={t("keypool.noMatchDesc")}
-          />
-        ) : (
+            iconTone="yellow"
+            bodyClassName="p-0"
+          >
+            <ListToolbar
+              search={query}
+              onSearchChange={setQuery}
+              searchPlaceholder={t("keypool.searchPlaceholder")}
+              selectedCount={selection.selected.size}
+              totalVisible={paged.length}
+              allSelected={selection.allSelected}
+              onSelectAll={selection.toggleAll}
+              onInvert={selection.invert}
+              onClear={selection.clear}
+              filters={
+                <SegmentedFilter
+                  aria-label={t("keypool.statusAria")}
+                  value={status}
+                  onChange={(v) => setStatus(v as StatusFilter)}
+                  options={[
+                    { value: "all", label: t("common.all") },
+                    { value: "enabled", label: t("common.enabled") },
+                    { value: "disabled", label: t("common.disabled") },
+                    { value: "cooling", label: t("keypool.statusCooling") },
+                  ]}
+                />
+              }
+              trailing={
+                <>
+                  <FilterSelect
+                    label={t("keypool.weightFilterLabel")}
+                    value={weightFilter}
+                    onChange={(v) => setWeightFilter(v as WeightFilter)}
+                    options={[
+                      { value: "all", label: t("common.all") },
+                      { value: "1", label: t("keypool.weightEq1") },
+                      { value: "ge2", label: t("keypool.weightGe2") },
+                      { value: "ge5", label: t("keypool.weightGe5") },
+                    ]}
+                  />
+                  <FilterSelect
+                    label={t("keypool.sortLabel")}
+                    value={sort}
+                    onChange={(v) => setSort(v as SortKey)}
+                    options={[
+                      { value: "label_asc", label: t("keypool.sortLabelAsc") },
+                      { value: "label_desc", label: t("keypool.sortLabelDesc") },
+                      { value: "weight_desc", label: t("keypool.sortWeightDesc") },
+                      { value: "weight_asc", label: t("keypool.sortWeightAsc") },
+                      { value: "status", label: t("keypool.sortStatus") },
+                    ]}
+                  />
+                </>
+              }
+              bulkActions={
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={bulkBusy}
+                    onClick={() => void bulkSetEnabled(true)}
+                  >
+                    {t("common.enable")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={bulkBusy}
+                    onClick={() => void bulkSetEnabled(false)}
+                  >
+                    {t("common.disable")}
+                  </Button>
+                  <DeleteButton loading={bulkBusy} onClick={() => void bulkDelete()} />
+                </>
+              }
+            />
+            {filtered.length === 0 ? (
+              <EmptyState
+                compact
+                icon={Key}
+                title={t("keypool.noMatchTitle")}
+                description={t("keypool.noMatchDesc")}
+              />
+            ) : (
           <div className="min-w-0">
             <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
               <input
@@ -757,8 +798,10 @@ export function KeyPoolPage() {
               }}
             />
           </div>
-        )}
-      </SectionPanel>
+            )}
+          </SectionPanel>
+        </>
+      )}
 
       <Dialog
         open={editing !== null}
