@@ -1,4 +1,10 @@
-import { ArrowClockwise, Stack } from "@phosphor-icons/react";
+import {
+  ArrowClockwise,
+  Coins,
+  Globe,
+  Stack,
+  SquaresFour,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -13,10 +19,13 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
+  StatCard,
   slicePage,
 } from "@/components";
 import { api, ApiError, type ModelDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { cn } from "@/lib/cn";
+import { familyInitials, familyTone } from "@/lib/family-tone";
 import { useI18n } from "@/lib/i18n";
 
 /** free≈public, paid≈zen — single axis. */
@@ -26,6 +35,43 @@ type SortKey = "id_asc" | "id_desc" | "free_first" | "paid_first";
 function modelFamily(id: string): string {
   const parts = id.split(/[-_/]/).filter(Boolean);
   return (parts[0] ?? id).toLowerCase();
+}
+
+function ModelIdCell({ id, family }: { readonly id: string; readonly family: string }) {
+  const tone = familyTone(family);
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span
+        className={cn(
+          "inline-flex h-8 w-8 shrink-0 items-center justify-center border-2 border-border",
+          "text-[11px] font-bold tracking-tight shadow-[2px_2px_0_var(--border)]",
+          tone.bg,
+          tone.text,
+        )}
+        aria-hidden
+      >
+        {familyInitials(family)}
+      </span>
+      <span className="truncate font-mono text-[13px] font-medium text-ink">{id}</span>
+    </div>
+  );
+}
+
+function RouteCell({ free, freeLabel, paidLabel }: {
+  readonly free: boolean;
+  readonly freeLabel: string;
+  readonly paidLabel: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-muted">
+      {free ? (
+        <Globe size={14} weight="duotone" className="shrink-0 text-ink" aria-hidden />
+      ) : (
+        <Coins size={14} weight="duotone" className="shrink-0 text-ink" aria-hidden />
+      )}
+      <span className="truncate">{free ? freeLabel : paidLabel}</span>
+    </span>
+  );
 }
 
 export function ModelsPage() {
@@ -128,165 +174,253 @@ export function ModelsPage() {
         meta={
           stale
             ? t("models.staleMeta")
-            : t("models.summaryMeta", { total: models.length, free: freeCount, paid: paidCount })
+            : t("models.summaryMeta", {
+                total: models.length,
+                free: freeCount,
+                paid: paidCount,
+              })
         }
         actions={
-          <Button variant="secondary" size="sm" loading={refreshing} onClick={() => void load(true)}>
-            <ArrowClockwise size={16} className="mr-1.5" />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={refreshing}
+            onClick={() => void load(true)}
+          >
+            <ArrowClockwise size={16} weight="bold" className="mr-1.5" aria-hidden />
             {t("common.refresh")}
           </Button>
         }
         className="!pb-3"
       />
 
-      {loading ? <Skeleton className="h-48 w-full" /> : null}
-      {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
+      {loading ? (
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </div>
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : null}
+      {!loading && error ? (
+        <ErrorState title={t("common.loadFailed")} description={error} />
+      ) : null}
 
       {!loading && !error ? (
-        <SectionPanel
-          title={t("models.catalogTitle")}
-          description={t("models.catalogDescription", {
-            filtered: filtered.length,
-            total: models.length,
-            filteredFree,
-            filteredPaid: filtered.length - filteredFree,
-          })}
-          bodyClassName="p-0"
-        >
-          <FilterStrip
-            search={query}
-            onSearchChange={setQuery}
-            searchPlaceholder={t("models.searchPlaceholder")}
-            filters={
-              <>
-                <SegmentedFilter
-                  aria-label={t("models.filterKindLabel")}
-                  value={kind}
-                  onChange={(v) => setKind(v as KindFilter)}
-                  options={[
-                    { value: "all", label: t("common.all") },
-                    { value: "free", label: "Free" },
-                    { value: "paid", label: "Paid" },
-                  ]}
-                />
-                <FilterSelect
-                  label={t("models.filterFamilyLabel")}
-                  value={familyFilter}
-                  onChange={setFamilyFilter}
-                  options={[
-                    { value: "all", label: t("common.all") },
-                    ...families.map((family) => ({ value: family, label: family })),
-                  ]}
-                />
-              </>
-            }
-            trailing={
-              <>
-                <FilterSelect
-                  label={t("models.filterSortLabel")}
-                  value={sortKey}
-                  onChange={(v) => setSortKey(v as SortKey)}
-                  options={[
-                    { value: "id_asc", label: t("models.sortIdAsc") },
-                    { value: "id_desc", label: t("models.sortIdDesc") },
-                    { value: "free_first", label: t("models.sortFreeFirst") },
-                    { value: "paid_first", label: t("models.sortPaidFirst") },
-                  ]}
-                />
-                <Button variant="secondary" size="sm" onClick={resetFilters}>
-                  {t("models.reset")}
-                </Button>
-              </>
-            }
-          />
-
-          {models.length === 0 ? (
-            <EmptyState
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label={t("models.kpi.total")}
+              value={models.length}
+              hint={t("models.kpi.showing") + ` ${filtered.length}`}
               icon={Stack}
-              title={t("models.emptyTitle")}
-              action={
-                <Button size="sm" loading={refreshing} onClick={() => void load(true)}>
-                  {t("models.emptyAction")}
-                </Button>
+              tone="default"
+            />
+            <StatCard
+              label={t("models.kpi.free")}
+              value={freeCount}
+              hint={t("models.routeFree")}
+              icon={Globe}
+              tone="yellow"
+            />
+            <StatCard
+              label={t("models.kpi.paid")}
+              value={paidCount}
+              hint={t("models.routePaid")}
+              icon={Coins}
+              tone="accent"
+            />
+            <StatCard
+              label={t("models.kpi.families")}
+              value={families.length}
+              hint={
+                familyFilter === "all"
+                  ? t("common.all")
+                  : familyFilter
+              }
+              icon={SquaresFour}
+              tone="teal"
+            />
+          </div>
+
+          <SectionPanel
+            title={t("models.catalogTitle")}
+            description={t("models.catalogDescription", {
+              filtered: filtered.length,
+              total: models.length,
+              filteredFree,
+              filteredPaid: filtered.length - filteredFree,
+            })}
+            icon={Stack}
+            iconTone="yellow"
+            bodyClassName="p-0"
+          >
+            <FilterStrip
+              search={query}
+              onSearchChange={setQuery}
+              searchPlaceholder={t("models.searchPlaceholder")}
+              filters={
+                <>
+                  <SegmentedFilter
+                    aria-label={t("models.filterKindLabel")}
+                    value={kind}
+                    onChange={(v) => setKind(v as KindFilter)}
+                    options={[
+                      { value: "all", label: t("common.all") },
+                      { value: "free", label: "Free" },
+                      { value: "paid", label: "Paid" },
+                    ]}
+                  />
+                  <FilterSelect
+                    label={t("models.filterFamilyLabel")}
+                    value={familyFilter}
+                    onChange={setFamilyFilter}
+                    options={[
+                      { value: "all", label: t("common.all") },
+                      ...families.map((family) => ({ value: family, label: family })),
+                    ]}
+                  />
+                </>
+              }
+              trailing={
+                <>
+                  <FilterSelect
+                    label={t("models.filterSortLabel")}
+                    value={sortKey}
+                    onChange={(v) => setSortKey(v as SortKey)}
+                    options={[
+                      { value: "id_asc", label: t("models.sortIdAsc") },
+                      { value: "id_desc", label: t("models.sortIdDesc") },
+                      { value: "free_first", label: t("models.sortFreeFirst") },
+                      { value: "paid_first", label: t("models.sortPaidFirst") },
+                    ]}
+                  />
+                  <Button variant="secondary" size="sm" onClick={resetFilters}>
+                    {t("models.reset")}
+                  </Button>
+                </>
               }
             />
-          ) : filtered.length === 0 ? (
-            <EmptyState
-              compact
-              title={t("models.emptyFilteredTitle")}
-            />
-          ) : (
-            <div className="min-w-0 overflow-hidden">
-              <div className="divide-y divide-border md:hidden">
-                {paged.map((model) => (
-                  <div key={model.id} className="flex items-start justify-between gap-3 px-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-[13px] font-medium text-ink">
-                        {model.id}
-                      </p>
-                      <p className="mt-0.5 text-[12px] text-ink-muted">
-                        {modelFamily(model.id)} ·{" "}
-                        {model.free ? t("models.routeFree") : t("models.routePaid")}
-                      </p>
-                    </div>
-                    {model.free ? (
-                      <Badge kind="warning">free</Badge>
-                    ) : (
-                      <Badge kind="neutral">paid</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-paper-0/60 text-caption text-ink-muted">
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.id")}</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.family")}</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.kind")}</th>
-                      <th className="whitespace-nowrap px-3 py-2 font-medium">{t("models.table.route")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paged.map((model) => (
-                      <tr
-                        key={model.id}
-                        className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
-                      >
-                        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] text-ink">
-                          {model.id}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-ink-muted">
-                          {modelFamily(model.id)}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5">
-                          {model.free ? (
-                            <Badge kind="warning">free</Badge>
-                          ) : (
-                            <Badge kind="neutral">paid</Badge>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-ink-muted">
-                          {model.free ? t("models.routeFree") : t("models.routePaid")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                total={filtered.length}
-                page={page}
-                pageSize={pageSize}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => {
-                  setPageSize(size);
-                  setPage(1);
-                }}
+
+            {models.length === 0 ? (
+              <EmptyState
+                icon={Stack}
+                title={t("models.emptyTitle")}
+                description={t("models.emptyDescription")}
+                action={
+                  <Button size="sm" loading={refreshing} onClick={() => void load(true)}>
+                    {t("models.emptyAction")}
+                  </Button>
+                }
               />
-            </div>
-          )}
-        </SectionPanel>
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                compact
+                icon={Stack}
+                title={t("models.emptyFilteredTitle")}
+                description={t("models.emptyFilteredDescription")}
+                action={
+                  <Button size="sm" variant="secondary" onClick={resetFilters}>
+                    {t("models.reset")}
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="min-w-0 overflow-hidden">
+                <div className="divide-y divide-border md:hidden">
+                  {paged.map((model) => {
+                    const family = modelFamily(model.id);
+                    return (
+                      <div
+                        key={model.id}
+                        className="flex items-start justify-between gap-3 px-3 py-3"
+                      >
+                        <div className="min-w-0">
+                          <ModelIdCell id={model.id} family={family} />
+                          <p className="mt-1.5 pl-[2.625rem] text-[12px] text-ink-muted">
+                            {family} ·{" "}
+                            {model.free ? t("models.routeFree") : t("models.routePaid")}
+                          </p>
+                        </div>
+                        {model.free ? (
+                          <Badge kind="free">free</Badge>
+                        ) : (
+                          <Badge kind="paid">paid</Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[40rem] text-left text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
+                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                          {t("models.table.id")}
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                          {t("models.table.family")}
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                          {t("models.table.kind")}
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                          {t("models.table.route")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paged.map((model) => {
+                        const family = modelFamily(model.id);
+                        return (
+                          <tr
+                            key={model.id}
+                            className="border-b border-border last:border-b-0 transition-colors hover:bg-accent-soft/40"
+                          >
+                            <td className="whitespace-nowrap px-3 py-2.5">
+                              <ModelIdCell id={model.id} family={family} />
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5">
+                              <span className="inline-flex items-center border border-border bg-paper-0 px-1.5 py-0.5 text-[12px] font-medium text-ink-muted">
+                                {family}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5">
+                              {model.free ? (
+                                <Badge kind="free">free</Badge>
+                              ) : (
+                                <Badge kind="paid">paid</Badge>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5">
+                              <RouteCell
+                                free={model.free}
+                                freeLabel={t("models.routeFree")}
+                                paidLabel={t("models.routePaid")}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  total={filtered.length}
+                  page={page}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                />
+              </div>
+            )}
+          </SectionPanel>
+        </>
       ) : null}
     </div>
   );

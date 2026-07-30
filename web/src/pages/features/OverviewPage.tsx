@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   ChartBar,
   ChartLineUp,
   Coins,
@@ -7,7 +8,12 @@ import {
   Pulse,
   Stack,
   WarningCircle,
+  Heartbeat,
+  Key,
+  Globe,
+  ChartLine,
 } from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -36,6 +42,7 @@ import {
   type UsageRecordDTO,
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import { cn } from "@/lib/cn";
 import { useI18n, type Lang, type Translate } from "@/lib/i18n";
 
 function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
@@ -58,7 +65,6 @@ function dayKey(date: Date): string {
   return `${m}/${d}`;
 }
 
-/** 近 N 天日期骨架（含今天），保证图表横轴稳定。 */
 function recentDays(): string[] {
   const days: string[] = [];
   const now = new Date();
@@ -70,7 +76,6 @@ function recentDays(): string[] {
   return days;
 }
 
-/** 网关日志 → 按日请求数。 */
 function buildRequestTrend(logs: ReadonlyArray<LogDTO>): TrendPoint[] {
   const bucket = new Map<string, number>(recentDays().map((d) => [d, 0]));
   for (const log of logs) {
@@ -82,7 +87,6 @@ function buildRequestTrend(logs: ReadonlyArray<LogDTO>): TrendPoint[] {
   return [...bucket.entries()].map(([label, value]) => ({ label, value }));
 }
 
-/** 用量记录 → 按日 token（输入+输出）。 */
 function buildTokenTrend(records: ReadonlyArray<UsageRecordDTO>): TrendPoint[] {
   const bucket = new Map<string, number>(recentDays().map((d) => [d, 0]));
   for (const r of records) {
@@ -101,6 +105,14 @@ function formatCompact(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
 }
+
+type QuickAction = {
+  readonly to: string;
+  readonly label: string;
+  readonly desc: string;
+  readonly icon: Icon;
+  readonly tone: string;
+};
 
 export function OverviewPage() {
   const navigate = useNavigate();
@@ -123,7 +135,6 @@ export function OverviewPage() {
       setMetrics(metricsPayload);
       setError(null);
 
-      // 趋势数据为增强信息：失败时静默降级，不阻塞概览主体。
       const [logsRes, usageRes] = await Promise.allSettled([
         api.logs(),
         api.usage(),
@@ -207,14 +218,14 @@ export function OverviewPage() {
       value: data.tokens_today,
       hint: t("overview.card.tokensTodayHint"),
       icon: Lightning,
-      tone: "default" as const,
+      tone: "yellow" as const,
     },
     {
       label: t("overview.card.requestsTotal"),
       value: data.requests_total,
       hint: t("overview.card.requestsTotalHint"),
       icon: ChartLineUp,
-      tone: "default" as const,
+      tone: "teal" as const,
     },
     {
       label: t("overview.card.tokensTotal"),
@@ -242,13 +253,40 @@ export function OverviewPage() {
     },
   ];
 
+  const quickActions: QuickAction[] = [
+    {
+      to: "/app/local-keys",
+      label: t("overview.quickActions.createLocalKeyLabel"),
+      desc: t("overview.quickActions.createLocalKeyDesc"),
+      icon: Key,
+      tone: "bg-accent-yellow text-black",
+    },
+    {
+      to: "/app/proxies",
+      label: t("overview.quickActions.configureProxyLabel"),
+      desc: t("overview.quickActions.configureProxyDesc"),
+      icon: Globe,
+      tone: "bg-accent-teal text-black",
+    },
+    {
+      to: "/app/quotas",
+      label: t("overview.quickActions.quotaMonitorLabel"),
+      desc: t("overview.quickActions.quotaMonitorDesc"),
+      icon: ChartLine,
+      tone: "bg-accent-mint text-black",
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title={t("overview.title")}
-        meta={t("overview.updatedAt", { time: formatUpdatedAt(lang, t, data.updated_at) })}
+        meta={t("overview.updatedAt", {
+          time: formatUpdatedAt(lang, t, data.updated_at),
+        })}
         actions={
           <Button variant="secondary" onClick={() => void load()}>
+            <Pulse size={16} weight="bold" className="mr-1.5" aria-hidden />
             {t("common.refresh")}
           </Button>
         }
@@ -271,6 +309,8 @@ export function OverviewPage() {
         <SectionPanel
           title={t("overview.requestTrend.title")}
           description={t("overview.requestTrend.description", { days: TREND_DAYS })}
+          icon={ChartLineUp}
+          iconTone="yellow"
         >
           {requestTrend.some((p) => p.value > 0) ? (
             <HardLineChart
@@ -282,6 +322,7 @@ export function OverviewPage() {
               compact
               icon={ChartLineUp}
               title={t("overview.requestTrend.emptyTitle")}
+              description={t("overview.requestTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
@@ -289,6 +330,8 @@ export function OverviewPage() {
         <SectionPanel
           title={t("overview.tokenTrend.title")}
           description={t("overview.tokenTrend.description", { days: TREND_DAYS })}
+          icon={ChartBar}
+          iconTone="teal"
         >
           {tokenTrend.some((p) => p.value > 0) ? (
             <HardBarChart
@@ -301,6 +344,7 @@ export function OverviewPage() {
               compact
               icon={ChartBar}
               title={t("overview.tokenTrend.emptyTitle")}
+              description={t("overview.tokenTrend.emptyDescription")}
             />
           )}
         </SectionPanel>
@@ -309,6 +353,10 @@ export function OverviewPage() {
       <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
         <SectionPanel
           title={t("overview.health.title")}
+          description={t("overview.health.description")}
+          icon={Heartbeat}
+          iconTone="accent"
+          actions={<Badge kind="healthy">{t("overview.health.live")}</Badge>}
         >
           <StatusStackBar
             ariaLabel={t("overview.health.ariaLabel")}
@@ -319,60 +367,87 @@ export function OverviewPage() {
             ]}
           />
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">{t("overview.health.successRate")}</p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
-                {successRate}
-              </p>
-            </div>
-            <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">{t("overview.health.streamRequests")}</p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
-                {metrics?.stream_requests ?? 0}
-              </p>
-            </div>
-            <div className="border-2 border-border bg-paper-0 px-3 py-3">
-              <p className="text-caption text-ink-muted">{t("overview.health.status5xx")}</p>
-              <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink">
-                {total5xx}
-              </p>
-            </div>
+            {[
+              {
+                label: t("overview.health.successRate"),
+                value: successRate,
+                tone: "bg-accent-mint",
+              },
+              {
+                label: t("overview.health.streamRequests"),
+                value: metrics?.stream_requests ?? 0,
+                tone: "bg-accent-yellow",
+              },
+              {
+                label: t("overview.health.status5xx"),
+                value: total5xx,
+                tone: "bg-accent-soft",
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
+              >
+                <span
+                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
+                  aria-hidden
+                />
+                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
+                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
+                  {item.value}
+                </p>
+              </div>
+            ))}
           </div>
         </SectionPanel>
 
         <SectionPanel
           title={t("overview.quickActions.title")}
+          description={t("overview.quickActions.description")}
+          icon={Path}
+          iconTone="yellow"
         >
-          <div className="flex flex-col gap-2">
-            {[
-              {
-                to: "/app/local-keys",
-                label: t("overview.quickActions.createLocalKeyLabel"),
-                desc: t("overview.quickActions.createLocalKeyDesc"),
-              },
-              {
-                to: "/app/proxies",
-                label: t("overview.quickActions.configureProxyLabel"),
-                desc: t("overview.quickActions.configureProxyDesc"),
-              },
-              {
-                to: "/app/quotas",
-                label: t("overview.quickActions.quotaMonitorLabel"),
-                desc: t("overview.quickActions.quotaMonitorDesc"),
-              },
-            ].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="flex items-center justify-between border-2 border-border bg-paper-0 px-3 py-2.5 transition-colors hover:bg-accent-soft"
-              >
-                <div>
-                  <p className="text-[13px] font-medium text-ink">{item.label}</p>
-                  <p className="text-[12px] text-ink-muted">{item.desc}</p>
-                </div>
-                <Path size={16} className="text-ink-faint" />
-              </Link>
-            ))}
+          <div className="flex flex-col gap-2.5">
+            {quickActions.map((item) => {
+              const IconComp = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    "group flex items-center gap-3 border-2 border-border bg-paper-0 px-3 py-3",
+                    "shadow-[2px_2px_0_var(--border)]",
+                    "transition-[transform,background-color,box-shadow] duration-150",
+                    "hover:-translate-x-px hover:-translate-y-px hover:bg-accent-soft hover:shadow-[3px_3px_0_var(--border)]",
+                    "active:translate-x-px active:translate-y-px active:shadow-none",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex h-10 w-10 shrink-0 items-center justify-center border-2 border-border",
+                      "shadow-[2px_2px_0_var(--border)]",
+                      item.tone,
+                    )}
+                    aria-hidden
+                  >
+                    <IconComp size={18} weight="duotone" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-ink">{item.label}</p>
+                    <p className="mt-0.5 text-[12px] text-ink-muted">{item.desc}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint transition-colors group-hover:text-ink">
+                    {t("overview.quickActions.open")}
+                    <ArrowRight
+                      size={14}
+                      weight="bold"
+                      className="transition-transform group-hover:translate-x-0.5"
+                      aria-hidden
+                    />
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </SectionPanel>
       </div>
@@ -380,12 +455,15 @@ export function OverviewPage() {
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
           title={t("overview.quotaWindows.title")}
+          description={t("overview.quotaWindows.description")}
+          icon={Coins}
+          iconTone="mint"
         >
           <div className="grid gap-3 sm:grid-cols-3">
             {data.quota_windows.map((window) => (
               <div
                 key={window.label}
-                className="border-2 border-border bg-paper-0 p-3.5"
+                className="border-2 border-border bg-paper-0 p-3.5 shadow-[2px_2px_0_var(--border)]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-caption font-medium text-ink-muted">
@@ -423,6 +501,9 @@ export function OverviewPage() {
 
       <SectionPanel
         title={t("overview.byModel.title")}
+        description={t("overview.byModel.description")}
+        icon={Stack}
+        iconTone="default"
         actions={
           <Button variant="ghost" onClick={() => void navigate("/app/logs?tab=usage")}>
             {t("overview.byModel.viewUsage")}
@@ -435,6 +516,7 @@ export function OverviewPage() {
             compact
             icon={Stack}
             title={t("overview.byModel.emptyTitle")}
+            description={t("overview.byModel.emptyDescription")}
             action={
               <Button variant="secondary" onClick={() => void navigate("/app/logs?tab=usage")}>
                 {t("overview.byModel.emptyAction")}
@@ -445,7 +527,7 @@ export function OverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[26rem] text-left text-sm md:min-w-[32rem]">
               <thead>
-                <tr className="border-b border-border text-caption text-ink-muted">
+                <tr className="border-b-2 border-border text-caption text-ink-muted">
                   <th className="pb-2 font-medium">{t("overview.byModel.table.model")}</th>
                   <th className="pb-2 font-medium">{t("overview.byModel.table.share")}</th>
                   <th className="pb-2 font-medium">{t("overview.byModel.table.requests")}</th>
@@ -455,8 +537,11 @@ export function OverviewPage() {
               </thead>
               <tbody>
                 {data.by_model.map((row) => (
-                  <tr key={row.model} className="border-b border-border last:border-b-0">
-                    <td className="py-2.5 font-mono text-[13px] text-ink">
+                  <tr
+                    key={row.model}
+                    className="border-b border-border last:border-b-0 transition-colors hover:bg-paper-0"
+                  >
+                    <td className="py-2.5 font-mono text-[13px] font-medium text-ink">
                       {row.model}
                     </td>
                     <td className="py-2.5 pr-3">

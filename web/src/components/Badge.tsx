@@ -19,9 +19,9 @@ export type BadgeProps = {
 function kindClass(kind: BadgeKind): string {
   switch (kind) {
     case "free":
-      return "bg-accent-soft text-ink border-border";
-    case "paid":
       return "bg-accent-yellow text-black border-border";
+    case "paid":
+      return "bg-paper-0 text-ink border-border";
     case "healthy":
       return "bg-accent-mint text-black border-border";
     case "warning":
