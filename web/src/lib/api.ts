@@ -23,6 +23,25 @@ export type LocalKeyCreatedDTO = {
 };
 export type KeyProvider = "opencode" | "ollama";
 
+export type ZenKeyStatus = "active" | "cooling" | "disabled";
+
+export type ZenPoolProviderSummaryDTO = {
+  readonly total: number;
+  readonly enabled: number;
+  readonly healthy: number;
+  readonly cooled: number;
+  readonly disabled: number;
+};
+
+export type ZenPoolSummaryDTO = {
+  readonly total: number;
+  readonly enabled: number;
+  readonly healthy: number;
+  readonly cooled: number;
+  readonly disabled: number;
+  readonly by_provider?: Readonly<Record<string, ZenPoolProviderSummaryDTO>>;
+};
+
 export type ZenKeyDTO = {
   readonly id: string;
   readonly label: string;
@@ -32,6 +51,12 @@ export type ZenKeyDTO = {
   readonly provider?: KeyProvider;
   readonly cooldown_until?: string;
   readonly created_at?: string;
+  /** active | cooling | disabled — derived server-side */
+  readonly status?: ZenKeyStatus;
+  /** Traffic share within the same provider eligible set (0–100). */
+  readonly traffic_pct?: number;
+  /** Seconds remaining until cooldown_until; 0 when not cooling. */
+  readonly cooldown_remaining_sec?: number;
 };
 export type AccountDTO = {
   readonly id: string;
@@ -58,6 +83,17 @@ export type QuotaWindowDTO = {
   readonly total: number;
   readonly unit: string;
   readonly reset_in_sec: number;
+  readonly used_pct?: number;
+  readonly headroom_pct?: number;
+  readonly burn_per_day?: number | null;
+  readonly days_to_empty?: number | null;
+};
+export type QuotaNarrativeDTO = {
+  readonly primary_label?: string;
+  readonly used_pct?: number;
+  readonly headroom_pct?: number;
+  readonly days_to_empty?: number | null;
+  readonly note?: string;
 };
 export type AccountQuotaDTO = {
   readonly account_id: string;
@@ -66,6 +102,7 @@ export type AccountQuotaDTO = {
   readonly success: boolean;
   readonly updated_at: string;
   readonly windows?: ReadonlyArray<QuotaWindowDTO>;
+  readonly narrative?: QuotaNarrativeDTO;
   readonly error?: string;
 };
 export type UsageRecordDTO = {
@@ -118,6 +155,14 @@ export type SettingsDTO = {
   readonly http_proxy_configured: boolean;
   readonly https_proxy_configured: boolean;
 };
+export type OverviewQuotaNarrativeDTO = {
+  readonly effective_remaining: number;
+  readonly worst_used_pct?: number;
+  readonly headroom_pct?: number;
+  readonly days_to_empty?: number | null;
+  readonly burn_per_day?: number | null;
+  readonly note?: string;
+};
 export type OverviewDTO = {
   readonly requests_today: number;
   readonly tokens_today: number;
@@ -138,6 +183,10 @@ export type OverviewDTO = {
     readonly blocked: boolean;
     readonly blocked_by?: string;
   }>;
+  /** Quota burn/headroom narrative (owned by quota surface; not zen_pool). */
+  readonly quota_narrative?: OverviewQuotaNarrativeDTO;
+  /** Zen key pool health summary (secret-free). */
+  readonly zen_pool?: ZenPoolSummaryDTO;
   readonly updated_at?: string;
 };
 export type MetricsDTO = {
@@ -209,7 +258,7 @@ export const api = {
   revokeLocalKey: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/local-keys/${id}/revoke`, { method: "POST" }),
   zenKeys: (provider?: KeyProvider) =>
-    request<{ keys: ZenKeyDTO[] }>(
+    request<{ keys: ZenKeyDTO[]; summary?: ZenPoolSummaryDTO }>(
       provider
         ? `/api/admin/zen-keys?provider=${encodeURIComponent(provider)}`
         : "/api/admin/zen-keys",

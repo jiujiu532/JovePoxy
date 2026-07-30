@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatModelId, maskSecret, validatePasswordInput } from "./format";
+import {
+  formatCooldownRemaining,
+  formatModelId,
+  formatTrafficPct,
+  maskSecret,
+  validatePasswordInput,
+  zenKeyStatus,
+} from "./format";
 import { translate } from "./i18n";
 
 const t = (key: Parameters<typeof translate>[1]) => translate("zh", key);
@@ -35,5 +42,67 @@ describe("validatePasswordInput", () => {
 
   it("accepts valid password", () => {
     expect(validatePasswordInput("admin", t)).toBeNull();
+  });
+});
+
+describe("formatTrafficPct", () => {
+  it("formats zero and integers", () => {
+    expect(formatTrafficPct(0)).toBe("0%");
+    expect(formatTrafficPct(100)).toBe("100%");
+    expect(formatTrafficPct(25)).toBe("25%");
+  });
+
+  it("keeps one decimal when needed", () => {
+    expect(formatTrafficPct(33.3)).toBe("33.3%");
+  });
+});
+
+describe("zenKeyStatus", () => {
+  const now = Date.parse("2026-07-30T12:00:00.000Z");
+
+  it("classifies disabled / active / cooling", () => {
+    expect(zenKeyStatus({ enabled: false }, now)).toBe("disabled");
+    expect(zenKeyStatus({ enabled: true }, now)).toBe("active");
+    expect(
+      zenKeyStatus(
+        { enabled: true, cooldown_until: "2026-07-30T12:01:00.000Z" },
+        now,
+      ),
+    ).toBe("cooling");
+    expect(
+      zenKeyStatus(
+        { enabled: true, cooldown_until: "2026-07-30T11:59:00.000Z" },
+        now,
+      ),
+    ).toBe("active");
+  });
+});
+
+describe("formatCooldownRemaining", () => {
+  const now = Date.parse("2026-07-30T12:00:00.000Z");
+
+  it("returns null when not cooling", () => {
+    expect(formatCooldownRemaining({}, now)).toBeNull();
+    expect(
+      formatCooldownRemaining(
+        { cooldown_until: "2026-07-30T11:59:00.000Z" },
+        now,
+      ),
+    ).toBeNull();
+  });
+
+  it("formats seconds and minutes", () => {
+    expect(
+      formatCooldownRemaining(
+        { cooldown_until: "2026-07-30T12:00:45.000Z" },
+        now,
+      ),
+    ).toBe("45s");
+    expect(
+      formatCooldownRemaining(
+        { cooldown_until: "2026-07-30T12:02:05.000Z" },
+        now,
+      ),
+    ).toBe("2m 5s");
   });
 });

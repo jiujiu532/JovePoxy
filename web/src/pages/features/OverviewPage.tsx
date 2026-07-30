@@ -40,6 +40,7 @@ import {
   type MetricsDTO,
   type OverviewDTO,
   type UsageRecordDTO,
+  type ZenPoolSummaryDTO,
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { cn } from "@/lib/cn";
@@ -104,6 +105,143 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
+}
+
+function ZenPoolCard({
+  pool,
+  t,
+  onOpen,
+}: {
+  readonly pool?: ZenPoolSummaryDTO | undefined;
+  readonly t: Translate;
+  readonly onOpen: () => void;
+}) {
+  const total = pool?.total ?? 0;
+  const healthy = pool?.healthy ?? 0;
+  const cooled = pool?.cooled ?? 0;
+  const disabled = pool?.disabled ?? 0;
+  const by = pool?.by_provider;
+  const oc = by?.["opencode"];
+  const ol = by?.["ollama"];
+
+  return (
+    <SectionPanel
+      title={t("overview.zenPool.title")}
+      description={t("overview.zenPool.description")}
+      icon={Coins}
+      iconTone="yellow"
+      actions={
+        <Button variant="ghost" onClick={onOpen}>
+          {t("overview.zenPool.openPool")}
+        </Button>
+      }
+    >
+      {total === 0 ? (
+        <EmptyState
+          compact
+          icon={Coins}
+          title={t("overview.zenPool.empty")}
+          description={t("overview.zenPool.description")}
+          action={
+            <Button variant="secondary" size="sm" onClick={onOpen}>
+              {t("overview.zenPool.openPool")}
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <StatusStackBar
+            ariaLabel={t("overview.zenPool.title")}
+            segments={[
+              {
+                label: t("overview.zenPool.healthy"),
+                value: healthy,
+                color: "var(--accent-teal)",
+              },
+              {
+                label: t("overview.zenPool.cooled"),
+                value: cooled,
+                color: "var(--accent-yellow)",
+              },
+              {
+                label: t("overview.zenPool.disabled"),
+                value: disabled,
+                color: "var(--border)",
+              },
+            ]}
+          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                label: t("overview.zenPool.healthy"),
+                value: healthy,
+                tone: "bg-accent-mint",
+              },
+              {
+                label: t("overview.zenPool.cooled"),
+                value: cooled,
+                tone: "bg-accent-yellow",
+              },
+              {
+                label: t("overview.zenPool.disabled"),
+                value: disabled,
+                tone: "bg-paper-2",
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
+              >
+                <span
+                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
+                  aria-hidden
+                />
+                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
+                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[12px] text-ink-faint">
+            {t("overview.zenPool.total", { n: total })}
+          </p>
+          {oc || ol ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {oc ? (
+                <div className="border-2 border-border bg-paper-0 px-3 py-2 shadow-[2px_2px_0_var(--border)]">
+                  <p className="text-[12px] font-semibold text-ink">
+                    {t("overview.zenPool.opencode")}
+                  </p>
+                  <p className="mt-1 text-[12px] text-ink-muted">
+                    {t("overview.zenPool.providerLine", {
+                      healthy: oc.healthy,
+                      total: oc.total,
+                      cooled: oc.cooled,
+                    })}
+                  </p>
+                </div>
+              ) : null}
+              {ol ? (
+                <div className="border-2 border-border bg-paper-0 px-3 py-2 shadow-[2px_2px_0_var(--border)]">
+                  <p className="text-[12px] font-semibold text-ink">
+                    {t("overview.zenPool.ollama")}
+                  </p>
+                  <p className="mt-1 text-[12px] text-ink-muted">
+                    {t("overview.zenPool.providerLine", {
+                      healthy: ol.healthy,
+                      total: ol.total,
+                      cooled: ol.cooled,
+                    })}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
+    </SectionPanel>
+  );
 }
 
 type QuickAction = {
@@ -237,7 +375,17 @@ export function OverviewPage() {
     {
       label: t("overview.card.quotaRemaining"),
       value: `${Number(data.quota_effective_remaining ?? 0).toFixed(1)}%`,
-      hint: t("overview.card.quotaRemainingHint"),
+      hint: (() => {
+        const n = data.quota_narrative;
+        if (!n) return t("overview.card.quotaRemainingHint");
+        if (n.note === "sample_insufficient" || n.worst_used_pct == null) {
+          return t("overview.card.quotaNarrativeSample");
+        }
+        return t("overview.card.quotaNarrativeHint", {
+          pct: Number(n.worst_used_pct).toFixed(1),
+          headroom: Number(n.headroom_pct ?? Math.max(0, 100 - n.worst_used_pct)).toFixed(1),
+        });
+      })(),
       icon: Coins,
       tone: "success" as const,
     },
@@ -304,6 +452,12 @@ export function OverviewPage() {
           />
         ))}
       </div>
+
+      <ZenPoolCard
+        pool={data.zen_pool}
+        t={t}
+        onOpen={() => void navigate("/app/key-pool")}
+      />
 
       <div className="grid gap-3 lg:grid-cols-2">
         <SectionPanel

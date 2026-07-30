@@ -8,6 +8,17 @@ import (
 	"jovepoxy/internal/usage"
 )
 
+// QuotaNarrative is a lightweight burn/headroom summary for overview.
+// Burn/days stay nil without a scientifically sound rate (P0: pct only).
+type QuotaNarrative struct {
+	EffectiveRemaining float64  `json:"effective_remaining"`
+	WorstUsedPct       *float64 `json:"worst_used_pct,omitempty"`
+	HeadroomPct        *float64 `json:"headroom_pct,omitempty"`
+	DaysToEmpty        *float64 `json:"days_to_empty,omitempty"`
+	BurnPerDay         *float64 `json:"burn_per_day,omitempty"`
+	Note               string   `json:"note,omitempty"`
+}
+
 // Overview is the control-plane dashboard payload.
 type Overview struct {
 	RequestsToday  int64            `json:"requests_today"`
@@ -17,6 +28,7 @@ type Overview struct {
 	ByModel        []ModelBreakdown `json:"by_model"`
 	QuotaEffective float64          `json:"quota_effective_remaining"`
 	QuotaWindows   []CascadedWindow `json:"quota_windows,omitempty"`
+	QuotaNarrative *QuotaNarrative  `json:"quota_narrative,omitempty"`
 	UpdatedAt      time.Time        `json:"updated_at"`
 }
 
@@ -49,10 +61,12 @@ func NewService(reader UsageReader) *Service {
 func (service *Service) Overview(ctx context.Context, windows []quota.Window) (Overview, error) {
 	now := service.now().UTC()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	effective := EffectiveRemaining(windows)
 	overview := Overview{
 		ByModel:        []ModelBreakdown{},
 		QuotaWindows:   ApplyOpenCodeCascade(windows),
-		QuotaEffective: EffectiveRemaining(windows),
+		QuotaEffective: effective,
+		QuotaNarrative: BuildQuotaNarrative(windows, effective),
 		UpdatedAt:      now,
 	}
 	if service.usage == nil {

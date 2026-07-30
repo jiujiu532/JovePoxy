@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"math"
 	"time"
 
 	"jovepoxy/internal/analytics"
@@ -83,18 +84,40 @@ type updateLocalKeyRequest struct {
 }
 
 type zenKeyDTO struct {
-	ID            string     `json:"id"`
-	Label         string     `json:"label"`
-	Prefix        string     `json:"prefix"`
-	Weight        int        `json:"weight"`
-	Enabled       bool       `json:"enabled"`
-	Provider      string     `json:"provider"`
-	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID                   string     `json:"id"`
+	Label                string     `json:"label"`
+	Prefix               string     `json:"prefix"`
+	Weight               int        `json:"weight"`
+	Enabled              bool       `json:"enabled"`
+	Provider             string     `json:"provider"`
+	CooldownUntil        *time.Time `json:"cooldown_until,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	Status               string     `json:"status"`
+	TrafficPct           float64    `json:"traffic_pct"`
+	CooldownRemainingSec int        `json:"cooldown_remaining_sec"`
+}
+
+type zenPoolProviderSummaryDTO struct {
+	Total    int `json:"total"`
+	Enabled  int `json:"enabled"`
+	Healthy  int `json:"healthy"`
+	Cooled   int `json:"cooled"`
+	Disabled int `json:"disabled"`
+}
+
+// zenPoolSummaryDTO is secret-free pool health for overview / key list.
+type zenPoolSummaryDTO struct {
+	Total      int                                  `json:"total"`
+	Enabled    int                                  `json:"enabled"`
+	Healthy    int                                  `json:"healthy"`
+	Cooled     int                                  `json:"cooled"`
+	Disabled   int                                  `json:"disabled"`
+	ByProvider map[string]zenPoolProviderSummaryDTO `json:"by_provider,omitempty"`
 }
 
 type zenKeysResponse struct {
-	Keys []zenKeyDTO `json:"keys"`
+	Keys    []zenKeyDTO        `json:"keys"`
+	Summary *zenPoolSummaryDTO `json:"summary,omitempty"`
 }
 
 type createZenKeyRequest struct {
@@ -136,22 +159,36 @@ type createAccountRequest struct {
 }
 
 type quotaWindowDTO struct {
-	Label      string  `json:"label"`
-	Used       float64 `json:"used"`
-	Remaining  float64 `json:"remaining"`
-	Total      float64 `json:"total"`
-	Unit       string  `json:"unit"`
-	ResetInSec int     `json:"reset_in_sec"`
+	Label       string   `json:"label"`
+	Used        float64  `json:"used"`
+	Remaining   float64  `json:"remaining"`
+	Total       float64  `json:"total"`
+	Unit        string   `json:"unit"`
+	ResetInSec  int      `json:"reset_in_sec"`
+	UsedPct     *float64 `json:"used_pct,omitempty"`
+	HeadroomPct *float64 `json:"headroom_pct,omitempty"`
+	BurnPerDay  *float64 `json:"burn_per_day,omitempty"`
+	DaysToEmpty *float64 `json:"days_to_empty,omitempty"`
+}
+
+// accountQuotaNarrativeDTO is an optional account-level summary of the busiest window.
+type accountQuotaNarrativeDTO struct {
+	PrimaryLabel string   `json:"primary_label,omitempty"`
+	UsedPct      *float64 `json:"used_pct,omitempty"`
+	HeadroomPct  *float64 `json:"headroom_pct,omitempty"`
+	DaysToEmpty  *float64 `json:"days_to_empty,omitempty"`
+	Note         string   `json:"note,omitempty"`
 }
 
 type accountQuotaDTO struct {
-	AccountID   string           `json:"account_id"`
-	Name        string           `json:"name"`
-	WorkspaceID string           `json:"workspace_id"`
-	Success     bool             `json:"success"`
-	UpdatedAt   time.Time        `json:"updated_at"`
-	Windows     []quotaWindowDTO `json:"windows,omitempty"`
-	Error       string           `json:"error,omitempty"`
+	AccountID   string                    `json:"account_id"`
+	Name        string                    `json:"name"`
+	WorkspaceID string                    `json:"workspace_id"`
+	Success     bool                      `json:"success"`
+	UpdatedAt   time.Time                 `json:"updated_at"`
+	Windows     []quotaWindowDTO          `json:"windows,omitempty"`
+	Narrative   *accountQuotaNarrativeDTO `json:"narrative,omitempty"`
+	Error       string                    `json:"error,omitempty"`
 }
 
 type quotasResponse struct {
@@ -204,14 +241,18 @@ type settingsResponse struct {
 }
 
 type overviewResponse struct {
-	RequestsToday  int64                       `json:"requests_today"`
-	TokensToday    int64                       `json:"tokens_today"`
-	RequestsTotal  int64                       `json:"requests_total"`
-	TokensTotal    int64                       `json:"tokens_total"`
-	ByModel        []analytics.ModelBreakdown  `json:"by_model"`
-	QuotaEffective float64                     `json:"quota_effective_remaining"`
-	QuotaWindows   []analytics.CascadedWindow  `json:"quota_windows,omitempty"`
-	UpdatedAt      time.Time                   `json:"updated_at"`
+	RequestsToday  int64                      `json:"requests_today"`
+	TokensToday    int64                      `json:"tokens_today"`
+	RequestsTotal  int64                      `json:"requests_total"`
+	TokensTotal    int64                      `json:"tokens_total"`
+	ByModel        []analytics.ModelBreakdown `json:"by_model"`
+	QuotaEffective float64                    `json:"quota_effective_remaining"`
+	QuotaWindows   []analytics.CascadedWindow `json:"quota_windows,omitempty"`
+	// QuotaNarrative is owned by the quota burn/headroom surface.
+	QuotaNarrative *analytics.QuotaNarrative `json:"quota_narrative,omitempty"`
+	// ZenPool is owned by the zenpool status surface; do not merge quota narrative here.
+	ZenPool   *zenPoolSummaryDTO `json:"zen_pool,omitempty"`
+	UpdatedAt time.Time          `json:"updated_at"`
 }
 
 func mapModels(result models.Result) modelsResponse {
@@ -238,19 +279,46 @@ func mapLocalKeyCreated(created keys.Creation) localKeyCreatedDTO {
 }
 
 func mapZenKeys(list []zenpool.Metadata) zenKeysResponse {
-	out := make([]zenKeyDTO, 0, len(list))
-	for _, item := range list {
-		provider := string(item.Provider)
+	return mapZenKeysAt(list, time.Now().UTC())
+}
+
+func mapZenKeysAt(list []zenpool.Metadata, now time.Time) zenKeysResponse {
+	views := zenpool.DeriveViews(list, now)
+	out := make([]zenKeyDTO, 0, len(views))
+	for _, view := range views {
+		provider := string(view.Provider)
 		if provider == "" {
 			provider = string(zenpool.ProviderOpenCode)
 		}
+		// Round to one decimal for stable JSON / UI display.
+		pct := math.Round(view.TrafficPct*10) / 10
 		out = append(out, zenKeyDTO{
-			ID: string(item.ID), Label: item.Label, Prefix: item.Prefix, Weight: item.Weight,
-			Enabled: item.Enabled, Provider: provider,
-			CooldownUntil: item.CooldownUntil, CreatedAt: item.CreatedAt,
+			ID: string(view.ID), Label: view.Label, Prefix: view.Prefix, Weight: view.Weight,
+			Enabled: view.Enabled, Provider: provider,
+			CooldownUntil: view.CooldownUntil, CreatedAt: view.CreatedAt,
+			Status: string(view.Status), TrafficPct: pct,
+			CooldownRemainingSec: view.CooldownRemainingSec,
 		})
 	}
-	return zenKeysResponse{Keys: out}
+	summary := mapZenPoolSummary(zenpool.Summarize(list, now))
+	return zenKeysResponse{Keys: out, Summary: &summary}
+}
+
+func mapZenPoolSummary(sum zenpool.PoolSummary) zenPoolSummaryDTO {
+	dto := zenPoolSummaryDTO{
+		Total: sum.Total, Enabled: sum.Enabled, Healthy: sum.Healthy,
+		Cooled: sum.Cooled, Disabled: sum.Disabled,
+	}
+	if len(sum.ByProvider) > 0 {
+		dto.ByProvider = make(map[string]zenPoolProviderSummaryDTO, len(sum.ByProvider))
+		for provider, item := range sum.ByProvider {
+			dto.ByProvider[provider] = zenPoolProviderSummaryDTO{
+				Total: item.Total, Enabled: item.Enabled, Healthy: item.Healthy,
+				Cooled: item.Cooled, Disabled: item.Disabled,
+			}
+		}
+	}
+	return dto
 }
 
 func mapAccounts(list []quota.Account) accountsResponse {
@@ -273,19 +341,45 @@ func mapAccount(item quota.Account) accountDTO {
 	}
 }
 
+func mapQuotaWindow(window quota.Window) quotaWindowDTO {
+	narrative := quota.DeriveWindowNarrative(window.Used, window.Remaining, window.Total)
+	return quotaWindowDTO{
+		Label: window.Label, Used: window.Used, Remaining: window.Remaining,
+		Total: window.Total, Unit: window.Unit, ResetInSec: window.ResetInSec,
+		UsedPct: narrative.UsedPct, HeadroomPct: narrative.HeadroomPct,
+		BurnPerDay: narrative.BurnPerDay, DaysToEmpty: narrative.DaysToEmpty,
+	}
+}
+
+func mapAccountNarrative(item quota.AccountQuota) *accountQuotaNarrativeDTO {
+	if !item.Success {
+		return nil
+	}
+	label, narrative, note := quota.PickPrimaryNarrative(item.Windows)
+	if narrative.UsedPct == nil && note == "" {
+		return nil
+	}
+	out := &accountQuotaNarrativeDTO{
+		PrimaryLabel: label,
+		UsedPct:      narrative.UsedPct,
+		HeadroomPct:  narrative.HeadroomPct,
+		DaysToEmpty:  narrative.DaysToEmpty,
+		Note:         note,
+	}
+	return out
+}
+
 func mapQuotas(list []quota.AccountQuota) quotasResponse {
 	out := make([]accountQuotaDTO, 0, len(list))
 	for _, item := range list {
 		windows := make([]quotaWindowDTO, 0, len(item.Windows))
 		for _, window := range item.Windows {
-			windows = append(windows, quotaWindowDTO{
-				Label: window.Label, Used: window.Used, Remaining: window.Remaining,
-				Total: window.Total, Unit: window.Unit, ResetInSec: window.ResetInSec,
-			})
+			windows = append(windows, mapQuotaWindow(window))
 		}
 		out = append(out, accountQuotaDTO{
 			AccountID: string(item.AccountID), Name: item.Name, WorkspaceID: item.WorkspaceID,
-			Success: item.Success, UpdatedAt: item.UpdatedAt, Windows: windows, Error: item.Error,
+			Success: item.Success, UpdatedAt: item.UpdatedAt, Windows: windows,
+			Narrative: mapAccountNarrative(item), Error: item.Error,
 		})
 	}
 	return quotasResponse{Quotas: out}
@@ -319,6 +413,7 @@ func mapOverview(overview analytics.Overview) overviewResponse {
 		RequestsToday: overview.RequestsToday, TokensToday: overview.TokensToday,
 		RequestsTotal: overview.RequestsTotal, TokensTotal: overview.TokensTotal,
 		ByModel: overview.ByModel, QuotaEffective: overview.QuotaEffective,
-		QuotaWindows: overview.QuotaWindows, UpdatedAt: overview.UpdatedAt,
+		QuotaWindows: overview.QuotaWindows, QuotaNarrative: overview.QuotaNarrative,
+		UpdatedAt: overview.UpdatedAt,
 	}
 }

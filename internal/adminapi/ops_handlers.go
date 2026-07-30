@@ -5,14 +5,18 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"jovepoxy/internal/auth"
 	"jovepoxy/internal/quota"
+	"jovepoxy/internal/zenpool"
 )
 
 func (server server) overview(writer http.ResponseWriter, request *http.Request) {
 	if server.analytics == nil {
-		writeJSON(writer, http.StatusOK, overviewResponse{ByModel: nil})
+		resp := overviewResponse{ByModel: nil}
+		resp.ZenPool = server.zenPoolSummary(request)
+		writeJSON(writer, http.StatusOK, resp)
 		return
 	}
 	var windows []quota.Window
@@ -24,7 +28,24 @@ func (server server) overview(writer http.ResponseWriter, request *http.Request)
 		writeError(writer, http.StatusInternalServerError, "overview failed")
 		return
 	}
-	writeJSON(writer, http.StatusOK, mapOverview(overview))
+	resp := mapOverview(overview)
+	resp.ZenPool = server.zenPoolSummary(request)
+	writeJSON(writer, http.StatusOK, resp)
+}
+
+func (server server) zenPoolSummary(request *http.Request) *zenPoolSummaryDTO {
+	if server.pool == nil {
+		empty := mapZenPoolSummary(zenpool.PoolSummary{})
+		return &empty
+	}
+	list, err := server.pool.List(request.Context())
+	if err != nil {
+		// Surface empty counts rather than failing the whole overview.
+		empty := mapZenPoolSummary(zenpool.PoolSummary{})
+		return &empty
+	}
+	sum := mapZenPoolSummary(zenpool.Summarize(list, time.Now().UTC()))
+	return &sum
 }
 
 func (server server) listModels(writer http.ResponseWriter, request *http.Request) {

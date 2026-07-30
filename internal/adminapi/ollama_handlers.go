@@ -136,5 +136,5 @@ func (server server) listOllamaQuotas(writer http.ResponseWriter, request *http.
 		cookies[account.ID] = cookie
 	}
 	results := server.ollamaScraper.FetchAll(request.Context(), enabled, cookies)
-	writeJSON(writer, http.StatusOK, map[string]any{"quotas": results})
+	writeJSON(writer, http.StatusOK, map[string]any{"quotas": mapOllamaQuotas(results)})
 }

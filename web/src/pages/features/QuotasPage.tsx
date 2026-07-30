@@ -30,12 +30,25 @@ type OllamaQuotaItem = {
   success: boolean;
   plan?: string;
   error?: string;
+  narrative?: {
+    primary_label?: string;
+    used_pct?: number;
+    headroom_pct?: number;
+    days_to_empty?: number | null;
+    note?: string;
+  };
   windows?: ReadonlyArray<{
     label: string;
     used: number;
     remaining: number;
+    total?: number;
     unit: string;
+    reset_in_sec?: number;
     status_text?: string;
+    used_pct?: number;
+    headroom_pct?: number;
+    burn_per_day?: number | null;
+    days_to_empty?: number | null;
     models?: ReadonlyArray<{ model: string; requests: number }>;
   }>;
 };
@@ -45,6 +58,71 @@ function formatReset(t: Translate, sec: number): string {
   if (sec < 3600) return t("quotas.resetMinutes", { n: Math.ceil(sec / 60) });
   if (sec < 86400) return t("quotas.resetHours", { n: (sec / 3600).toFixed(1) });
   return t("quotas.resetDays", { n: (sec / 86400).toFixed(1) });
+}
+
+function windowUsedPct(window: {
+  used: number;
+  total?: number;
+  used_pct?: number;
+}): number {
+  if (typeof window.used_pct === "number" && Number.isFinite(window.used_pct)) {
+    return Math.min(100, Math.max(0, window.used_pct));
+  }
+  if (typeof window.total === "number" && window.total > 0) {
+    return Math.min(100, Math.max(0, (window.used / window.total) * 100));
+  }
+  return Math.min(100, Math.max(0, window.used));
+}
+
+function buildWindowHint(
+  t: Translate,
+  window: {
+    used: number;
+    remaining: number;
+    unit: string;
+    reset_in_sec?: number;
+    status_text?: string;
+    used_pct?: number;
+    headroom_pct?: number;
+    burn_per_day?: number | null;
+    days_to_empty?: number | null;
+  },
+  fallback?: string,
+): string {
+  const parts: string[] = [];
+  if (typeof window.used_pct === "number" && Number.isFinite(window.used_pct)) {
+    parts.push(t("quotas.usedPct", { pct: window.used_pct.toFixed(1) }));
+  } else {
+    parts.push(
+      t("quotas.usedHint", {
+        used: window.used.toFixed(1),
+        unit: window.unit,
+        reset: formatReset(t, window.reset_in_sec ?? 0),
+      }),
+    );
+  }
+  if (typeof window.headroom_pct === "number" && Number.isFinite(window.headroom_pct)) {
+    parts.push(t("quotas.headroom", { pct: window.headroom_pct.toFixed(1) }));
+  }
+  if (typeof window.days_to_empty === "number" && Number.isFinite(window.days_to_empty)) {
+    parts.push(t("quotas.daysToEmpty", { days: window.days_to_empty.toFixed(1) }));
+  } else if (typeof window.burn_per_day === "number" && Number.isFinite(window.burn_per_day)) {
+    parts.push(
+      t("quotas.burnRough", {
+        burn: window.burn_per_day.toFixed(2),
+        unit: window.unit,
+      }),
+    );
+  }
+  // usedHint already embeds reset; only append when we used usedPct path.
+  if (typeof window.used_pct === "number" && typeof window.reset_in_sec === "number") {
+    parts.push(t("quotas.resetLabel", { reset: formatReset(t, window.reset_in_sec) }));
+  } else if (typeof window.used_pct === "number" && window.status_text) {
+    parts.push(window.status_text);
+  } else if (typeof window.used_pct === "number" && fallback) {
+    parts.push(fallback);
+  }
+  return parts.join(" · ");
 }
 
 function toOpenCodeViews(
@@ -58,19 +136,12 @@ function toOpenCodeViews(
       subtitle: item.workspace_id,
       success: item.success,
       windows: (item.windows ?? []).map((window) => {
-        const pct =
-          window.total > 0
-            ? (window.used / window.total) * 100
-            : Math.min(100, Math.max(0, window.used));
+        const pct = windowUsedPct(window);
         return {
           label: window.label,
           percent: pct,
           primaryText: `${window.remaining.toFixed(0)}${window.unit}`,
-          hint: t("quotas.usedHint", {
-            used: window.used.toFixed(1),
-            unit: window.unit,
-            reset: formatReset(t, window.reset_in_sec),
-          }),
+          hint: buildWindowHint(t, window),
         };
       }),
     };
@@ -104,14 +175,19 @@ function toOllamaViews(
       name: item.name,
       success: item.success,
       windows: (item.windows ?? []).map((w) => {
-        const percent = Number.isFinite(w.used) ? w.used : 0;
+        const percent = windowUsedPct(w);
         return {
           label: w.label,
           percent,
           primaryText: `${percent.toFixed(0)}%`,
-          hint: w.status_text
-            ? w.status_text
-            : t("quotas.remainingHint", { remaining: w.remaining.toFixed(1), unit: w.unit }),
+          hint: buildWindowHint(
+            t,
+            w,
+            t("quotas.remainingHint", {
+              remaining: w.remaining.toFixed(1),
+              unit: w.unit,
+            }),
+          ),
         };
       }),
     };

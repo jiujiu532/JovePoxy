@@ -36,6 +36,11 @@ import {
 } from "@/components";
 import { api, ApiError, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
+import {
+  formatCooldownRemaining,
+  formatTrafficPct,
+  zenKeyStatus,
+} from "@/lib/format";
 import { useI18n, type Translate } from "@/lib/i18n";
 import { isProviderTab, type ProviderTab } from "@/lib/routes";
 import {
@@ -190,16 +195,27 @@ export function KeyPoolPage() {
     }
   }
 
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const hasCooling = keys.some((k) => zenKeyStatus(k) === "cooling");
+    if (!hasCooling) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [keys]);
+
   const enabled = keys.filter((k) => k.enabled).length;
-  const cooling = keys.filter((k) => k.cooldown_until).length;
-  const totalWeight = keys.filter((k) => k.enabled && !k.cooldown_until).reduce((s, k) => s + k.weight, 0);
+  const cooling = keys.filter((k) => zenKeyStatus(k, nowMs) === "cooling").length;
+  const totalWeight = keys
+    .filter((k) => zenKeyStatus(k, nowMs) === "active" && k.weight > 0)
+    .reduce((s, k) => s + k.weight, 0);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = keys.filter((k) => {
+      const keyStatus = zenKeyStatus(k, nowMs);
       if (status === "enabled" && !k.enabled) return false;
       if (status === "disabled" && k.enabled) return false;
-      if (status === "cooling" && !k.cooldown_until) return false;
+      if (status === "cooling" && keyStatus !== "cooling") return false;
       if (!matchWeight(k.weight, weightFilter)) return false;
       if (!q) return true;
       return (
@@ -211,12 +227,14 @@ export function KeyPoolPage() {
       compareBySort(a, b, sort, {
         label: (x) => x.label,
         weight: (x) => x.weight,
-        statusRank: (x) =>
-          x.cooldown_until ? 2 : x.enabled ? 0 : 1,
+        statusRank: (x) => {
+          const s = zenKeyStatus(x, nowMs);
+          return s === "cooling" ? 2 : s === "active" ? 0 : 1;
+        },
       }),
     );
     return list;
-  }, [keys, query, status, weightFilter, sort]);
+  }, [keys, query, status, weightFilter, sort, nowMs]);
 
   useEffect(() => {
     setPage(1);
@@ -575,11 +593,14 @@ export function KeyPoolPage() {
               mobile={
                 <div>
                   {paged.map((key) => {
-                    const healthy = key.enabled && !key.cooldown_until;
+                    const keyStatus = zenKeyStatus(key, nowMs);
                     const share =
-                      healthy && totalWeight > 0
-                        ? `${Math.round((key.weight / totalWeight) * 100)}%`
-                        : "-";
+                      typeof key.traffic_pct === "number"
+                        ? formatTrafficPct(key.traffic_pct)
+                        : keyStatus === "active" && totalWeight > 0
+                          ? formatTrafficPct((key.weight / totalWeight) * 100)
+                          : t("keypool.shareZero");
+                    const remaining = formatCooldownRemaining(key, nowMs);
                     return (
                       <MobileEntityCard
                         key={key.id}
@@ -602,12 +623,12 @@ export function KeyPoolPage() {
                           <span className="font-mono text-[11px]">{key.prefix}</span>
                         }
                         badge={
-                          key.cooldown_until ? (
+                          keyStatus === "cooling" ? (
                             <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
-                          ) : key.enabled ? (
-                            <Badge kind="healthy">{t("common.enabled")}</Badge>
+                          ) : keyStatus === "active" ? (
+                            <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                           ) : (
-                            <Badge kind="neutral">{t("common.disabled")}</Badge>
+                            <Badge kind="neutral">{t("keypool.statusDisabled")}</Badge>
                           )
                         }
                         fields={[
@@ -615,9 +636,11 @@ export function KeyPoolPage() {
                           { label: t("keypool.shareLabel"), value: share },
                           {
                             label: t("keypool.coolingLabel"),
-                            value: key.cooldown_until
-                              ? new Date(key.cooldown_until).toLocaleString()
-                              : "-",
+                            value: remaining
+                              ? t("keypool.remainingLabel", { time: remaining })
+                              : key.cooldown_until
+                                ? new Date(key.cooldown_until).toLocaleString()
+                                : "-",
                           },
                         ]}
                         actions={
@@ -693,9 +716,19 @@ export function KeyPoolPage() {
                             <HelpTip content={t("keypool.weightColTip")} />
                           </span>
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colShare")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">
+                          <span className="inline-flex items-center gap-1">
+                            {t("keypool.colShare")}
+                            <HelpTip content={t("keypool.shareTip")} />
+                          </span>
+                        </th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colStatus")}</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colCooling")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">
+                          <span className="inline-flex items-center gap-1">
+                            {t("keypool.colCooling")}
+                            <HelpTip content={t("keypool.cooldownTip")} />
+                          </span>
+                        </th>
                         <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
                           {t("keypool.colActions")}
                         </th>
@@ -703,11 +736,14 @@ export function KeyPoolPage() {
                     </thead>
                     <tbody>
                       {paged.map((key) => {
-                        const healthy = key.enabled && !key.cooldown_until;
+                        const keyStatus = zenKeyStatus(key, nowMs);
                         const share =
-                          healthy && totalWeight > 0
-                            ? `${Math.round((key.weight / totalWeight) * 100)}%`
-                            : "-";
+                          typeof key.traffic_pct === "number"
+                            ? formatTrafficPct(key.traffic_pct)
+                            : keyStatus === "active" && totalWeight > 0
+                              ? formatTrafficPct((key.weight / totalWeight) * 100)
+                              : t("keypool.shareZero");
+                        const remaining = formatCooldownRemaining(key, nowMs);
                         return (
                           <tr
                             key={key.id}
@@ -751,18 +787,20 @@ export function KeyPoolPage() {
                               {share}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5">
-                              {key.cooldown_until ? (
+                              {keyStatus === "cooling" ? (
                                 <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
-                              ) : key.enabled ? (
-                                <Badge kind="healthy">{t("common.enabled")}</Badge>
+                              ) : keyStatus === "active" ? (
+                                <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                               ) : (
-                                <Badge kind="neutral">{t("common.disabled")}</Badge>
+                                <Badge kind="neutral">{t("keypool.statusDisabled")}</Badge>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-ink-muted">
-                              {key.cooldown_until
-                                ? new Date(key.cooldown_until).toLocaleString()
-                                : "-"}
+                              {remaining
+                                ? t("keypool.remainingLabel", { time: remaining })
+                                : key.cooldown_until
+                                  ? new Date(key.cooldown_until).toLocaleString()
+                                  : "-"}
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex justify-end gap-1.5">

@@ -5,6 +5,7 @@ import {
   Coins,
   GearSix,
   Globe,
+  Heartbeat,
   Key,
   SidebarSimple,
   SignOut,
@@ -15,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { NavLink } from "react-router-dom";
+import { api, ApiError, type ZenPoolSummaryDTO } from "@/lib/api";
 import { BrandMark } from "@/components/BrandMark";
 import { NAV_ROUTES, type NavRouteId } from "@/lib/routes";
 import { useI18n, type MessageKey } from "@/lib/i18n";
@@ -121,6 +123,7 @@ function IconTile({
 export function Sidebar({ open, onClose, onLogout }: SidebarProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [pool, setPool] = useState<ZenPoolSummaryDTO | null>(null);
 
   useEffect(() => {
     try {
@@ -130,9 +133,43 @@ export function Sidebar({ open, onClose, onLogout }: SidebarProps) {
     }
   }, [collapsed]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPool() {
+      try {
+        const overview = await api.overview();
+        if (!cancelled) setPool(overview.zen_pool ?? null);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          if (!cancelled) setPool(null);
+          return;
+        }
+        // Keep last known snapshot on transient failures.
+      }
+    }
+    void loadPool();
+    const timer = window.setInterval(() => void loadPool(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   function toggleCollapsed() {
     setCollapsed((v) => !v);
   }
+
+  const healthy = pool?.healthy ?? 0;
+  const total = pool?.total ?? 0;
+  const cooled = pool?.cooled ?? 0;
+  const poolTone =
+    total === 0
+      ? "bg-paper-2"
+      : healthy === 0
+        ? "bg-accent"
+        : cooled > 0
+          ? "bg-accent-yellow"
+          : "bg-accent-mint";
 
   return (
     <>
@@ -288,6 +325,70 @@ export function Sidebar({ open, onClose, onLogout }: SidebarProps) {
             ))}
           </div>
         </nav>
+
+        {/* Zen pool health strip */}
+        <div
+          className={cn(
+            "shrink-0 border-t-2 border-border bg-paper-0",
+            collapsed ? "px-2 py-2" : "px-3 py-2.5",
+          )}
+        >
+          <NavLink
+            to="/app/key-pool"
+            onClick={onClose}
+            title={t("shell.poolHealth.aria")}
+            aria-label={
+              total === 0
+                ? t("shell.poolHealth.empty")
+                : t("shell.poolHealth.collapsedAria", { healthy, total })
+            }
+            className={cn(
+              "group flex items-center border-2 border-border bg-paper-1",
+              "shadow-[2px_2px_0_var(--border)]",
+              "transition-[transform,background-color,box-shadow] duration-150",
+              "hover:-translate-y-px hover:bg-accent-soft hover:shadow-[3px_3px_0_var(--border)]",
+              "active:translate-y-px active:shadow-none",
+              collapsed ? "justify-center px-1.5 py-1.5" : "gap-2.5 px-2.5 py-2",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-flex h-8 w-8 shrink-0 items-center justify-center border-2 border-border text-black",
+                "shadow-[2px_2px_0_var(--border)]",
+                poolTone,
+              )}
+              aria-hidden
+            >
+              <Heartbeat size={16} weight="fill" />
+            </span>
+            <div className={cn("min-w-0 flex-1", collapsed && "md:hidden")}>
+              <p className="truncate text-[12px] font-semibold text-ink">
+                {total === 0
+                  ? t("shell.poolHealth.empty")
+                  : t("shell.poolHealth.line", { healthy, total })}
+              </p>
+              {total > 0 ? (
+                <p className="truncate text-[11px] text-ink-muted">
+                  {t("shell.poolHealth.cooled", { n: cooled })} · {t("shell.poolHealth.link")}
+                </p>
+              ) : (
+                <p className="truncate text-[11px] text-ink-muted">
+                  {t("shell.poolHealth.link")}
+                </p>
+              )}
+            </div>
+            {collapsed ? (
+              <span
+                className={cn(
+                  "hidden tabular-nums text-[11px] font-bold text-ink md:inline",
+                )}
+                aria-hidden
+              >
+                {total === 0 ? "0" : healthy}
+              </span>
+            ) : null}
+          </NavLink>
+        </div>
 
         {/* Footer: logout + desktop collapse (JoveMage-style) */}
         <div
