@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JovePoxy · 方案 B · Poster Empty</title>
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --paper: #fafafa;
+    --coral: #ff6b6b;
+    --mint: #4ecdc4;
+    --sun: #ffe66d;
+    --foam: #95e1d3;
+    --rose: #f38181;
+    --shadow: 4px 4px 0 #000;
+    --border: 3px solid #000;
+    --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "SF Mono", ui-monospace, monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    background: #e8e8e8;
+    color: var(--ink);
+    line-height: 1.45;
+  }
+
+  /* shell */
+  .shell {
+    max-width: 1120px;
+    margin: 24px auto 48px;
+    padding: 0 16px;
+  }
+  .frame {
+    background: var(--paper);
+    border: var(--border);
+    box-shadow: 8px 8px 0 #000;
+  }
+
+  /* top chrome */
+  .chrome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: var(--border);
+    background: #fff;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .brand-mark {
+    width: 28px;
+    height: 28px;
+    background: var(--coral);
+    border: 2px solid #000;
+    box-shadow: 2px 2px 0 #000;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .nav-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .nav-pill {
+    border: 2px solid #000;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #fff;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .nav-pill.on {
+    background: var(--sun);
+    box-shadow: 2px 2px 0 #000;
+  }
+
+  /* page head */
+  .page {
+    padding: 18px 18px 28px;
+  }
+  .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .page-title-block h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: -0.03em;
+    font-weight: 900;
+  }
+  .page-title-block p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #333;
+  }
+  .tabs {
+    display: inline-flex;
+    border: var(--border);
+    box-shadow: var(--shadow);
+    background: #fff;
+  }
+  .tab {
+    border: 0;
+    border-right: 2px solid #000;
+    background: #fff;
+    padding: 8px 16px;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: default;
+    font-family: inherit;
+  }
+  .tab:last-child { border-right: 0; }
+  .tab.active {
+    background: var(--mint);
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    border: var(--border);
+    box-shadow: var(--shadow);
+    background: #fff;
+    padding: 8px 14px;
+    font-weight: 800;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    color: var(--ink);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+  }
+  .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 #000;
+  }
+  .btn-primary {
+    background: var(--coral);
+    color: #fff;
+  }
+  .btn-ghost {
+    background: #fff;
+  }
+  .btn-mint { background: var(--mint); }
+  .btn-sun { background: var(--sun); }
+
+  /* ========== POSTER EMPTY ========== */
+  .poster {
+    position: relative;
+    min-height: 420px;
+    border: var(--border);
+    box-shadow: var(--shadow);
+    background: #fff;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  /* diagonal sun bar */
+  .poster-skew {
+    position: absolute;
+    inset: -20% -10%;
+    background:
+      linear-gradient(115deg,
+        transparent 0 28%,
+        var(--sun) 28% 42%,
+        transparent 42% 58%,
+        var(--foam) 58% 66%,
+        transparent 66% 100%);
+    transform: skewY(-6deg);
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.95;
+  }
+  .poster-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 28px 28px;
+    z-index: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+
+  .poster-inner {
+    position: relative;
+    z-index: 1;
+    min-height: 420px;
+    padding: 22px 22px 18px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 12px;
+  }
+
+  .poster-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  /* stamp seal */
+  .stamp {
+    display: inline-block;
+    border: 3px solid #000;
+    background: var(--sun);
+    padding: 8px 12px;
+    box-shadow: var(--shadow);
+    transform: rotate(-8deg);
+    font-family: var(--mono);
+    font-weight: 900;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .stamp small {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    opacity: 0.85;
+  }
+
+  .giant-zero {
+    font-family: var(--mono);
+    font-weight: 900;
+    font-size: clamp(56px, 12vw, 96px);
+    line-height: 0.85;
+    letter-spacing: -0.06em;
+    color: var(--ink);
+    text-shadow: 4px 4px 0 var(--coral);
+    user-select: none;
+  }
+
+  .poster-mid {
+    display: grid;
+    grid-template-columns: 1.4fr 0.9fr;
+    gap: 16px;
+    align-items: end;
+  }
+  @media (max-width: 720px) {
+    .poster-mid { grid-template-columns: 1fr; }
+  }
+
+  .poster-title {
+    margin: 0;
+    font-size: clamp(40px, 8vw, 72px);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+  }
+  .poster-sub {
+    margin: 12px 0 0;
+    font-size: 15px;
+    max-width: 36ch;
+    font-weight: 600;
+  }
+
+  .poster-cta-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+  }
+  .cta-big {
+    border: var(--border);
+    background: var(--coral);
+    color: #fff;
+    box-shadow: 6px 6px 0 #000;
+    padding: 16px 22px;
+    font-size: 16px;
+    font-weight: 900;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: -0.01em;
+  }
+  .cta-big:active {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 #000;
+  }
+  .cta-note {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    background: #fff;
+    border: 2px solid #000;
+    padding: 4px 8px;
+  }
+
+  /* bottom info bars */
+  .info-rail {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: var(--border);
+    box-shadow: var(--shadow);
+  }
+  @media (max-width: 640px) {
+    .info-rail { grid-template-columns: 1fr; }
+  }
+  .info-bar {
+    padding: 12px 14px;
+    border-right: 2px solid #000;
+    min-height: 72px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .info-bar:last-child { border-right: 0; }
+  @media (max-width: 640px) {
+    .info-bar { border-right: 0; border-bottom: 2px solid #000; }
+    .info-bar:last-child { border-bottom: 0; }
+  }
+  .info-bar .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .info-bar .value {
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .info-bar.coral { background: var(--coral); color: #fff; }
+  .info-bar.mint { background: var(--mint); }
+  .info-bar.foam { background: var(--foam); }
+
+  /* section divider labels */
+  .section-label {
+    margin: 28px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label span {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: #fff;
+    padding: 4px 8px;
+  }
+  .section-label::after {
+    content: "";
+    flex: 1;
+    height: 3px;
+    background: #000;
+  }
+
+  /* ========== WITH DATA ========== */
+  .metric-rail {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: var(--border);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+  }
+  @media (max-width: 720px) {
+    .metric-rail { grid-template-columns: 1fr 1fr; }
+  }
+  .metric {
+    padding: 12px 14px;
+    border-right: 2px solid #000;
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .metric:last-child { border-right: 0; }
+  @media (max-width: 720px) {
+    .metric:nth-child(2) { border-right: 0; }
+    .metric:nth-child(1),
+    .metric:nth-child(2) { border-bottom: 2px solid #000; }
+  }
+  .metric .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .metric .v {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-family: var(--mono);
+  }
+  .metric .hint {
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.85;
+  }
+  .metric.m1 { background: var(--sun); }
+  .metric.m2 { background: var(--mint); }
+  .metric.m3 { background: var(--foam); }
+  .metric.m4 { background: var(--rose); color: #fff; }
+
+  .table-wrap {
+    border: var(--border);
+    box-shadow: var(--shadow);
+    overflow: auto;
+    background: #fff;
+  }
+  table.keys {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.keys th,
+  table.keys td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid #000;
+    white-space: nowrap;
+  }
+  table.keys th {
+    background: var(--ink);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 800;
+  }
+  table.keys tr:last-child td { border-bottom: 0; }
+  table.keys tbody tr:nth-child(even) { background: #f3f3f3; }
+  .badge {
+    display: inline-block;
+    border: 2px solid #000;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    font-family: var(--mono);
+  }
+  .badge.on { background: var(--mint); }
+  .badge.off { background: #ddd; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+
+  /* ========== ACCOUNTS POSTER (same language) ========== */
+  .poster.accounts {
+    min-height: 320px;
+  }
+  .poster.accounts .poster-inner {
+    min-height: 320px;
+  }
+  .poster.accounts .poster-skew {
+    background:
+      linear-gradient(115deg,
+        transparent 0 34%,
+        var(--rose) 34% 48%,
+        transparent 48% 62%,
+        var(--mint) 62% 72%,
+        transparent 72% 100%);
+    opacity: 0.85;
+  }
+  .dual-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .cta-secondary {
+    border: var(--border);
+    background: var(--sun);
+    color: var(--ink);
+    box-shadow: 6px 6px 0 #000;
+    padding: 16px 18px;
+    font-size: 15px;
+    font-weight: 900;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .cta-secondary:active {
+    transform: translate(3px, 3px);
+    box-shadow: 3px 3px 0 #000;
+  }
+
+  .footer-note {
+    margin-top: 20px;
+    padding: 10px 12px;
+    border: 2px dashed #000;
+    font-size: 12px;
+    font-weight: 600;
+    background: #fff;
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="frame">
+      <!-- app chrome -->
+      <header class="chrome">
+        <div class="brand">
+          <div class="brand-mark">JP</div>
+          <span>JovePoxy 管理台</span>
+        </div>
+        <nav class="nav-pills" aria-label="主导航">
+          <a class="nav-pill" href="#">总览</a>
+          <a class="nav-pill on" href="#">密钥池</a>
+          <a class="nav-pill" href="#">账号</a>
+          <a class="nav-pill" href="#">本地 Key</a>
+          <a class="nav-pill" href="#">设置</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="page-head">
+          <div class="page-title-block">
+            <h1>Zen 密钥池</h1>
+            <p>付费模型出站身份 · Key 与出口代理解耦</p>
+          </div>
+          <div class="tabs" role="tablist" aria-label="池类型">
+            <button type="button" class="tab active">OpenCode</button>
+            <button type="button" class="tab">Ollama</button>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-ghost">刷新</button>
+            <button type="button" class="btn btn-primary">添加</button>
+          </div>
+        </div>
+
+        <!-- 1. EMPTY POSTER -->
+        <section id="empty" class="poster" aria-label="空态海报">
+          <div class="poster-skew" aria-hidden="true"></div>
+          <div class="poster-grid" aria-hidden="true"></div>
+          <div class="poster-inner">
+            <div class="poster-top">
+              <div class="stamp">
+                STAMP
+                <small>POOL EMPTY</small>
+              </div>
+              <div class="giant-zero" aria-hidden="true">0</div>
+            </div>
+
+            <div class="poster-mid">
+              <div>
+                <h2 class="poster-title">池是空的</h2>
+                <p class="poster-sub">还没有 Zen Key。付费转发会停在这里，直到你丢进第一把密钥。</p>
+              </div>
+              <div class="poster-cta-wrap">
+                <button type="button" class="cta-big">立刻添加 Zen Key</button>
+                <span class="cta-note">AES-GCM · 入库即加密</span>
+              </div>
+            </div>
+
+            <div class="info-rail" aria-label="能力说明">
+              <div class="info-bar coral">
+                <span class="label">付费转发</span>
+                <span class="value">Zen 付费模型走密钥池出站</span>
+              </div>
+              <div class="info-bar mint">
+                <span class="label">Zen Key</span>
+                <span class="value">身份凭证 · 与代理 IP 解耦</span>
+              </div>
+              <div class="info-bar foam">
+                <span class="label">权重调度</span>
+                <span class="value">故障切换 · 轮询与权重</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. WITH DATA -->
+        <div class="section-label"><span>#with-data · 有数据时</span></div>
+        <section id="with-data" aria-label="有数据密表">
+          <div class="metric-rail">
+            <div class="metric m1">
+              <span class="k">总数</span>
+              <span class="v">12</span>
+              <span class="hint">池内密钥</span>
+            </div>
+            <div class="metric m2">
+              <span class="k">启用</span>
+              <span class="v">9</span>
+              <span class="hint">可调度</span>
+            </div>
+            <div class="metric m3">
+              <span class="k">冷却</span>
+              <span class="v">2</span>
+              <span class="hint">429 / 失败退避</span>
+            </div>
+            <div class="metric m4">
+              <span class="k">权重和</span>
+              <span class="v">100</span>
+              <span class="hint">调度权重</span>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="keys">
+              <thead>
+                <tr>
+                  <th>别名</th>
+                  <th>掩码</th>
+                  <th>状态</th>
+                  <th>权重</th>
+                  <th>最近使用</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>tokyo-a</strong></td>
+                  <td class="mono">sk-zen-••••7f2a</td>
+                  <td><span class="badge on">启用</span></td>
+                  <td class="mono">40</td>
+                  <td class="mono">2 分钟前</td>
+                </tr>
+                <tr>
+                  <td><strong>osaka-b</strong></td>
+                  <td class="mono">sk-zen-••••91c0</td>
+                  <td><span class="badge on">启用</span></td>
+                  <td class="mono">35</td>
+                  <td class="mono">14 分钟前</td>
+                </tr>
+                <tr>
+                  <td><strong>spare-c</strong></td>
+                  <td class="mono">sk-zen-••••d4e8</td>
+                  <td><span class="badge off">停用</span></td>
+                  <td class="mono">25</td>
+                  <td class="mono">昨日 18:02</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 3. ACCOUNTS ISOMORPH -->
+        <div class="section-label"><span>#accounts · 同构空态</span></div>
+        <section id="accounts" class="poster accounts" aria-label="账号空态海报">
+          <div class="poster-skew" aria-hidden="true"></div>
+          <div class="poster-grid" aria-hidden="true"></div>
+          <div class="poster-inner">
+            <div class="poster-top">
+              <div class="stamp" style="background: var(--foam);">
+                STAMP
+                <small>NO ACCOUNT</small>
+              </div>
+              <div class="giant-zero" style="text-shadow: 4px 4px 0 var(--mint);" aria-hidden="true">0</div>
+            </div>
+
+            <div class="poster-mid">
+              <div>
+                <h2 class="poster-title" style="font-size: clamp(32px, 6vw, 56px);">暂无 OpenCode 账号</h2>
+                <p class="poster-sub">额度与用量抓取依赖账号 Cookie。控制面专用，不参与对话转发。</p>
+              </div>
+              <div class="poster-cta-wrap dual-cta">
+                <button type="button" class="cta-big">添加账号</button>
+                <button type="button" class="cta-secondary">导入 JSON</button>
+              </div>
+            </div>
+
+            <div class="info-rail" aria-label="账号能力">
+              <div class="info-bar mint">
+                <span class="label">额度同步</span>
+                <span class="value">抓取配额与用量面板</span>
+              </div>
+              <div class="info-bar foam">
+                <span class="label">Cookie 加密</span>
+                <span class="value">ADMIN_SECRET · AES-GCM</span>
+              </div>
+              <div class="info-bar coral">
+                <span class="label">仅控制面</span>
+                <span class="value">不进入 /v1 数据面</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <p class="footer-note">
+          方案 B · Poster Empty · 空态 = 全幅海报冲击 · 有数据 = metric rail + 密表 · 无外链 · 直角硬边 shadow 4px 4px 0 #000
+        </p>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
