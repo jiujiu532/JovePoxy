@@ -38,7 +38,7 @@ export const en: Record<MessageKey, string> = {
   "nav.accounts": "Accounts",
   "nav.quotas": "Quotas",
   "nav.localKeys": "Local Keys",
-  "nav.proxies": "Egress Proxies",
+  "nav.proxies": "Proxies",
   "nav.logs": "Request Logs",
   "nav.settings": "Settings",
   "nav.console": "Console",

@@ -31,15 +31,15 @@ export const zh = {
   "common.none": "-",
 
   /* ===== nav ===== */
-  "nav.overview": "概览",
-  "nav.models": "模型",
-  "nav.keyPool": "密钥池",
+  "nav.overview": "概览中心",
+  "nav.models": "模型目录",
+  "nav.keyPool": "密钥池组",
   "nav.accounts": "账号统计",
   "nav.quotas": "额度监控",
   "nav.localKeys": "分发管理",
-  "nav.proxies": "出口代理池",
+  "nav.proxies": "出口代理",
   "nav.logs": "请求日志",
-  "nav.settings": "设置",
+  "nav.settings": "系统设置",
   "nav.console": "管理台",
 
   /* ===== shell ===== */
