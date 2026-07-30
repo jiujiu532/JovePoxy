@@ -3,7 +3,6 @@ import {
   CheckCircle,
   ClipboardText,
   Database,
-  Pulse,
   Stack,
   Timer,
   WarningCircle,
@@ -23,7 +22,6 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
-  StatCard,
   Tabs,
   slicePage,
 } from "@/components";
@@ -168,21 +166,27 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label={t("kpi.total")} value={logs.length} icon={Stack} tone="default" />
-          <StatCard label={t("kpi.ok")} value={ok} icon={CheckCircle} tone="success" />
-          <StatCard
-            label={t("kpi.rateLimited")}
-            value={rateLimited}
-            icon={WarningCircle}
-            tone={rateLimited > 0 ? "yellow" : "default"}
-          />
-          <StatCard
-            label={t("kpi.avgLatency")}
-            value={logs.length ? formatLatency(avgLatency) : t("common.none")}
-            icon={Timer}
-            tone="teal"
-          />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent text-black font-bold shadow-[2px_2px_0_var(--border)]">
+              <ClipboardText size={20} weight="duotone" />
+            </span>
+            <div>
+              <span className="font-bold text-sm text-ink">{t("logs.gatewayTitle")}</span>
+              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} / {logs.length})</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <CheckCircle size={14} className="text-status-healthy" /> {t("kpi.ok")}: {ok}
+            </span>
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <WarningCircle size={14} className={rateLimited > 0 ? "text-amber-700" : "text-ink-faint"} /> 429限流: {rateLimited}
+            </span>
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <Timer size={14} className="text-accent-teal" /> {t("kpi.avgLatency")}: {logs.length ? formatLatency(avgLatency) : "-"}
+            </span>
+          </div>
         </div>
         <SectionPanel
           title={t("logs.gatewayTitle")}
@@ -447,11 +451,24 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label={t("kpi.total")} value={records.length} icon={Stack} tone="default" />
-          <StatCard label={t("kpi.filtered")} value={filtered.length} icon={Pulse} tone="yellow" />
-          <StatCard label={t("logs.colInput")} value={totalIn.toLocaleString()} icon={ChartBar} tone="teal" />
-          <StatCard label={t("logs.colOutput")} value={totalOut.toLocaleString()} icon={Database} tone="success" />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent-yellow text-black font-bold shadow-[2px_2px_0_var(--border)]">
+              <Database size={20} weight="duotone" />
+            </span>
+            <div>
+              <span className="font-bold text-sm text-ink">{t("logs.usageOcTitle")}</span>
+              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} / {records.length})</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <ChartBar size={14} className="text-accent-teal" /> {t("logs.colInput")}: {totalIn.toLocaleString()}
+            </span>
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <Database size={14} className="text-status-healthy" /> {t("logs.colOutput")}: {totalOut.toLocaleString()}
+            </span>
+          </div>
         </div>
         <SectionPanel
           title={t("logs.usageOcTitle")}
@@ -716,11 +733,24 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
       {!loading && error ? <ErrorState title={t("common.loadFailed")} description={error} /> : null}
       {!loading && !error ? (
         <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label={t("kpi.accounts")} value={accounts.length} icon={Stack} tone="default" />
-          <StatCard label={t("kpi.filtered")} value={filtered.length} icon={Pulse} tone="yellow" />
-          <StatCard label={t("logs.colRequests")} value={totalReq.toLocaleString()} icon={ChartBar} tone="teal" />
-          <StatCard label={t("kpi.total")} value={rows.length} icon={Database} tone="success" />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-border bg-paper-1 px-4 py-3 shadow-[var(--shadow-hard)]">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center border-2 border-border bg-accent-teal text-black font-bold shadow-[2px_2px_0_var(--border)]">
+              <Database size={20} weight="duotone" />
+            </span>
+            <div>
+              <span className="font-bold text-sm text-ink">{t("logs.usageOlTitle")}</span>
+              <span className="ml-2 font-mono text-xs text-ink-muted">({filtered.length} {t("logs.colModel")})</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <Stack size={14} /> {t("kpi.accounts")}: {accounts.length}
+            </span>
+            <span className="inline-flex items-center gap-1.5 border border-border bg-paper-0 px-2.5 py-1 font-medium text-ink">
+              <ChartBar size={14} className="text-accent-teal" /> {t("logs.colRequests")}: {totalReq.toLocaleString()}
+            </span>
+          </div>
         </div>
         <SectionPanel
           title={t("logs.usageOlTitle")}

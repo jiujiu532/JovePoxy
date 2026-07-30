@@ -2,8 +2,6 @@ import {
   Cloud,
   DownloadSimple,
   Plus,
-  Pulse,
-  Stack,
   UploadSimple,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -25,7 +23,6 @@ import {
   SelectionStrip,
   SecretInput,
   Skeleton,
-  StatCard,
   Tabs,
   TextInput,
   slicePage,
@@ -472,34 +469,40 @@ export function AccountsPage() {
       />
 
       {!loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label={t("kpi.accounts")}
-            value={ocAccounts.length + olAccounts.length}
-            hint={`OC ${ocAccounts.length} · OL ${olAccounts.length}`}
-            icon={Stack}
-            tone="default"
-          />
-          <StatCard
-            label="OpenCode"
-            value={ocAccounts.length}
-            hint={`${t("kpi.enabled")} ${ocEnabled}`}
-            icon={UsersThree}
-            tone="yellow"
-          />
-          <StatCard
-            label="Ollama"
-            value={olAccounts.length}
-            hint={`${t("kpi.enabled")} ${olEnabled}`}
-            icon={Cloud}
-            tone="teal"
-          />
-          <StatCard
-            label={t("kpi.enabled")}
-            value={ocEnabled + olEnabled}
-            icon={Pulse}
-            tone="success"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-center justify-between border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-border bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]">
+                <UsersThree size={22} weight="duotone" />
+              </span>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">OpenCode {t("kpi.accounts")}</p>
+                <p className="mt-0.5 font-mono text-2xl font-bold text-ink">{ocAccounts.length}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge kind={ocEnabled > 0 ? "healthy" : "neutral"}>
+                {t("kpi.enabled")}: {ocEnabled} / {ocAccounts.length}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-border bg-accent-teal text-black shadow-[2px_2px_0_var(--border)]">
+                <Cloud size={22} weight="duotone" />
+              </span>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Ollama {t("kpi.accounts")}</p>
+                <p className="mt-0.5 font-mono text-2xl font-bold text-ink">{olAccounts.length}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge kind={olEnabled > 0 ? "healthy" : "neutral"}>
+                {t("kpi.enabled")}: {olEnabled} / {olAccounts.length}
+              </Badge>
+            </div>
+          </div>
         </div>
       ) : null}
 

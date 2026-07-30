@@ -5,7 +5,6 @@ import {
   PencilSimple,
   Plus,
   Pulse,
-  Stack,
   Trash,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -30,7 +29,6 @@ import {
   SectionPanel,
   SegmentedFilter,
   Skeleton,
-  StatCard,
   TextInput,
   fieldInputClass,
   slicePage,
@@ -310,32 +308,49 @@ export function LocalKeysPage() {
       />
 
       {!loading && !listError ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label={t("kpi.total")}
-            value={keys.length}
-            hint={t("kpi.filtered") + ` ${filtered.length}`}
-            icon={Stack}
-            tone="default"
-          />
-          <StatCard
-            label={t("kpi.available")}
-            value={active}
-            icon={Pulse}
-            tone="success"
-          />
-          <StatCard
-            label={t("kpi.limited")}
-            value={limited}
-            icon={Gauge}
-            tone="yellow"
-          />
-          <StatCard
-            label={t("kpi.revoked")}
-            value={revoked}
-            icon={Trash}
-            tone={revoked > 0 ? "accent" : "default"}
-          />
+        <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-border bg-paper-1 p-4 shadow-[var(--shadow-hard)]">
+          <div className="flex items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center border-2 border-border bg-accent text-black shadow-[2px_2px_0_var(--border)]">
+              <Key size={24} weight="duotone" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-ink">{t("localkeys.title")}</h2>
+                <span className="border border-border bg-paper-0 px-2 py-0.5 font-mono text-[11px] font-semibold text-ink-muted">
+                  {keys.length} 密钥
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12px] text-ink-muted">
+                {t("kpi.filtered")}: {filtered.length} · {t("kpi.available")}: {active}/{keys.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2.5 border-2 border-border bg-accent-mint/20 px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)]">
+              <Pulse size={18} className="text-black" weight="bold" />
+              <div className="text-left">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.available")}</p>
+                <p className="font-mono text-base font-bold text-ink">{active}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 border-2 border-border bg-accent-yellow/20 px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)]">
+              <Gauge size={18} className="text-black" weight="bold" />
+              <div className="text-left">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.limited")}</p>
+                <p className="font-mono text-base font-bold text-ink">{limited}</p>
+              </div>
+            </div>
+
+            <div className={`flex items-center gap-2.5 border-2 border-border px-3.5 py-1.5 shadow-[2px_2px_0_var(--border)] ${revoked > 0 ? "bg-accent/30" : "bg-paper-0"}`}>
+              <Trash size={18} className={revoked > 0 ? "text-accent" : "text-ink-faint"} weight="bold" />
+              <div className="text-left">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">{t("kpi.revoked")}</p>
+                <p className="font-mono text-base font-bold text-ink">{revoked}</p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
