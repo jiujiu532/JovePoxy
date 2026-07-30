@@ -325,6 +325,10 @@ export const en: Record<MessageKey, string> = {
   "overview.opsKpis.status5xx": "5xx",
   "overview.opsKpis.noData": "No request samples in this window",
   "overview.opsKpis.ms": "{n} ms",
+  "overview.volume.title": "Traffic volume",
+  "overview.volume.hint": "Today and all-time requests / tokens (from usage records)",
+  "overview.requestTrend.shortDesc": "Last {days} days · from request logs",
+  "overview.tokenTrend.shortDesc": "Last {days} days · from usage records",
 
   "settings.title": "Settings",
   "settings.description": "Console authentication, service connections, and runtime parameters. Hover the ? for details.",

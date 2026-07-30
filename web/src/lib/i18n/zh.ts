@@ -324,6 +324,10 @@ export const zh = {
   "overview.opsKpis.status5xx": "5xx",
   "overview.opsKpis.noData": "该时窗暂无请求样本",
   "overview.opsKpis.ms": "{n} ms",
+  "overview.volume.title": "流量体积",
+  "overview.volume.hint": "今日与累计请求 / Token（来自用量记录）",
+  "overview.requestTrend.shortDesc": "近 {days} 天 · 请求日志聚合",
+  "overview.tokenTrend.shortDesc": "近 {days} 天 · 用量记录聚合",
 
   "settings.title": "设置",
   "settings.description": "管理台鉴权、服务连接与运行参数。标 ? 的说明悬停查看。",

@@ -1,18 +1,15 @@
 import {
-  ArrowRight,
   ChartBar,
   ChartLineUp,
   Coins,
   Lightning,
-  Path,
   Pulse,
   Stack,
-  WarningCircle,
+  ArrowRight,
   Key,
   Globe,
   ChartLine,
 } from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -20,10 +17,10 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  MetricRail,
   PageHeader,
   SectionPanel,
   Skeleton,
-  StatCard,
 } from "@/components";
 import {
   HardBarChart,
@@ -36,7 +33,6 @@ import {
   api,
   ApiError,
   type LogDTO,
-  type MetricsDTO,
   type OpsKPIsDTO,
   type OpsWindow,
   type OverviewDTO,
@@ -110,7 +106,9 @@ function formatCompact(value: number): string {
 
 const OPS_WINDOWS: ReadonlyArray<OpsWindow> = ["1h", "24h", "7d"];
 
-function windowLabelKey(window: OpsWindow): "overview.opsKpis.window1h" | "overview.opsKpis.window24h" | "overview.opsKpis.window7d" {
+function windowLabelKey(
+  window: OpsWindow,
+): "overview.opsKpis.window1h" | "overview.opsKpis.window24h" | "overview.opsKpis.window7d" {
   switch (window) {
     case "1h":
       return "overview.opsKpis.window1h";
@@ -126,15 +124,56 @@ function formatSuccessRate(rate: number | null | undefined, requests: number): s
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-function formatLatencyMs(
-  t: Translate,
-  value: number | null | undefined,
-): string {
+function formatLatencyMs(t: Translate, value: number | null | undefined): string {
   if (value == null) return "-";
   return t("overview.opsKpis.ms", { n: value });
 }
 
-function OpsKpisPanel({
+function WindowToggle({
+  window,
+  onWindowChange,
+  loading,
+  t,
+}: {
+  readonly window: OpsWindow;
+  readonly onWindowChange: (w: OpsWindow) => void;
+  readonly loading: boolean;
+  readonly t: Translate;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={t("overview.opsKpis.window")}
+      className="inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5"
+    >
+      {OPS_WINDOWS.map((w) => {
+        const active = window === w;
+        return (
+          <button
+            key={w}
+            type="button"
+            aria-pressed={active}
+            disabled={loading}
+            className={cn(
+              "inline-flex h-8 items-center rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color] duration-150",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-paper-0",
+              active
+                ? "bg-paper-1 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
+                : "text-ink-muted hover:bg-paper-1/70 hover:text-ink",
+              loading && "opacity-60",
+            )}
+            onClick={() => onWindowChange(w)}
+          >
+            {t(windowLabelKey(w))}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 第一眼：健康 + 延迟，时窗可切换。 */
+function HealthBlock({
   kpis,
   window,
   onWindowChange,
@@ -158,107 +197,74 @@ function OpsKpisPanel({
       icon={ChartLineUp}
       iconTone="teal"
       actions={
-        <div
-          role="group"
-          aria-label={t("overview.opsKpis.window")}
-          className="inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5"
-        >
-          {OPS_WINDOWS.map((w) => {
-            const active = window === w;
-            return (
-              <button
-                key={w}
-                type="button"
-                aria-pressed={active}
-                disabled={loading}
-                className={cn(
-                  "inline-flex h-8 items-center rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color] duration-150",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-paper-0",
-                  active
-                    ? "bg-paper-1 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
-                    : "text-ink-muted hover:bg-paper-1/70 hover:text-ink",
-                  loading && "opacity-60",
-                )}
-                onClick={() => onWindowChange(w)}
-              >
-                {t(windowLabelKey(w))}
-              </button>
-            );
-          })}
-        </div>
+        <WindowToggle
+          window={window}
+          onWindowChange={onWindowChange}
+          loading={loading}
+          t={t}
+        />
       }
     >
       {requests === 0 ? (
         <EmptyState compact icon={ChartLineUp} title={t("overview.opsKpis.noData")} />
       ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-px overflow-hidden border-2 border-border bg-border sm:grid-cols-4">
             {[
               {
                 label: t("overview.opsKpis.requests"),
                 value: requests,
-                tone: "bg-accent-teal",
               },
               {
                 label: t("overview.opsKpis.successRate"),
                 value: formatSuccessRate(kpis?.success_rate, requests),
-                tone: "bg-accent-mint",
               },
               {
                 label: t("overview.opsKpis.latencyP50"),
                 value: formatLatencyMs(t, kpis?.latency_p50_ms),
-                tone: "bg-accent-yellow",
               },
               {
                 label: t("overview.opsKpis.latencyP95"),
                 value: formatLatencyMs(t, kpis?.latency_p95_ms),
-                tone: "bg-accent-soft",
               },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
-              >
-                <span
-                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
-                  aria-hidden
-                />
-                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
-                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
-                  {item.value}
+            ].map((cell) => (
+              <div key={cell.label} className="bg-paper-0 px-3 py-2.5">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  {cell.label}
+                </p>
+                <p className="mt-1 font-mono text-[1.35rem] font-bold leading-none tabular-nums text-ink">
+                  {cell.value}
                 </p>
               </div>
             ))}
           </div>
-          <div className="mt-4">
-            <StatusStackBar
-              ariaLabel={t("overview.opsKpis.title")}
-              segments={[
-                {
-                  label: t("overview.opsKpis.status2xx"),
-                  value: s2xx,
-                  color: "var(--accent-teal)",
-                },
-                {
-                  label: t("overview.opsKpis.status429"),
-                  value: s429,
-                  color: "var(--accent-yellow)",
-                },
-                {
-                  label: t("overview.opsKpis.status5xx"),
-                  value: s5xx,
-                  color: "var(--accent)",
-                },
-              ]}
-            />
-          </div>
-        </>
+          <StatusStackBar
+            ariaLabel={t("overview.opsKpis.title")}
+            segments={[
+              {
+                label: t("overview.opsKpis.status2xx"),
+                value: s2xx,
+                color: "var(--accent-teal)",
+              },
+              {
+                label: t("overview.opsKpis.status429"),
+                value: s429,
+                color: "var(--accent-yellow)",
+              },
+              {
+                label: t("overview.opsKpis.status5xx"),
+                value: s5xx,
+                color: "var(--accent)",
+              },
+            ]}
+          />
+        </div>
       )}
     </SectionPanel>
   );
 }
 
-function ZenPoolCard({
+function ZenPoolStrip({
   pool,
   t,
   onOpen,
@@ -318,12 +324,8 @@ function ZenPoolCard({
         {t("overview.zenPool.total", { n: total })}
         {oc || ol ? (
           <>
-            {oc
-              ? ` · ${t("overview.zenPool.opencode")} ${oc.healthy}/${oc.total}`
-              : null}
-            {ol
-              ? ` · ${t("overview.zenPool.ollama")} ${ol.healthy}/${ol.total}`
-              : null}
+            {oc ? ` · ${t("overview.zenPool.opencode")} ${oc.healthy}/${oc.total}` : null}
+            {ol ? ` · ${t("overview.zenPool.ollama")} ${ol.healthy}/${ol.total}` : null}
           </>
         ) : null}
       </p>
@@ -331,19 +333,10 @@ function ZenPoolCard({
   );
 }
 
-type QuickAction = {
-  readonly to: string;
-  readonly label: string;
-  readonly desc: string;
-  readonly icon: Icon;
-  readonly tone: string;
-};
-
 export function OverviewPage() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
   const [data, setData] = useState<OverviewDTO | null>(null);
-  const [metrics, setMetrics] = useState<MetricsDTO | null>(null);
   const [requestTrend, setRequestTrend] = useState<TrendPoint[]>([]);
   const [tokenTrend, setTokenTrend] = useState<TrendPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -354,18 +347,11 @@ export function OverviewPage() {
   async function load(window: OpsWindow = opsWindow) {
     setLoading(true);
     try {
-      const [overview, metricsPayload] = await Promise.all([
-        api.overview(window),
-        api.metrics(),
-      ]);
+      const overview = await api.overview(window);
       setData(overview);
-      setMetrics(metricsPayload);
       setError(null);
 
-      const [logsRes, usageRes] = await Promise.allSettled([
-        api.logs(),
-        api.usage(),
-      ]);
+      const [logsRes, usageRes] = await Promise.allSettled([api.logs(), api.usage()]);
       setRequestTrend(
         logsRes.status === "fulfilled" ? buildRequestTrend(logsRes.value.logs) : [],
       );
@@ -413,18 +399,14 @@ export function OverviewPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-5">
-        <Skeleton className="h-16 w-full" />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-28 w-full" />
-          ))}
-        </div>
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-24 w-full" />
         <div className="grid gap-3 lg:grid-cols-2">
           <Skeleton className="h-56 w-full" />
           <Skeleton className="h-56 w-full" />
         </div>
-        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
@@ -445,94 +427,72 @@ export function OverviewPage() {
 
   if (!data) return null;
 
-  const total429 = metrics?.status_429 ?? 0;
-  const total5xx = metrics?.status_5xx ?? 0;
   const modelMaxRequests = Math.max(1, ...data.by_model.map((m) => m.requests));
 
-  const cards = [
+  const quotaHint = (() => {
+    const n = data.quota_narrative;
+    if (!n) return t("overview.card.quotaRemainingHint");
+    if (n.note === "sample_insufficient" || n.worst_used_pct == null) {
+      return t("overview.card.quotaNarrativeSample");
+    }
+    return t("overview.card.quotaNarrativeHint", {
+      pct: Number(n.worst_used_pct).toFixed(1),
+      headroom: Number(n.headroom_pct ?? Math.max(0, 100 - n.worst_used_pct)).toFixed(1),
+    });
+  })();
+
+  const volumeRail = [
     {
       label: t("overview.card.requestsToday"),
       value: data.requests_today,
       hint: t("overview.card.requestsTodayHint"),
-      icon: Pulse,
       tone: "accent" as const,
     },
     {
       label: t("overview.card.tokensToday"),
-      value: data.tokens_today,
+      value: formatCompact(data.tokens_today),
       hint: t("overview.card.tokensTodayHint"),
-      icon: Lightning,
       tone: "yellow" as const,
     },
     {
       label: t("overview.card.requestsTotal"),
-      value: data.requests_total,
+      value: formatCompact(data.requests_total),
       hint: t("overview.card.requestsTotalHint"),
-      icon: ChartLineUp,
       tone: "teal" as const,
     },
     {
       label: t("overview.card.tokensTotal"),
-      value: data.tokens_total,
+      value: formatCompact(data.tokens_total),
       hint: t("overview.card.tokensTotalHint"),
-      icon: Stack,
-      tone: "default" as const,
-    },
-    {
-      label: t("overview.card.quotaRemaining"),
-      value: `${Number(data.quota_effective_remaining ?? 0).toFixed(1)}%`,
-      hint: (() => {
-        const n = data.quota_narrative;
-        if (!n) return t("overview.card.quotaRemainingHint");
-        if (n.note === "sample_insufficient" || n.worst_used_pct == null) {
-          return t("overview.card.quotaNarrativeSample");
-        }
-        return t("overview.card.quotaNarrativeHint", {
-          pct: Number(n.worst_used_pct).toFixed(1),
-          headroom: Number(n.headroom_pct ?? Math.max(0, 100 - n.worst_used_pct)).toFixed(1),
-        });
-      })(),
-      icon: Coins,
-      tone: "success" as const,
-    },
-    {
-      label: t("overview.card.status429"),
-      value: total429,
-      hint:
-        total5xx > 0
-          ? t("overview.card.status429HintWith5xx", { n: total5xx })
-          : t("overview.card.status429Hint"),
-      icon: WarningCircle,
-      tone: total429 > 0 ? ("warning" as const) : ("default" as const),
+      tone: "white" as const,
     },
   ];
 
-  const quickActions: QuickAction[] = [
+  const shortcuts = [
     {
       to: "/app/local-keys",
       label: t("overview.quickActions.createLocalKeyLabel"),
-      desc: t("overview.quickActions.createLocalKeyDesc"),
       icon: Key,
-      tone: "bg-accent-yellow text-black",
     },
     {
       to: "/app/proxies",
       label: t("overview.quickActions.configureProxyLabel"),
-      desc: t("overview.quickActions.configureProxyDesc"),
       icon: Globe,
-      tone: "bg-accent-teal text-black",
     },
     {
       to: "/app/quotas",
       label: t("overview.quickActions.quotaMonitorLabel"),
-      desc: t("overview.quickActions.quotaMonitorDesc"),
       icon: ChartLine,
-      tone: "bg-accent-mint text-black",
+    },
+    {
+      to: "/app/key-pool",
+      label: t("overview.zenPool.openPool"),
+      icon: Coins,
     },
   ];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title={t("overview.title")}
         meta={t("overview.updatedAt", {
@@ -546,43 +506,57 @@ export function OverviewPage() {
         }
       />
 
-      <OpsKpisPanel
-        kpis={data.ops_kpis}
-        window={opsWindow}
-        onWindowChange={(w) => void changeOpsWindow(w)}
-        loading={opsLoading}
-        t={t}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
-          <StatCard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            hint={card.hint}
-            icon={card.icon}
-            tone={card.tone}
-          />
-        ))}
+      {/* 1. 现在健康：KPI + 密钥池并排 */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <HealthBlock
+          kpis={data.ops_kpis}
+          window={opsWindow}
+          onWindowChange={(w) => void changeOpsWindow(w)}
+          loading={opsLoading}
+          t={t}
+        />
+        <ZenPoolStrip
+          pool={data.zen_pool}
+          t={t}
+          onOpen={() => void navigate("/app/key-pool")}
+        />
       </div>
 
-      <ZenPoolCard
-        pool={data.zen_pool}
-        t={t}
-        onOpen={() => void navigate("/app/key-pool")}
-      />
+      {/* 2. 流量体积：今日 + 累计，一条轨道 */}
+      <section aria-label={t("overview.volume.title")}>
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-muted">
+              {t("overview.volume.title")}
+            </h2>
+            <p className="mt-0.5 text-[12px] text-ink-faint">{t("overview.volume.hint")}</p>
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-ink-muted">
+            <Lightning size={14} weight="fill" className="text-accent-yellow" aria-hidden />
+            <span>
+              {t("overview.card.quotaRemaining")}{" "}
+              <span className="font-mono font-semibold tabular-nums text-ink">
+                {Number(data.quota_effective_remaining ?? 0).toFixed(1)}%
+              </span>
+            </span>
+            <span className="hidden text-ink-faint sm:inline">· {quotaHint}</span>
+          </div>
+        </div>
+        <MetricRail items={volumeRail} />
+      </section>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      {/* 3. 趋势：请求 + token 同屏 */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <SectionPanel
           title={t("overview.requestTrend.title")}
-          description={t("overview.requestTrend.description", { days: TREND_DAYS })}
+          description={t("overview.requestTrend.shortDesc", { days: TREND_DAYS })}
           icon={ChartLineUp}
           iconTone="yellow"
         >
           {requestTrend.some((p) => p.value > 0) ? (
             <HardLineChart
               points={requestTrend}
+              formatValue={formatCompact}
               ariaLabel={t("overview.requestTrend.ariaLabel", { days: TREND_DAYS })}
             />
           ) : (
@@ -597,7 +571,7 @@ export function OverviewPage() {
 
         <SectionPanel
           title={t("overview.tokenTrend.title")}
-          description={t("overview.tokenTrend.description", { days: TREND_DAYS })}
+          description={t("overview.tokenTrend.shortDesc", { days: TREND_DAYS })}
           icon={ChartBar}
           iconTone="teal"
         >
@@ -618,55 +592,7 @@ export function OverviewPage() {
         </SectionPanel>
       </div>
 
-      <SectionPanel
-        title={t("overview.quickActions.title")}
-        icon={Path}
-        iconTone="yellow"
-      >
-        <div className="grid gap-2.5 sm:grid-cols-3">
-          {quickActions.map((item) => {
-            const IconComp = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "group flex items-center gap-3 border-2 border-border bg-paper-0 px-3 py-3",
-                  "shadow-[2px_2px_0_var(--border)]",
-                  "transition-[transform,background-color,box-shadow] duration-150",
-                  "hover:-translate-x-px hover:-translate-y-px hover:bg-accent-soft hover:shadow-[3px_3px_0_var(--border)]",
-                  "active:translate-x-px active:translate-y-px active:shadow-none",
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-flex h-10 w-10 shrink-0 items-center justify-center border-2 border-border",
-                    "shadow-[2px_2px_0_var(--border)]",
-                    item.tone,
-                  )}
-                  aria-hidden
-                >
-                  <IconComp size={18} weight="duotone" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-ink">{item.label}</p>
-                  <p className="mt-0.5 text-[12px] text-ink-muted">{item.desc}</p>
-                </div>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint transition-colors group-hover:text-ink">
-                  {t("overview.quickActions.open")}
-                  <ArrowRight
-                    size={14}
-                    weight="bold"
-                    className="transition-transform group-hover:translate-x-0.5"
-                    aria-hidden
-                  />
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </SectionPanel>
-
+      {/* 4. 额度窗口（有数据才显示） */}
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
           title={t("overview.quotaWindows.title")}
@@ -681,9 +607,7 @@ export function OverviewPage() {
                 className="border-2 border-border bg-paper-0 p-3.5 shadow-[2px_2px_0_var(--border)]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-caption font-medium text-ink-muted">
-                    {window.label}
-                  </p>
+                  <p className="text-caption font-medium text-ink-muted">{window.label}</p>
                   {window.blocked ? (
                     <Badge kind="warning">{t("overview.quotaWindows.blocked")}</Badge>
                   ) : (
@@ -714,6 +638,7 @@ export function OverviewPage() {
         </SectionPanel>
       ) : null}
 
+      {/* 5. 按模型明细 */}
       <SectionPanel
         title={t("overview.byModel.title")}
         description={t("overview.byModel.description")}
@@ -764,10 +689,10 @@ export function OverviewPage() {
                     </td>
                     <td className="py-2.5 tabular-nums text-ink">{row.requests}</td>
                     <td className="py-2.5 tabular-nums text-ink-muted">
-                      {row.input_tokens}
+                      {formatCompact(row.input_tokens)}
                     </td>
                     <td className="py-2.5 tabular-nums text-ink-muted">
-                      {row.output_tokens}
+                      {formatCompact(row.output_tokens)}
                     </td>
                   </tr>
                 ))}
@@ -776,6 +701,35 @@ export function OverviewPage() {
           </div>
         )}
       </SectionPanel>
+
+      {/* 6. 底部紧凑入口（不再占一整块英雄区） */}
+      <nav
+        aria-label={t("overview.quickActions.title")}
+        className="flex flex-wrap items-center gap-2 border-t-2 border-border pt-3"
+      >
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+          {t("overview.quickActions.title")}
+        </span>
+        {shortcuts.map((item) => {
+          const IconComp = item.icon;
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 border-2 border-border bg-paper-0 px-2.5 text-[12px] font-medium text-ink",
+                "shadow-[2px_2px_0_var(--border)]",
+                "transition-[transform,background-color] duration-150",
+                "hover:bg-accent-soft active:translate-x-px active:translate-y-px active:shadow-none",
+              )}
+            >
+              <IconComp size={14} weight="duotone" aria-hidden />
+              {item.label}
+              <ArrowRight size={12} weight="bold" className="text-ink-faint" aria-hidden />
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

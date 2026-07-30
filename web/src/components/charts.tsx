@@ -3,8 +3,8 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 /**
- * Neo-Brutalist hard-edge SVG charts (no external chart lib).
- * 视觉规则：直角、黑硬边、纯色填充、无渐变/无模糊阴影。
+ * Neo-Brutalist hard-edge charts (no external chart lib).
+ * 直角、黑硬边、纯色；Y 轴刻度 + 逐日 X 标签 + 峰值标注。
  */
 
 export type TrendPoint = {
@@ -12,14 +12,23 @@ export type TrendPoint = {
   readonly value: number;
 };
 
-/** 折线 + 纯色面积。用于请求/token 趋势。 */
+function niceMax(raw: number): number {
+  if (raw <= 0) return 1;
+  const exp = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / exp;
+  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return nice * exp;
+}
+
+/** 折线 + 面积。 */
 export function HardLineChart({
   points,
-  height = 132,
+  height = 168,
   stroke = "var(--accent)",
   fill = "var(--accent-soft)",
   className,
   ariaLabel,
+  formatValue = (v: number) => String(v),
 }: {
   readonly points: ReadonlyArray<TrendPoint>;
   readonly height?: number;
@@ -27,86 +36,110 @@ export function HardLineChart({
   readonly fill?: string;
   readonly className?: string;
   readonly ariaLabel: string;
+  readonly formatValue?: (v: number) => string;
 }) {
   const uid = useId();
   const { t } = useI18n();
   if (points.length === 0) return null;
 
-  const w = 100;
-  const h = 40;
-  const max = Math.max(1, ...points.map((p) => p.value));
-  const stepX = points.length > 1 ? w / (points.length - 1) : w;
+  const plotW = 100;
+  const plotH = 40;
+  const max = niceMax(Math.max(...points.map((p) => p.value)));
+  const stepX = points.length > 1 ? plotW / (points.length - 1) : plotW;
   const coords = points.map((p, i) => ({
-    x: points.length > 1 ? i * stepX : w / 2,
-    y: h - (p.value / max) * (h - 4) - 2,
+    x: points.length > 1 ? i * stepX : plotW / 2,
+    y: plotH - (p.value / max) * (plotH - 4) - 2,
+    value: p.value,
+    label: p.label,
   }));
   const line = coords.map((c) => `${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(" ");
-  const area = `0,${h} ${line} ${w},${h}`;
-
-  const first = points[0];
-  const last = points[points.length - 1];
-  const peak = points.reduce((a, b) => (b.value > a.value ? b : a), first ?? { label: "", value: 0 });
+  const area = `0,${plotH} ${line} ${plotW},${plotH}`;
+  const peak = coords.reduce((a, b) => (b.value > a.value ? b : a), coords[0]!);
+  const mid = max / 2;
 
   return (
     <figure className={cn("m-0", className)} role="img" aria-label={ariaLabel}>
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="none"
-        style={{ height }}
-        className="block w-full border-2 border-border bg-paper-0"
-        aria-hidden
-      >
-        {/* 网格：硬细线 */}
-        {[1, 2, 3].map((i) => (
-          <line
-            key={i}
-            x1={0}
-            x2={w}
-            y1={(h / 4) * i}
-            y2={(h / 4) * i}
-            stroke="var(--border)"
-            strokeOpacity={0.14}
-            strokeWidth={0.4}
-          />
-        ))}
-        <polygon points={area} fill={fill} />
-        <polyline
-          points={line}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.6}
-          strokeLinejoin="miter"
-          strokeLinecap="square"
-        />
-        {/* 峰值点：方形标记（非圆点） */}
-        {coords.map((c, i) =>
-          points[i] === peak && peak.value > 0 ? (
-            <rect
-              key={`${uid}-pk`}
-              x={c.x - 1.4}
-              y={c.y - 1.4}
-              width={2.8}
-              height={2.8}
-              fill="var(--ink)"
+      <div className="flex gap-2">
+        <div
+          className="flex w-9 shrink-0 flex-col justify-between py-0.5 text-right text-[10px] tabular-nums leading-none text-ink-faint"
+          style={{ height }}
+          aria-hidden
+        >
+          <span>{formatValue(max)}</span>
+          <span>{formatValue(mid)}</span>
+          <span>0</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <svg
+            viewBox={`0 0 ${plotW} ${plotH}`}
+            preserveAspectRatio="none"
+            style={{ height }}
+            className="block w-full border-2 border-border bg-paper-0"
+            aria-hidden
+          >
+            {[0, 1, 2, 3, 4].map((i) => (
+              <line
+                key={i}
+                x1={0}
+                x2={plotW}
+                y1={(plotH / 4) * i}
+                y2={(plotH / 4) * i}
+                stroke="var(--border)"
+                strokeOpacity={0.22}
+                strokeWidth={0.35}
+              />
+            ))}
+            <polygon points={area} fill={fill} />
+            <polyline
+              points={line}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={2}
+              strokeLinejoin="miter"
+              strokeLinecap="square"
+              vectorEffect="non-scaling-stroke"
             />
-          ) : null,
-        )}
-      </svg>
-      <figcaption className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums text-ink-faint">
-        <span>{first?.label}</span>
-        {peak.value > 0 ? (
-          <span className="font-medium text-ink-muted">{t("charts.peak", { value: peak.value })}</span>
-        ) : null}
-        <span>{last?.label}</span>
-      </figcaption>
+            {coords.map((c, i) => (
+              <rect
+                key={`${uid}-pt-${i}`}
+                x={c.x - 1.1}
+                y={c.y - 1.1}
+                width={2.2}
+                height={2.2}
+                fill={c === peak && peak.value > 0 ? "var(--ink)" : stroke}
+                stroke="var(--paper-0)"
+                strokeWidth={0.4}
+              />
+            ))}
+          </svg>
+          <div
+            className="mt-1.5 grid text-[10px] tabular-nums text-ink-faint"
+            style={{
+              gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {points.map((p) => (
+              <span key={p.label} className="truncate text-center">
+                {p.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {peak.value > 0 ? (
+        <figcaption className="mt-2 text-[11px] text-ink-muted">
+          {t("charts.peak", { value: formatValue(peak.value) })}
+          <span className="text-ink-faint"> · {peak.label}</span>
+        </figcaption>
+      ) : null}
     </figure>
   );
 }
 
-/** 竖向硬边柱状图。用于按日 token。 */
+/** 竖向硬边柱状图。 */
 export function HardBarChart({
   points,
-  height = 132,
+  height = 168,
   barFill = "var(--accent-teal)",
   className,
   ariaLabel,
@@ -119,38 +152,79 @@ export function HardBarChart({
   readonly ariaLabel: string;
   readonly formatValue?: (v: number) => string;
 }) {
+  const { t } = useI18n();
   if (points.length === 0) return null;
-  const max = Math.max(1, ...points.map((p) => p.value));
+
+  const max = niceMax(Math.max(...points.map((p) => p.value)));
+  const peak = points.reduce((a, b) => (b.value > a.value ? b : a), points[0]!);
+  const mid = max / 2;
+  const plotH = Math.max(96, height - 28);
 
   return (
     <figure className={cn("m-0", className)} role="img" aria-label={ariaLabel}>
-      <div
-        className="flex items-end gap-1.5 border-2 border-border bg-paper-0 px-2 pt-2"
-        style={{ height }}
-      >
-        {points.map((p) => {
-          const ratio = p.value / max;
-          return (
-            <div
-              key={p.label}
-              className="group relative flex min-w-0 flex-1 flex-col justify-end self-stretch"
-              title={`${p.label}: ${formatValue(p.value)}`}
-            >
-              <div
-                className="w-full border-2 border-b-0 border-border transition-[background-color] duration-150 group-hover:bg-ink"
-                style={{
-                  height: `${Math.max(ratio * 100, p.value > 0 ? 6 : 2)}%`,
-                  backgroundColor: p.value > 0 ? barFill : "var(--paper-0)",
-                }}
-              />
-            </div>
-          );
-        })}
+      <div className="flex gap-2">
+        <div
+          className="flex w-9 shrink-0 flex-col justify-between py-0.5 text-right text-[10px] tabular-nums leading-none text-ink-faint"
+          style={{ height: plotH }}
+          aria-hidden
+        >
+          <span>{formatValue(max)}</span>
+          <span>{formatValue(mid)}</span>
+          <span>0</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div
+            className="flex items-end gap-1.5 border-2 border-border bg-paper-0 px-2 pt-4"
+            style={{ height: plotH }}
+          >
+            {points.map((p) => {
+              const ratio = p.value / max;
+              const isPeak = p === peak && p.value > 0;
+              return (
+                <div
+                  key={p.label}
+                  className="group relative flex min-w-0 flex-1 flex-col justify-end self-stretch"
+                  title={`${p.label}: ${formatValue(p.value)}`}
+                >
+                  {isPeak ? (
+                    <span className="pointer-events-none absolute -top-0.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold tabular-nums text-ink">
+                      {formatValue(p.value)}
+                    </span>
+                  ) : null}
+                  <div
+                    className={cn(
+                      "w-full border-2 border-b-0 border-border transition-[background-color] duration-150",
+                      "group-hover:bg-ink",
+                    )}
+                    style={{
+                      height: `${Math.max(ratio * 100, p.value > 0 ? 8 : 2)}%`,
+                      backgroundColor: p.value > 0 ? barFill : "var(--paper-0)",
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div
+            className="mt-1.5 grid text-[10px] tabular-nums text-ink-faint"
+            style={{
+              gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {points.map((p) => (
+              <span key={p.label} className="truncate text-center">
+                {p.label}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-ink-faint">
-        <span>{points[0]?.label}</span>
-        <span>{points[points.length - 1]?.label}</span>
-      </div>
+      {peak.value > 0 ? (
+        <figcaption className="mt-2 text-[11px] text-ink-muted">
+          {t("charts.peak", { value: formatValue(peak.value) })}
+          <span className="text-ink-faint"> · {peak.label}</span>
+        </figcaption>
+      ) : null}
     </figure>
   );
 }
@@ -176,7 +250,7 @@ export function StatusStackBar({
 
   return (
     <figure className={cn("m-0", className)} role="img" aria-label={ariaLabel}>
-      <div className="flex h-7 w-full overflow-hidden border-2 border-border bg-paper-0">
+      <div className="flex h-6 w-full overflow-hidden border-2 border-border bg-paper-0">
         {total === 0 ? (
           <div className="flex w-full items-center justify-center text-[11px] text-ink-faint">
             {t("charts.noRequests")}
