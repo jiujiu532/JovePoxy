@@ -18,9 +18,10 @@ function variantClass(variant: ButtonVariant): string {
     case "primary":
       return "bg-accent text-accent-fg border-2 border-border shadow-[var(--shadow-hard)] hover:bg-accent-hover";
     case "secondary":
-      return "bg-paper-1 text-ink border-2 border-border shadow-[var(--shadow-hard)] hover:bg-accent-yellow hover:text-black";
+      /* paper-0 在 dark 卡片(paper-1)上可读；light 仍为白底硬边 */
+      return "bg-paper-0 text-ink border-2 border-border shadow-[var(--shadow-hard)] hover:bg-accent-yellow hover:text-black";
     case "ghost":
-      return "bg-transparent text-ink border-2 border-transparent hover:border-border hover:bg-paper-1";
+      return "bg-transparent text-ink border-2 border-transparent hover:border-border hover:bg-paper-2";
     case "danger":
       return "bg-status-error text-accent-fg border-2 border-border shadow-[var(--shadow-hard)] hover:opacity-90";
     default:

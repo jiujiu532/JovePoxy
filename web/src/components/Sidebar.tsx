@@ -347,7 +347,7 @@ export function Sidebar({ open, onClose, onLogout }: SidebarProps) {
                 "border-2 border-border bg-paper-0 text-ink",
                 "shadow-[2px_2px_0_var(--border)]",
                 "transition-[transform,background-color] duration-150",
-                "hover:bg-paper-1 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                "hover:bg-paper-2 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
               )}
               aria-label={collapsed ? t("shell.expand") : t("shell.collapse")}

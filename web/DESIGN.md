@@ -23,25 +23,25 @@ Reading this as: **运维/技术操作者的产品管理台重设计**（非营�
 
 ### 2.1 结构色 + 强调色板
 
-| 角色 | Token | Light | Dark | 用途 |
+| 角色 | Token | Light | Dark（Ink Console） | 用途 |
 |------|-------|-------|------|------|
-| App bg | `--paper-0` | `#ffffff` | `#0a0a0a` | 应用背景 |
-| Surface | `--paper-1` | `#ffffff` | `#111111` | 卡片、面板 |
-| Elevated | `--paper-2` | `#ffffff` | `#1a1a1a` | 模态、弹出层 |
-| Ink primary | `--ink` | `#000000` | `#f5f5f5` | 标题、正文 |
-| Ink muted | `--ink-muted` | `#1a1a1a` | `#e8e8e8` | 次级标签（高对比，禁止柔灰） |
-| Ink faint | `--ink-faint` | `#333333` | `#cccccc` | 占位、禁用 |
-| Border | `--border` | `#000000` | `#ffffff` | 硬边框 |
-| Border strong | `--border-strong` | `#000000` | `#e5e5e5` | 强调/选中边框 |
-| Accent primary | `--accent` | `#ff6b6b` | `#ff6b6b` | 主 CTA（Playful Red） |
-| Accent hover | `--accent-hover` | `#e85a5a` | `#e85a5a` | 更深纯色，无渐变 |
+| App bg | `--paper-0` | `#ffffff` | `#121212` | 应用背景（canvas） |
+| Surface | `--paper-1` | `#ffffff` | `#1e1e1e` | 卡片、面板、顶栏/侧栏 |
+| Elevated | `--paper-2` | `#ffffff` | `#2c2c2c` | 模态、弹出层、hover 抬升 |
+| Ink primary | `--ink` | `#000000` | `#fafafa` | 标题、正文 |
+| Ink muted | `--ink-muted` | `#1a1a1a` | `#d0d0d0` | 次级标签（高对比，禁止泥灰） |
+| Ink faint | `--ink-faint` | `#333333` | `#9a9a9a` | 占位、分组标题 |
+| Border | `--border` | `#000000` | `#e5e5e5` | 硬边框（奶油白，非刺眼纯白） |
+| Border strong | `--border-strong` | `#000000` | `#f5f5f5` | 强调/选中边框 |
+| Accent primary | `--accent` | `#ff6b6b` | `#ff7a7a` | 主 CTA（Playful Red，dark 略提亮） |
+| Accent hover | `--accent-hover` | `#e85a5a` | `#ff9191` | dark 用更亮纯色反馈 |
 | Accent fg | `--accent-fg` | `#000000` | `#000000` | 强调色上的文字（主 CTA 黑字） |
-| Accent soft | `--accent-soft` | `#ffe0e0` | `#222222` | 浅纯色块（禁止 color-mix 模糊 tint） |
-| Success | `--status-success` | `#4ecdc4` | `#4ecdc4` | 健康 / teal 倾向 |
-| Warning | `--status-warning` | `#ffe66d` | `#ffe66d` | 警告 / 黄 |
-| Error | `--status-error` | `#ff6b6b` | `#ff6b6b` | 错误 / playful red |
-| Info | `--status-info` | `#95e1d3` | `#95e1d3` | 信息 / mint |
-| Focus ring | `--focus-ring` | `#ffe66d` | `#ffe66d` | 键盘焦点（黄，高对比） |
+| Accent soft | `--accent-soft` | `#ffe0e0` | `#3f1518` | 浅/深纯色块（禁止灰 soft、禁止 color-mix） |
+| Success | `--status-success` | `#4ecdc4` | `#5ad9d0` | 健康 / teal 倾向 |
+| Warning | `--status-warning` | `#ffe66d` | `#ffe97a` | 警告 / 黄 |
+| Error | `--status-error` | `#ff6b6b` | `#ff7a7a` | 错误 / playful red |
+| Info | `--status-info` | `#95e1d3` | `#a8eadc` | 信息 / mint |
+| Focus ring | `--focus-ring` | `#ffe66d` | `#ffe97a` | 键盘焦点（黄，高对比） |
 
 ### 2.2 五色强调（Playful Accents）
 
@@ -58,32 +58,32 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 ### 2.3 固定色值（source of truth）
 
 ```
---paper-0:          #ffffff / #0a0a0a
---paper-1:          #ffffff / #111111
---paper-2:          #ffffff / #1a1a1a
---ink:              #000000 / #f5f5f5
---ink-muted:        #1a1a1a / #e8e8e8
---ink-faint:        #333333 / #cccccc
---border:           #000000 / #ffffff
---border-strong:    #000000 / #e5e5e5
---accent:           #ff6b6b / #ff6b6b
---accent-hover:     #e85a5a / #e85a5a
+--paper-0:          #ffffff / #121212
+--paper-1:          #ffffff / #1e1e1e
+--paper-2:          #ffffff / #2c2c2c
+--ink:              #000000 / #fafafa
+--ink-muted:        #1a1a1a / #d0d0d0
+--ink-faint:        #333333 / #9a9a9a
+--border:           #000000 / #e5e5e5
+--border-strong:    #000000 / #f5f5f5
+--accent:           #ff6b6b / #ff7a7a
+--accent-hover:     #e85a5a / #ff9191
 --accent-fg:        #000000 / #000000
---accent-soft:      #ffe0e0 / #222222
---accent-teal:      #4ecdc4
---accent-yellow:    #ffe66d
---accent-mint:      #95e1d3
---accent-coral:     #f38181
---status-success:   #4ecdc4
---status-warning:   #ffe66d
---status-error:     #ff6b6b
---status-info:      #95e1d3
---focus-ring:       #ffe66d
---shadow-hard:      4px 4px 0 #000000 / 4px 4px 0 #ffffff
+--accent-soft:      #ffe0e0 / #3f1518
+--accent-teal:      #4ecdc4 / #5ad9d0
+--accent-yellow:    #ffe66d / #ffe97a
+--accent-mint:      #95e1d3 / #a8eadc
+--accent-coral:     #f38181 / #ff8f8f
+--status-success:   #4ecdc4 / #5ad9d0
+--status-warning:   #ffe66d / #ffe97a
+--status-error:     #ff6b6b / #ff7a7a
+--status-info:      #95e1d3 / #a8eadc
+--focus-ring:       #ffe66d / #ffe97a
+--shadow-hard:      4px 4px 0 #000000 / 4px 4px 0 #e5e5e5
 --shadow-paper:     同 --shadow-hard（兼容旧类名）
---shadow-accent-red:    4px 4px 0 #ff6b6b
---shadow-accent-teal:   4px 4px 0 #4ecdc4
---shadow-accent-yellow: 4px 4px 0 #ffe66d
+--shadow-accent-red:    4px 4px 0 #ff6b6b / #ff7a7a
+--shadow-accent-teal:   4px 4px 0 #4ecdc4 / #5ad9d0
+--shadow-accent-yellow: 4px 4px 0 #ffe66d / #ffe97a
 --ease-toy-spring:  cubic-bezier(0.34, 1.56, 0.64, 1)
 ```
 
@@ -91,7 +91,9 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 
 - 黑/白为结构色；五强调色为交互与装饰。
 - 禁止柔和灰色正文/边框；次级文字必须高对比深色/浅色。
-- 禁止渐变、禁止 `color-mix` 做「模糊 soft tint」；soft 仅用纯色块（如 `#ffe0e0` / `#222`）。
+- 禁止渐变、禁止 `color-mix` 做「模糊 soft tint」；soft 仅用纯色块（如 light `#ffe0e0` / dark `#3f1518` 深红块，**禁止** `#222` 死灰 soft）。
+- Dark 必须保留 **paper-0 < paper-1 < paper-2** 三层 elevation；禁止把三层都压成近纯黑。
+- Dark 硬边/硬阴影用奶油白 `#e5e5e5`，避免纯 `#ffffff` chalk outline。
 - 状态徽章：硬黑/白边 + 纯色填充，不靠圆角区分。
 - 新增 hex 必须先扩展本表再使用。
 
@@ -172,13 +174,13 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 
 | Token | Light | Dark |
 |-------|-------|------|
-| `--shadow-hard` / `--shadow-paper` | `4px 4px 0 #000` | `4px 4px 0 #fff` |
-| `--shadow-accent-red` | `4px 4px 0 #ff6b6b` | 同左（accent 卡可选） |
-| `--shadow-accent-teal` | `4px 4px 0 #4ecdc4` | 同左 |
-| `--shadow-accent-yellow` | `4px 4px 0 #ffe66d` | 同左 |
+| `--shadow-hard` / `--shadow-paper` | `4px 4px 0 #000` | `4px 4px 0 #e5e5e5` |
+| `--shadow-accent-red` | `4px 4px 0 #ff6b6b` | `4px 4px 0 #ff7a7a` |
+| `--shadow-accent-teal` | `4px 4px 0 #4ecdc4` | `4px 4px 0 #5ad9d0` |
+| `--shadow-accent-yellow` | `4px 4px 0 #ffe66d` | `4px 4px 0 #ffe97a` |
 
 - **禁止**模糊阴影、`backdrop-blur`、多层 soft elevation。
-- Dark 默认硬阴影用白 offset；彩色 shadow 仅 accent-heavy 点缀。
+- Dark 默认硬阴影用奶油白 offset（对齐 `--border`）；彩色 shadow 仅 accent-heavy 点缀。
 - 已废弃 kraft **Grain**：`.paper-grain` 空规则保留以免旧引用报错，视觉无效果。
 
 ---
