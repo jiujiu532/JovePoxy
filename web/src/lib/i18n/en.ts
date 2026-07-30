@@ -222,6 +222,7 @@ export const en: Record<MessageKey, string> = {
   "overview.zenPool.description": "Enabled, non-cooling keys are eligible for weighted pick; general failures cool for 60s, 401 for 5 minutes.",
   "overview.zenPool.healthy": "Healthy",
   "overview.zenPool.cooled": "Cooling",
+  "overview.zenPool.benched": "Benched",
   "overview.zenPool.disabled": "Disabled",
   "overview.zenPool.total": "Total {n}",
   "overview.zenPool.empty": "No upstream keys yet",

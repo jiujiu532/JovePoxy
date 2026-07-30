@@ -221,6 +221,7 @@ export const zh = {
   "overview.zenPool.description": "启用且未冷却的 key 可被加权选中；失败默认冷却 60 秒，401 冷却 5 分钟。",
   "overview.zenPool.healthy": "健康",
   "overview.zenPool.cooled": "冷却中",
+  "overview.zenPool.benched": "隔离中",
   "overview.zenPool.disabled": "已禁用",
   "overview.zenPool.total": "合计 {n}",
   "overview.zenPool.empty": "尚未添加上游密钥",

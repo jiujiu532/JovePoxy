@@ -8,7 +8,6 @@ import {
   Pulse,
   Stack,
   WarningCircle,
-  Heartbeat,
   Key,
   Globe,
   ChartLine,
@@ -156,7 +155,6 @@ function OpsKpisPanel({
   return (
     <SectionPanel
       title={t("overview.opsKpis.title")}
-      description={t("overview.opsKpis.description")}
       icon={ChartLineUp}
       iconTone="teal"
       actions={
@@ -191,12 +189,7 @@ function OpsKpisPanel({
       }
     >
       {requests === 0 ? (
-        <EmptyState
-          compact
-          icon={ChartLineUp}
-          title={t("overview.opsKpis.noData")}
-          description={t("overview.opsKpis.description")}
-        />
+        <EmptyState compact icon={ChartLineUp} title={t("overview.opsKpis.noData")} />
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -258,19 +251,6 @@ function OpsKpisPanel({
                 },
               ]}
             />
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {[
-                { label: t("overview.opsKpis.status2xx"), value: s2xx },
-                { label: t("overview.opsKpis.status429"), value: s429 },
-                { label: t("overview.opsKpis.status5xx"), value: s5xx },
-              ].map((item) => (
-                <p key={item.label} className="text-[12px] text-ink-muted">
-                  <span className="font-semibold text-ink">{item.label}</span>
-                  {": "}
-                  <span className="tabular-nums">{item.value}</span>
-                </p>
-              ))}
-            </div>
           </div>
         </>
       )}
@@ -288,9 +268,12 @@ function ZenPoolCard({
   readonly onOpen: () => void;
 }) {
   const total = pool?.total ?? 0;
+  if (total === 0) return null;
+
   const healthy = pool?.healthy ?? 0;
   const cooled = pool?.cooled ?? 0;
   const disabled = pool?.disabled ?? 0;
+  const benched = pool?.benched ?? 0;
   const by = pool?.by_provider;
   const oc = by?.["opencode"];
   const ol = by?.["ollama"];
@@ -298,7 +281,6 @@ function ZenPoolCard({
   return (
     <SectionPanel
       title={t("overview.zenPool.title")}
-      description={t("overview.zenPool.description")}
       icon={Coins}
       iconTone="yellow"
       actions={
@@ -307,110 +289,44 @@ function ZenPoolCard({
         </Button>
       }
     >
-      {total === 0 ? (
-        <EmptyState
-          compact
-          icon={Coins}
-          title={t("overview.zenPool.empty")}
-          description={t("overview.zenPool.description")}
-          action={
-            <Button variant="secondary" size="sm" onClick={onOpen}>
-              {t("overview.zenPool.openPool")}
-            </Button>
-          }
-        />
-      ) : (
-        <>
-          <StatusStackBar
-            ariaLabel={t("overview.zenPool.title")}
-            segments={[
-              {
-                label: t("overview.zenPool.healthy"),
-                value: healthy,
-                color: "var(--accent-teal)",
-              },
-              {
-                label: t("overview.zenPool.cooled"),
-                value: cooled,
-                color: "var(--accent-yellow)",
-              },
-              {
-                label: t("overview.zenPool.disabled"),
-                value: disabled,
-                color: "var(--border)",
-              },
-            ]}
-          />
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: t("overview.zenPool.healthy"),
-                value: healthy,
-                tone: "bg-accent-mint",
-              },
-              {
-                label: t("overview.zenPool.cooled"),
-                value: cooled,
-                tone: "bg-accent-yellow",
-              },
-              {
-                label: t("overview.zenPool.disabled"),
-                value: disabled,
-                tone: "bg-paper-2",
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
-              >
-                <span
-                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
-                  aria-hidden
-                />
-                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
-                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-[12px] text-ink-faint">
-            {t("overview.zenPool.total", { n: total })}
-          </p>
-          {oc || ol ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {oc ? (
-                <div className="border-2 border-border bg-paper-0 px-3 py-2 shadow-[2px_2px_0_var(--border)]">
-                  <p className="text-[12px] font-semibold text-ink">
-                    {t("overview.zenPool.opencode")}
-                  </p>
-                  <p className="mt-1 text-[12px] text-ink-muted">
-                    {t("overview.zenPool.providerLine", {
-                      healthy: oc.healthy,
-                      total: oc.total,
-                      cooled: oc.cooled,
-                    })}
-                  </p>
-                </div>
-              ) : null}
-              {ol ? (
-                <div className="border-2 border-border bg-paper-0 px-3 py-2 shadow-[2px_2px_0_var(--border)]">
-                  <p className="text-[12px] font-semibold text-ink">
-                    {t("overview.zenPool.ollama")}
-                  </p>
-                  <p className="mt-1 text-[12px] text-ink-muted">
-                    {t("overview.zenPool.providerLine", {
-                      healthy: ol.healthy,
-                      total: ol.total,
-                      cooled: ol.cooled,
-                    })}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </>
-      )}
+      <StatusStackBar
+        ariaLabel={t("overview.zenPool.title")}
+        segments={[
+          {
+            label: t("overview.zenPool.healthy"),
+            value: healthy,
+            color: "var(--accent-teal)",
+          },
+          {
+            label: t("overview.zenPool.cooled"),
+            value: cooled,
+            color: "var(--accent-yellow)",
+          },
+          {
+            label: t("overview.zenPool.benched"),
+            value: benched,
+            color: "var(--accent)",
+          },
+          {
+            label: t("overview.zenPool.disabled"),
+            value: disabled,
+            color: "var(--border)",
+          },
+        ]}
+      />
+      <p className="mt-2 text-[12px] text-ink-muted">
+        {t("overview.zenPool.total", { n: total })}
+        {oc || ol ? (
+          <>
+            {oc
+              ? ` · ${t("overview.zenPool.opencode")} ${oc.healthy}/${oc.total}`
+              : null}
+            {ol
+              ? ` · ${t("overview.zenPool.ollama")} ${ol.healthy}/${ol.total}`
+              : null}
+          </>
+        ) : null}
+      </p>
     </SectionPanel>
   );
 }
@@ -529,12 +445,8 @@ export function OverviewPage() {
 
   if (!data) return null;
 
-  const total2xx = metrics?.status_2xx ?? 0;
   const total429 = metrics?.status_429 ?? 0;
   const total5xx = metrics?.status_5xx ?? 0;
-  const totalReq = metrics?.total_requests ?? data.requests_total;
-  const successRate =
-    totalReq > 0 ? `${((total2xx / totalReq) * 100).toFixed(1)}%` : "-";
   const modelMaxRequests = Math.max(1, ...data.by_model.map((m) => m.requests));
 
   const cards = [
@@ -706,107 +618,54 @@ export function OverviewPage() {
         </SectionPanel>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-        <SectionPanel
-          title={t("overview.health.title")}
-          description={t("overview.health.description")}
-          icon={Heartbeat}
-          iconTone="accent"
-          actions={<Badge kind="healthy">{t("overview.health.live")}</Badge>}
-        >
-          <StatusStackBar
-            ariaLabel={t("overview.health.ariaLabel")}
-            segments={[
-              { label: "2xx", value: total2xx, color: "var(--accent-teal)" },
-              { label: "429", value: total429, color: "var(--accent-yellow)" },
-              { label: "5xx", value: total5xx, color: "var(--accent)" },
-            ]}
-          />
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: t("overview.health.successRate"),
-                value: successRate,
-                tone: "bg-accent-mint",
-              },
-              {
-                label: t("overview.health.streamRequests"),
-                value: metrics?.stream_requests ?? 0,
-                tone: "bg-accent-yellow",
-              },
-              {
-                label: t("overview.health.status5xx"),
-                value: total5xx,
-                tone: "bg-accent-soft",
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="relative overflow-hidden border-2 border-border bg-paper-0 px-3 py-3 shadow-[2px_2px_0_var(--border)]"
+      <SectionPanel
+        title={t("overview.quickActions.title")}
+        icon={Path}
+        iconTone="yellow"
+      >
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {quickActions.map((item) => {
+            const IconComp = item.icon;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "group flex items-center gap-3 border-2 border-border bg-paper-0 px-3 py-3",
+                  "shadow-[2px_2px_0_var(--border)]",
+                  "transition-[transform,background-color,box-shadow] duration-150",
+                  "hover:-translate-x-px hover:-translate-y-px hover:bg-accent-soft hover:shadow-[3px_3px_0_var(--border)]",
+                  "active:translate-x-px active:translate-y-px active:shadow-none",
+                )}
               >
                 <span
-                  className={cn("absolute inset-y-0 left-0 w-1", item.tone)}
-                  aria-hidden
-                />
-                <p className="pl-2 text-caption text-ink-muted">{item.label}</p>
-                <p className="mt-1.5 pl-2 text-xl font-semibold tabular-nums text-ink">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </SectionPanel>
-
-        <SectionPanel
-          title={t("overview.quickActions.title")}
-          description={t("overview.quickActions.description")}
-          icon={Path}
-          iconTone="yellow"
-        >
-          <div className="flex flex-col gap-2.5">
-            {quickActions.map((item) => {
-              const IconComp = item.icon;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
                   className={cn(
-                    "group flex items-center gap-3 border-2 border-border bg-paper-0 px-3 py-3",
+                    "inline-flex h-10 w-10 shrink-0 items-center justify-center border-2 border-border",
                     "shadow-[2px_2px_0_var(--border)]",
-                    "transition-[transform,background-color,box-shadow] duration-150",
-                    "hover:-translate-x-px hover:-translate-y-px hover:bg-accent-soft hover:shadow-[3px_3px_0_var(--border)]",
-                    "active:translate-x-px active:translate-y-px active:shadow-none",
+                    item.tone,
                   )}
+                  aria-hidden
                 >
-                  <span
-                    className={cn(
-                      "inline-flex h-10 w-10 shrink-0 items-center justify-center border-2 border-border",
-                      "shadow-[2px_2px_0_var(--border)]",
-                      item.tone,
-                    )}
+                  <IconComp size={18} weight="duotone" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-ink">{item.label}</p>
+                  <p className="mt-0.5 text-[12px] text-ink-muted">{item.desc}</p>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint transition-colors group-hover:text-ink">
+                  {t("overview.quickActions.open")}
+                  <ArrowRight
+                    size={14}
+                    weight="bold"
+                    className="transition-transform group-hover:translate-x-0.5"
                     aria-hidden
-                  >
-                    <IconComp size={18} weight="duotone" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-ink">{item.label}</p>
-                    <p className="mt-0.5 text-[12px] text-ink-muted">{item.desc}</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint transition-colors group-hover:text-ink">
-                    {t("overview.quickActions.open")}
-                    <ArrowRight
-                      size={14}
-                      weight="bold"
-                      className="transition-transform group-hover:translate-x-0.5"
-                      aria-hidden
-                    />
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </SectionPanel>
-      </div>
+                  />
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </SectionPanel>
 
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
