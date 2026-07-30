@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 D · Ticket Board · 密钥池状态看板</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --ink: #111111;
+      --muted: #555555;
+      --line: #111111;
+      --coral: #ff6b6b;
+      --teal: #4ecdc4;
+      --yellow: #ffe66d;
+      --mint: #95e1d3;
+      --rose: #f38181;
+      --gray: #c8c8c8;
+      --soft: #f6f6f6;
+      --shadow: 4px 4px 0 #111111;
+      --radius: 0;
+      --gap: 12px;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.4;
+      min-height: 100vh;
+    }
+
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #111; }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 16px 48px;
+    }
+
+    /* Prototype chrome */
+    .proto-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+      background: var(--yellow);
+    }
+    .proto-bar .tag {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--ink);
+      color: #fff;
+      padding: 4px 8px;
+      border: 2px solid var(--line);
+    }
+    .proto-bar p {
+      margin: 0;
+      font-size: 13px;
+      flex: 1 1 200px;
+    }
+    .toggle-group {
+      display: inline-flex;
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+    .toggle-group button {
+      border: 0;
+      border-right: 2px solid var(--line);
+      background: #fff;
+      padding: 8px 12px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .toggle-group button:last-child { border-right: 0; }
+    .toggle-group button.is-on {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .panel {
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+      background: #fff;
+      padding: 14px;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 12px;
+    }
+    .panel-title h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .panel-title .hint {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    /* Toolbar: tabs + search + add */
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 720px) {
+      .toolbar { grid-template-columns: 1fr; }
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tab {
+      border: 2px solid var(--line);
+      background: #fff;
+      padding: 7px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 2px 2px 0 #111;
+    }
+    .tab.is-active {
+      background: var(--mint);
+    }
+    .tab:hover { background: var(--soft); }
+    .tab.is-active:hover { background: var(--mint); }
+
+    .search {
+      display: flex;
+      align-items: center;
+      border: 2px solid var(--line);
+      background: #fff;
+      box-shadow: 2px 2px 0 #111;
+      min-height: 36px;
+      padding: 0 10px;
+      gap: 8px;
+    }
+    .search span {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+    .search input {
+      border: 0;
+      outline: none;
+      width: 100%;
+      min-width: 0;
+      background: transparent;
+      font-size: 13px;
+    }
+    .search input::placeholder { color: #999; }
+
+    .btn {
+      border: 2px solid var(--line);
+      background: var(--coral);
+      color: var(--ink);
+      font-weight: 800;
+      font-size: 13px;
+      padding: 8px 14px;
+      box-shadow: var(--shadow);
+      white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(0.98); }
+    .btn.ghost {
+      background: #fff;
+      box-shadow: 2px 2px 0 #111;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .btn.ghost.strong {
+      background: var(--teal);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      padding: 8px 12px;
+    }
+    .btn.tiny {
+      padding: 4px 8px;
+      font-size: 11px;
+      box-shadow: 2px 2px 0 #111;
+    }
+
+    /* Board */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--gap);
+      min-height: 360px;
+    }
+    @media (max-width: 860px) {
+      .board { grid-template-columns: 1fr; }
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border: 2px solid var(--line);
+      background: var(--soft);
+      box-shadow: 2px 2px 0 #111;
+    }
+
+    .col-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 10px 9px;
+      border-bottom: 2px solid var(--line);
+      background: #fff;
+    }
+    .col-head .title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--line);
+      flex: 0 0 auto;
+    }
+    .col--active .swatch { background: var(--teal); }
+    .col--cooldown .swatch { background: var(--yellow); }
+    .col--disabled .swatch { background: var(--rose); }
+
+    .badge {
+      min-width: 28px;
+      height: 24px;
+      padding: 0 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--line);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      background: #fff;
+    }
+    .col--active .badge { background: var(--teal); }
+    .col--cooldown .badge { background: var(--yellow); }
+    .col--disabled .badge { background: var(--gray); color: #333; }
+
+    .col-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      min-height: 280px;
+    }
+
+    /* Empty drop zone */
+    .dropzone {
+      flex: 1;
+      min-height: 240px;
+      border: 2px dashed var(--line);
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 8px,
+          rgba(17, 17, 17, 0.03) 8px,
+          rgba(17, 17, 17, 0.03) 16px
+        );
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      padding: 16px 12px;
+    }
+    .dropzone .empty-label {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+    .dropzone .empty-sub {
+      font-size: 11px;
+      color: #888;
+      max-width: 16ch;
+    }
+    .dropzone.is-primary {
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          rgba(78, 205, 196, 0.08),
+          rgba(78, 205, 196, 0.08) 8px,
+          rgba(78, 205, 196, 0.14) 8px,
+          rgba(78, 205, 196, 0.14) 16px
+        );
+    }
+
+    /* Ticket cards */
+    .ticket {
+      border: 2px solid var(--line);
+      background: #fff;
+      box-shadow: 3px 3px 0 #111;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-rows: auto auto;
+      gap: 4px 10px;
+      align-items: center;
+      transition: transform 0.08s ease;
+    }
+    .ticket:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 4px 4px 0 #111;
+    }
+    .mono-gram {
+      grid-row: 1 / span 2;
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: -0.02em;
+      background: var(--mint);
+    }
+    .col--cooldown .mono-gram { background: var(--yellow); }
+    .col--disabled .mono-gram { background: var(--gray); }
+    .ticket .label {
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .weight {
+      border: 2px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 6px;
+      background: var(--yellow);
+      justify-self: end;
+    }
+    .prefix {
+      grid-column: 2 / span 2;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .footnote {
+      margin: 14px 0 0;
+      padding: 10px 12px;
+      border: 2px solid var(--line);
+      background: #fff;
+      box-shadow: 2px 2px 0 #111;
+      font-size: 12px;
+      color: #333;
+      line-height: 1.55;
+    }
+    .footnote strong { font-weight: 800; }
+
+    /* Quota two-col sketch */
+    .section-gap { margin-top: 28px; }
+
+    details.sketch {
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+    details.sketch > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 800;
+      font-size: 14px;
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--mint);
+    }
+    details.sketch > summary::-webkit-details-marker { display: none; }
+    details.sketch[open] > summary {
+      border-bottom-color: var(--line);
+    }
+    details.sketch > summary .chev {
+      font-family: var(--mono);
+      font-size: 12px;
+      border: 2px solid var(--line);
+      background: #fff;
+      padding: 2px 8px;
+    }
+    .sketch-body {
+      padding: 14px;
+    }
+    .sketch-note {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .board-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--gap);
+      min-height: 220px;
+    }
+    @media (max-width: 640px) {
+      .board-2 { grid-template-columns: 1fr; }
+    }
+    .col--ok .swatch { background: var(--teal); }
+    .col--ok .badge { background: var(--teal); }
+    .col--fail .swatch { background: var(--coral); }
+    .col--fail .badge { background: var(--coral); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="proto-bar">
+      <span class="tag">方案 D</span>
+      <p>Ticket Board 原型 · 不改生产 React · 纯本地 HTML</p>
+      <div class="toggle-group" role="group" aria-label="预览切换">
+        <button type="button" id="btn-empty" class="is-on">预览：空板</button>
+        <button type="button" id="btn-data">预览：有数据</button>
+      </div>
+    </div>
+
+    <section class="panel" aria-label="密钥池 Ticket Board">
+      <div class="panel-title">
+        <h1>密钥池</h1>
+        <span class="hint">状态看板 · 列头 count 即指标</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="密钥类型">
+          <button type="button" class="tab is-active" role="tab" aria-selected="true">Zen Key</button>
+          <button type="button" class="tab" role="tab" aria-selected="false">代理出口</button>
+          <button type="button" class="tab" role="tab" aria-selected="false">本地 Key</button>
+        </div>
+        <label class="search">
+          <span>搜</span>
+          <input type="search" placeholder="标签 / 前缀 / 备注" aria-label="搜索密钥" />
+        </label>
+        <button type="button" class="btn">+ 添加密钥</button>
+      </div>
+
+      <!-- EMPTY BOARD -->
+      <div id="view-empty" class="board" aria-label="空板状态">
+        <div class="col col--active">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>启用</span>
+            <span class="badge">0</span>
+          </div>
+          <div class="col-body">
+            <div class="dropzone is-primary">
+              <div class="empty-label">暂无</div>
+              <div class="empty-sub">空 ticket 槽 · 结构仍在</div>
+              <button type="button" class="btn ghost strong">添加</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="col col--cooldown">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>冷却</span>
+            <span class="badge">0</span>
+          </div>
+          <div class="col-body">
+            <div class="dropzone">
+              <div class="empty-label">暂无</div>
+              <div class="empty-sub">限流 / 失败后停放</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col col--disabled">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>禁用</span>
+            <span class="badge">0</span>
+          </div>
+          <div class="col-body">
+            <div class="dropzone">
+              <div class="empty-label">暂无</div>
+              <div class="empty-sub">人工下线 · 不参与调度</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DATA BOARD -->
+      <div id="view-data" class="board hidden" aria-label="有数据状态">
+        <div class="col col--active">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>启用</span>
+            <span class="badge">3</span>
+          </div>
+          <div class="col-body">
+            <article class="ticket">
+              <div class="mono-gram">ZP</div>
+              <div class="label">zen-prod-a</div>
+              <span class="weight">w:3</span>
+              <div class="prefix">sk-zen-7f2a…c91e</div>
+            </article>
+            <article class="ticket">
+              <div class="mono-gram">ZB</div>
+              <div class="label">zen-backup</div>
+              <span class="weight">w:2</span>
+              <div class="prefix">sk-zen-11b0…44d2</div>
+            </article>
+            <article class="ticket">
+              <div class="mono-gram">JP</div>
+              <div class="label">jp-edge-01</div>
+              <span class="weight">w:1</span>
+              <div class="prefix">sk-zen-9ac3…e017</div>
+            </article>
+          </div>
+        </div>
+
+        <div class="col col--cooldown">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>冷却</span>
+            <span class="badge">2</span>
+          </div>
+          <div class="col-body">
+            <article class="ticket">
+              <div class="mono-gram">EU</div>
+              <div class="label">eu-burst</div>
+              <span class="weight">w:2</span>
+              <div class="prefix">sk-zen-55d8…ab12 · 冷却 4m</div>
+            </article>
+            <article class="ticket">
+              <div class="mono-gram">SG</div>
+              <div class="label">sg-relay</div>
+              <span class="weight">w:1</span>
+              <div class="prefix">sk-zen-0e41…99ff · 冷却 1m</div>
+            </article>
+          </div>
+        </div>
+
+        <div class="col col--disabled">
+          <div class="col-head">
+            <span class="title"><i class="swatch" aria-hidden="true"></i>禁用</span>
+            <span class="badge">1</span>
+          </div>
+          <div class="col-body">
+            <article class="ticket">
+              <div class="mono-gram">OLD</div>
+              <div class="label">legacy-key</div>
+              <span class="weight">w:0</span>
+              <div class="prefix">sk-zen-dead…0000 · 手动禁用</div>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <p class="footnote">
+        <strong>本方案适合「状态比标签更重要」的运维扫视。</strong>
+        指标落在列头 badge，不再顶栏重复 KPI。空态时每列仍是虚线 ticket 槽，整体满、有结构感；有数据时 ticket 落入对应列。
+        额度页可改成「正常 / 失败」两列（见下方草图）。
+      </p>
+    </section>
+
+    <section class="section-gap">
+      <details class="sketch" open>
+        <summary>
+          <span>额度页两列板 · 草图（正常 0 / 失败 0 空态仍有板框）</span>
+          <span class="chev">折叠</span>
+        </summary>
+        <div class="sketch-body">
+          <p class="sketch-note">
+            同一 Ticket Board 语言：两列 grid、列头色块 + count、空列为虚线 drop zone。
+            不放顶栏重复数字。
+          </p>
+
+          <div class="toolbar" style="margin-bottom: 12px;">
+            <div class="tabs">
+              <button type="button" class="tab is-active">OpenCode 额度</button>
+              <button type="button" class="tab">Ollama</button>
+            </div>
+            <label class="search">
+              <span>搜</span>
+              <input type="search" placeholder="账号 / 邮箱" aria-label="搜索账号" />
+            </label>
+            <button type="button" class="btn">+ 添加账号</button>
+          </div>
+
+          <div class="board-2" aria-label="额度两列空板">
+            <div class="col col--ok">
+              <div class="col-head">
+                <span class="title"><i class="swatch" aria-hidden="true"></i>正常</span>
+                <span class="badge">0</span>
+              </div>
+              <div class="col-body">
+                <div class="dropzone is-primary">
+                  <div class="empty-label">暂无</div>
+                  <div class="empty-sub">抓取成功的账号落此列</div>
+                  <button type="button" class="btn ghost strong">添加</button>
+                </div>
+              </div>
+            </div>
+            <div class="col col--fail">
+              <div class="col-head">
+                <span class="title"><i class="swatch" aria-hidden="true"></i>失败</span>
+                <span class="badge">0</span>
+              </div>
+              <div class="col-body">
+                <div class="dropzone">
+                  <div class="empty-label">暂无</div>
+                  <div class="empty-sub">Cookie 失效 / 抓取错误</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var btnEmpty = document.getElementById("btn-empty");
+      var btnData = document.getElementById("btn-data");
+      var viewEmpty = document.getElementById("view-empty");
+      var viewData = document.getElementById("view-data");
+
+      function show(mode) {
+        var isEmpty = mode === "empty";
+        viewEmpty.classList.toggle("hidden", !isEmpty);
+        viewData.classList.toggle("hidden", isEmpty);
+        btnEmpty.classList.toggle("is-on", isEmpty);
+        btnData.classList.toggle("is-on", !isEmpty);
+      }
+
+      btnEmpty.addEventListener("click", function () { show("empty"); });
+      btnData.addEventListener("click", function () { show("data"); });
+
+      // Tabs are visual-only in this mock
+      document.querySelectorAll(".tabs").forEach(function (group) {
+        group.addEventListener("click", function (e) {
+          var t = e.target;
+          if (!t.classList.contains("tab")) return;
+          group.querySelectorAll(".tab").forEach(function (el) {
+            el.classList.remove("is-active");
+            el.setAttribute("aria-selected", "false");
+          });
+          t.classList.add("is-active");
+          t.setAttribute("aria-selected", "true");
+        });
+      });
+
+      // Details chevron label
+      var det = document.querySelector("details.sketch");
+      if (det) {
+        var chev = det.querySelector(".chev");
+        function syncChev() {
+          if (chev) chev.textContent = det.open ? "折叠" : "展开";
+        }
+        det.addEventListener("toggle", syncChev);
+        syncChev();
+      }
+    })();
+  </script>
+</body>
+</html>
