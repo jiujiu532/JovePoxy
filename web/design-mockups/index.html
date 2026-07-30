@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JovePoxy 列表页方案对比</title>
+  <style>
+    :root {
+      --ink: #000;
+      --paper: #fff;
+      --accent: #ff6b6b;
+      --teal: #4ecdc4;
+      --yellow: #ffe66d;
+      --mint: #95e1d3;
+      --coral: #f38181;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100dvh;
+      padding: 32px 24px 48px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+    }
+    .lead {
+      font-size: 14px;
+      max-width: 52ch;
+      line-height: 1.5;
+      margin: 0 0 28px;
+      color: #1a1a1a;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      max-width: 1100px;
+    }
+    a.card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      text-decoration: none;
+      color: inherit;
+      border: 2px solid #000;
+      background: #fff;
+      box-shadow: 4px 4px 0 #000;
+      padding: 18px;
+      transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    a.card:hover { transform: translate(-2px, -2px); }
+    a.card:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 8px;
+      border: 2px solid #000;
+      width: fit-content;
+    }
+    .tag-a { background: var(--yellow); }
+    .tag-b { background: var(--accent); color: #000; }
+    .tag-c { background: var(--teal); }
+    .tag-d { background: var(--mint); }
+    .card h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .card p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #1a1a1a;
+      flex: 1;
+    }
+    .go {
+      font-size: 12px;
+      font-weight: 800;
+      text-decoration: underline;
+    }
+    .note {
+      margin-top: 28px;
+      max-width: 70ch;
+      font-size: 12px;
+      line-height: 1.5;
+      border-left: 4px solid var(--yellow);
+      padding-left: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>列表页大改 · 四版方案</h1>
+  <p class="lead">
+    针对密钥池 / 账号 / 额度去重后太空的问题。四版都在 Neo-Brutalist  token 内，
+    指标只出现一次，空态有结构感。点卡片在浏览器打开静态 HTML，选一版再落地 React。
+  </p>
+  <div class="grid">
+    <a class="card" href="A-command-rack.html">
+      <span class="tag tag-a">A</span>
+      <h2>Command Rack</h2>
+      <p>顶部厚控制条：Tabs + 大号指标块 + 操作一体。去掉「密钥列表」第二层 header。空态左右不对称海报。</p>
+      <span class="go">打开方案 A</span>
+    </a>
+    <a class="card" href="B-poster-empty.html">
+      <span class="tag tag-b">B</span>
+      <h2>Poster Empty</h2>
+      <p>空态时主区变全幅海报（印章 + 巨字 + 色块信息条）。有数据时切回 metric rail + 表。冲击力最强。</p>
+      <span class="go">打开方案 B</span>
+    </a>
+    <a class="card" href="C-split-dock.html">
+      <span class="tag tag-c">C</span>
+      <h2>Split Dock</h2>
+      <p>左侧固定「池健康坞」作指标唯一来源，右侧工具 + 列表。有数据时空态都不漂。适合常驻扫视。</p>
+      <span class="go">打开方案 C</span>
+    </a>
+    <a class="card" href="D-ticket-board.html">
+      <span class="tag tag-d">D</span>
+      <h2>Ticket Board</h2>
+      <p>启用 / 冷却 / 禁用三列看板。空列仍有虚线槽，板始终「满」。适合状态优先运维扫视。</p>
+      <span class="go">打开方案 D</span>
+    </a>
+  </div>
+  <p class="note">
+    路径：<code>web/design-mockups/</code>。本地可直接双击 index.html，或
+    <code>start web/design-mockups/index.html</code>。
+    选定后回复 A / B / C / D（可组合），我再改生产页面。本目录仅原型，默认不入库除非你要求。
+  </p>
+</body>
+</html>

@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 C · Split Dock</title>
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #000;
+      --accent: #ff6b6b;
+      --teal: #4ecdc4;
+      --yellow: #ffe66d;
+      --mint: #95e1d3;
+      --coral: #f38181;
+      --shadow: 4px 4px 0 #000;
+      --shadow-sm: 2px 2px 0 #000;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #fff;
+      color: #000;
+      padding: 20px 24px 48px;
+    }
+    .page-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .page-head h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      margin-right: 8px;
+    }
+    .tabs {
+      display: flex;
+      border: 2px solid #000;
+    }
+    .tab {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      border-right: 2px solid #000;
+      background: #fff;
+    }
+    .tab:last-child { border-right: none; }
+    .tab.on { background: #000; color: #fff; }
+    .spacer { flex: 1; }
+    .btn {
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      padding: 10px 14px;
+      font-weight: 800;
+      font-size: 13px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); }
+    .btn:active { transform: translate(2px, 2px); box-shadow: none; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    /* Dock */
+    .dock {
+      border: 2px solid #000;
+      box-shadow: var(--shadow);
+      background: #fff;
+      position: sticky;
+      top: 16px;
+    }
+    .dock-h {
+      padding: 14px 16px;
+      border-bottom: 2px solid #000;
+      background: var(--yellow);
+      font-weight: 900;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+    }
+    .stat {
+      display: grid;
+      grid-template-columns: 6px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 2px solid #000;
+    }
+    .stat:last-of-type { border-bottom: 2px solid #000; }
+    .bar { align-self: stretch; min-height: 36px; }
+    .bar-y { background: var(--yellow); }
+    .bar-t { background: var(--teal); }
+    .bar-c { background: var(--coral); }
+    .bar-r { background: var(--accent); }
+    .stat .label { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+    .stat .val {
+      font-size: 32px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .avail {
+      padding: 14px 16px;
+      border-bottom: 2px solid #000;
+    }
+    .avail .cap {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .track {
+      height: 12px;
+      border: 2px solid #000;
+      background: #fff;
+      position: relative;
+    }
+    .track > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--mint);
+    }
+    .dock-tip {
+      padding: 12px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #1a1a1a;
+      background: #fafafa;
+    }
+
+    /* Right pane */
+    .pane {
+      border: 2px solid #000;
+      box-shadow: var(--shadow);
+      background: #fff;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+    }
+    .tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 2px solid #000;
+      align-items: center;
+    }
+    .search {
+      border: 2px solid #000;
+      padding: 8px 12px;
+      font-size: 13px;
+      flex: 1;
+      min-width: 160px;
+    }
+    .seg {
+      display: flex;
+      border: 2px solid #000;
+    }
+    .seg span {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      border-right: 2px solid #000;
+    }
+    .seg span:last-child { border-right: none; }
+    .seg .on { background: var(--accent); }
+    .fake-select {
+      border: 2px solid #000;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .empty-card {
+      margin: 28px auto;
+      max-width: 360px;
+      border: 2px solid #000;
+      box-shadow: var(--shadow);
+      padding: 24px;
+      text-align: left;
+    }
+    .empty-card .mark {
+      width: 48px;
+      height: 48px;
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      background: var(--yellow);
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      margin-bottom: 14px;
+    }
+    .empty-card h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .empty-card p {
+      margin: 0 0 16px;
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    .empty-card .btn { width: 100%; justify-content: center; display: flex; }
+
+    .mode-switch {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 2px solid #000;
+      background: #fafafa;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .mode-switch button {
+      border: 2px solid #000;
+      background: #fff;
+      padding: 6px 10px;
+      font-weight: 800;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .mode-switch button.on { background: #000; color: #fff; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border-bottom: 2px solid #000;
+      padding: 12px 14px;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      font-size: 11px;
+      font-weight: 800;
+      background: #fafafa;
+    }
+    tr:last-child td { border-bottom: none; }
+    .row-mark {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      font-size: 10px;
+      font-weight: 900;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .badge {
+      border: 2px solid #000;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 800;
+      background: var(--mint);
+    }
+
+    .section-label {
+      margin: 40px 0 12px;
+      font-size: 16px;
+      font-weight: 900;
+    }
+    .note {
+      margin-top: 20px;
+      font-size: 12px;
+      border-left: 4px solid var(--teal);
+      padding-left: 10px;
+      max-width: 70ch;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .dock { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>密钥池</h1>
+    <div class="tabs">
+      <div class="tab on">OpenCode</div>
+      <div class="tab">Ollama</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" type="button">刷新</button>
+    <button class="btn btn-primary" type="button">+ 添加</button>
+  </div>
+
+  <div class="layout">
+    <aside class="dock">
+      <div class="dock-h">池健康</div>
+      <div class="stat">
+        <div class="bar bar-y"></div>
+        <div class="label">把数</div>
+        <div class="val">0</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-t"></div>
+        <div class="label">启用</div>
+        <div class="val">0</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-c"></div>
+        <div class="label">冷却</div>
+        <div class="val">0</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-r"></div>
+        <div class="label">总权重</div>
+        <div class="val">0</div>
+      </div>
+      <div class="avail">
+        <div class="cap"><span>可用率</span><span>0%</span></div>
+        <div class="track"><i></i></div>
+      </div>
+      <div class="dock-tip">Key = 身份 · Proxy = 出口 IP。指标只在此坞展示，顶栏不再堆 chip。</div>
+    </aside>
+
+    <section class="pane">
+      <div class="mode-switch">
+        预览：
+        <button type="button" class="on" id="btn-empty" onclick="show('empty')">空态</button>
+        <button type="button" id="btn-data" onclick="show('data')">有数据</button>
+      </div>
+      <div class="tools">
+        <input class="search" type="search" placeholder="标签 / 前缀" />
+        <div class="seg">
+          <span class="on">全部</span>
+          <span>启用</span>
+          <span>禁用</span>
+          <span>冷却</span>
+        </div>
+        <div class="fake-select">排序 A-Z</div>
+      </div>
+
+      <div id="view-empty">
+        <div class="empty-card">
+          <div class="mark">🔑</div>
+          <h2>池是空的</h2>
+          <p>先添加至少一把 OpenCode 密钥，付费模型才能转发。</p>
+          <button class="btn btn-primary" type="button">+ 添加密钥</button>
+        </div>
+      </div>
+
+      <div id="view-data" hidden>
+        <table>
+          <thead>
+            <tr><th>密钥</th><th>状态</th><th>权重</th><th>前缀</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="row-mark" style="background:var(--teal)">PM</span><strong>prod-main</strong></td>
+              <td><span class="badge">启用</span></td>
+              <td>10</td>
+              <td style="font-family:ui-monospace,monospace;font-size:12px">sk-zen-…a91f</td>
+            </tr>
+            <tr>
+              <td><span class="row-mark" style="background:var(--yellow)">BK</span><strong>backup-eu</strong></td>
+              <td><span class="badge" style="background:var(--yellow)">冷却</span></td>
+              <td>5</td>
+              <td style="font-family:ui-monospace,monospace;font-size:12px">sk-zen-…c02b</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="section-label">账号页同构</div>
+  <div class="layout">
+    <aside class="dock">
+      <div class="dock-h" style="background:var(--mint)">账号健康</div>
+      <div class="stat">
+        <div class="bar bar-y"></div>
+        <div class="label">合计</div>
+        <div class="val">1</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-t"></div>
+        <div class="label">启用</div>
+        <div class="val">1</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-c"></div>
+        <div class="label">OpenCode</div>
+        <div class="val">0</div>
+      </div>
+      <div class="stat">
+        <div class="bar bar-r"></div>
+        <div class="label">Ollama</div>
+        <div class="val">1</div>
+      </div>
+      <div class="dock-tip">当前 Tab 为 OpenCode，列表为空；合计含另一侧账号。</div>
+    </aside>
+    <section class="pane">
+      <div class="tools">
+        <input class="search" type="search" placeholder="名称 / workspace / cookie" />
+        <div class="seg">
+          <span class="on">全部</span>
+          <span>启用</span>
+          <span>禁用</span>
+        </div>
+      </div>
+      <div class="empty-card">
+        <div class="mark" style="background:var(--coral)">👤</div>
+        <h2>暂无 OpenCode 账号</h2>
+        <p>可手动添加、批量粘贴，或导入 JSON。</p>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" type="button" style="flex:1">添加账号</button>
+          <button class="btn" type="button" style="flex:1">导入 JSON</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="note">
+    方案 C 卖点：左侧「健康坞」是指标唯一来源，顶栏只留标题 / Tabs / 主操作。
+    空态是紧凑卡片贴在右栏内，不漂在整页中央。适合常驻扫视池状态。
+  </p>
+
+  <script>
+    function show(mode) {
+      const empty = document.getElementById('view-empty');
+      const data = document.getElementById('view-data');
+      const be = document.getElementById('btn-empty');
+      const bd = document.getElementById('btn-data');
+      if (mode === 'empty') {
+        empty.hidden = false;
+        data.hidden = true;
+        be.classList.add('on');
+        bd.classList.remove('on');
+      } else {
+        empty.hidden = true;
+        data.hidden = false;
+        be.classList.remove('on');
+        bd.classList.add('on');
+        // 演示坞数字
+        document.querySelectorAll('.layout')[0].querySelectorAll('.stat .val').forEach((el, i) => {
+          el.textContent = ['2', '1', '1', '15'][i];
+        });
+        document.querySelector('.track > i').style.width = '50%';
+        document.querySelector('.avail .cap span:last-child').textContent = '50%';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 A · Command Rack</title>
+  <style>
+    :root {
+      --paper: #fff;
+      --ink: #000;
+      --muted: #1a1a1a;
+      --faint: #333;
+      --accent: #ff6b6b;
+      --teal: #4ecdc4;
+      --yellow: #ffe66d;
+      --mint: #95e1d3;
+      --coral: #f38181;
+      --soft-red: #ffe0e0;
+      --shadow: 4px 4px 0 #000;
+      --shadow-sm: 2px 2px 0 #000;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100dvh;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+    }
+    aside {
+      border-right: 2px solid #000;
+      background: #000;
+      color: #fff;
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+      padding: 8px 10px 16px;
+      border-bottom: 2px solid #333;
+      margin-bottom: 8px;
+    }
+    .nav-item {
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 2px solid transparent;
+      color: #ccc;
+    }
+    .nav-item.active {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+      font-weight: 800;
+    }
+    main { padding: 20px 24px 40px; min-width: 0; }
+    .crumb {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--faint);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* Control Rack */
+    .rack {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: stretch;
+      border: 2px solid #000;
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .tabs {
+      display: flex;
+      border: 2px solid #000;
+      align-self: center;
+    }
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      background: #fff;
+      border: none;
+      border-right: 2px solid #000;
+      cursor: default;
+    }
+    .tab:last-child { border-right: none; }
+    .tab.on { background: #000; color: #fff; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      min-width: 0;
+    }
+    .metric {
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      padding: 8px 10px;
+      min-width: 0;
+    }
+    .metric .n {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    .metric .l {
+      margin-top: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .m-total { background: #fff; }
+    .m-on { background: var(--mint); }
+    .m-cool { background: var(--yellow); }
+    .m-weight { background: #ffe8e0; }
+
+    .rack-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      background: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn:active { transform: translate(2px, 2px); box-shadow: none; }
+    .btn-primary { background: var(--accent); }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 2px solid #000;
+      margin-bottom: 16px;
+    }
+    .search {
+      border: 2px solid #000;
+      padding: 8px 12px;
+      font-size: 13px;
+      min-width: 200px;
+      flex: 1;
+      max-width: 280px;
+    }
+    .seg {
+      display: flex;
+      border: 2px solid #000;
+    }
+    .seg span {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border-right: 2px solid #000;
+    }
+    .seg span:last-child { border-right: none; }
+    .seg .on { background: var(--accent); }
+    .selects { display: flex; gap: 8px; margin-left: auto; }
+    .fake-select {
+      border: 2px solid #000;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+    }
+
+    /* Empty split */
+    .empty-split {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 0;
+      border: 2px solid #000;
+      box-shadow: var(--shadow);
+      min-height: 360px;
+      overflow: hidden;
+    }
+    .empty-left {
+      background: var(--yellow);
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      position: relative;
+      border-right: 2px solid #000;
+    }
+    .empty-left .giant {
+      font-size: clamp(96px, 18vw, 160px);
+      font-weight: 900;
+      line-height: 0.85;
+      letter-spacing: -0.06em;
+      margin: 0;
+    }
+    .empty-left h2 {
+      margin: 12px 0 8px;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    .empty-left p {
+      margin: 0;
+      font-size: 14px;
+      max-width: 32ch;
+      line-height: 1.45;
+      font-weight: 600;
+    }
+    .badge-stamp {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      border: 2px solid #000;
+      background: #fff;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      transform: rotate(6deg);
+      box-shadow: var(--shadow-sm);
+    }
+    .empty-right {
+      background: #000;
+      color: #fff;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .empty-right h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--yellow);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+    .steps li {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .steps .num {
+      width: 32px;
+      height: 32px;
+      border: 2px solid #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 13px;
+      background: #111;
+    }
+    .steps strong { display: block; font-size: 14px; margin-bottom: 2px; }
+    .steps span { font-size: 12px; color: #bbb; line-height: 1.4; }
+    .cta-big {
+      border: 2px solid #fff;
+      background: var(--accent);
+      color: #000;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 14px 18px;
+      box-shadow: 4px 4px 0 var(--yellow);
+      text-align: center;
+      cursor: pointer;
+    }
+
+    /* Filled table */
+    section.filled { margin-top: 40px; }
+    section.filled h2 {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section.filled h2 .pill {
+      font-size: 11px;
+      border: 2px solid #000;
+      background: var(--mint);
+      padding: 2px 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+    th, td {
+      border-bottom: 2px solid #000;
+      padding: 12px 14px;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: #fafafa;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tr:last-child td { border-bottom: none; }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mono-mark {
+      width: 32px;
+      height: 32px;
+      border: 2px solid #000;
+      box-shadow: var(--shadow-sm);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .b-teal { background: var(--teal); }
+    .b-yellow { background: var(--yellow); }
+    .b-coral { background: var(--coral); }
+    .badge {
+      display: inline-block;
+      border: 2px solid #000;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .ok { background: var(--mint); }
+    .cool { background: var(--yellow); }
+    .weight {
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      font-family: ui-monospace, monospace;
+    }
+    .prefix {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: var(--faint);
+    }
+    .note {
+      margin-top: 20px;
+      font-size: 12px;
+      color: var(--faint);
+      border-left: 4px solid var(--yellow);
+      padding-left: 10px;
+      max-width: 70ch;
+      line-height: 1.45;
+    }
+    @media (max-width: 960px) {
+      body { grid-template-columns: 1fr; }
+      aside { display: none; }
+      .rack { grid-template-columns: 1fr; }
+      .empty-split { grid-template-columns: 1fr; }
+      .empty-left { border-right: none; border-bottom: 2px solid #000; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="brand">JovePoxy</div>
+    <div class="nav-item">概览</div>
+    <div class="nav-item">模型</div>
+    <div class="nav-item active">密钥池</div>
+    <div class="nav-item">账号</div>
+    <div class="nav-item">额度</div>
+    <div class="nav-item">分发密钥</div>
+    <div class="nav-item">代理</div>
+    <div class="nav-item">日志</div>
+    <div class="nav-item">设置</div>
+  </aside>
+  <main>
+    <div class="crumb">资源 · 密钥池</div>
+
+    <div class="rack">
+      <div class="tabs">
+        <button class="tab on" type="button">OpenCode</button>
+        <button class="tab" type="button">Ollama</button>
+      </div>
+      <div class="metrics">
+        <div class="metric m-total"><div class="n">0</div><div class="l">把数</div></div>
+        <div class="metric m-on"><div class="n">0</div><div class="l">启用</div></div>
+        <div class="metric m-cool"><div class="n">0</div><div class="l">冷却</div></div>
+        <div class="metric m-weight"><div class="n">0</div><div class="l">总权重</div></div>
+      </div>
+      <div class="rack-actions">
+        <button class="btn" type="button">刷新</button>
+        <button class="btn btn-primary" type="button">+ 添加</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input class="search" type="search" placeholder="标签 / 前缀" />
+      <div class="seg">
+        <span class="on">全部</span>
+        <span>启用</span>
+        <span>禁用</span>
+        <span>冷却</span>
+      </div>
+      <div class="selects">
+        <div class="fake-select">权重 全部</div>
+        <div class="fake-select">排序 标签 A-Z</div>
+      </div>
+    </div>
+
+    <div class="empty-split">
+      <div class="empty-left">
+        <div class="badge-stamp">OPENCODE · POOL</div>
+        <p class="giant">0</p>
+        <h2>池是空的</h2>
+        <p>先添加至少一把 OpenCode 密钥，付费模型才能转发。</p>
+      </div>
+      <div class="empty-right">
+        <h3>上手三步</h3>
+        <ol class="steps">
+          <li>
+            <span class="num">1</span>
+            <div>
+              <strong>添加密钥</strong>
+              <span>粘贴 Zen API Key，设标签与权重</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <div>
+              <strong>调权重与冷却</strong>
+              <span>Key = 身份，Proxy = 出口 IP，互不替代</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <div>
+              <strong>走付费模型</strong>
+              <span>客户端用本地 sk-oc 密钥调用即可</span>
+            </div>
+          </li>
+        </ol>
+        <div class="cta-big">+ 添加密钥</div>
+      </div>
+    </div>
+
+    <p class="note">
+      方案 A 卖点：指标只在顶部 Command Rack 出现一次；去掉「密钥列表 0/0」第二层 header。
+      空态左右分栏有色块与步骤，不再白茫茫居中小图标。
+    </p>
+
+    <section class="filled" id="filled">
+      <h2>有数据时 <span class="pill">预览 2 把</span></h2>
+      <div class="rack" style="margin-bottom:12px">
+        <div class="tabs">
+          <button class="tab on" type="button">OpenCode</button>
+          <button class="tab" type="button">Ollama</button>
+        </div>
+        <div class="metrics">
+          <div class="metric m-total"><div class="n">2</div><div class="l">把数</div></div>
+          <div class="metric m-on"><div class="n">1</div><div class="l">启用</div></div>
+          <div class="metric m-cool"><div class="n">1</div><div class="l">冷却</div></div>
+          <div class="metric m-weight"><div class="n">15</div><div class="l">总权重</div></div>
+        </div>
+        <div class="rack-actions">
+          <button class="btn" type="button">刷新</button>
+          <button class="btn btn-primary" type="button">+ 添加</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>密钥</th>
+            <th>状态</th>
+            <th>权重</th>
+            <th>前缀</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="row">
+                <span class="mono-mark b-teal">PR</span>
+                <strong>prod-main</strong>
+              </div>
+            </td>
+            <td><span class="badge ok">启用</span></td>
+            <td class="weight">10</td>
+            <td class="prefix">sk-zen-…a91f</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="row">
+                <span class="mono-mark b-yellow">BK</span>
+                <strong>backup-eu</strong>
+              </div>
+            </td>
+            <td><span class="badge cool">冷却</span></td>
+            <td class="weight">5</td>
+            <td class="prefix">sk-zen-…c02b</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
