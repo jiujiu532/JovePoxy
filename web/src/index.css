@@ -47,6 +47,11 @@
   --text-sm--line-height: 1.45;
 }
 
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 :root {
   color-scheme: light;
 
@@ -108,85 +113,85 @@
 }
 
 /*
- * Dark — Slate Ops（选型 C）
- * 机房/监控大屏冷灰蓝：深冷灰底 + 冷银纸边 + 极清爽工程对比。
- * 三层 elevation 明确；保留 Neo-Brutalist 直角 / 硬边 / 硬 offset。
+ * Dark — Espresso Night（选型 B）
+ * 暖褐/焦糖夜：咖啡壳底 + 奶油边，与 playful red 同温。
+ * 三层 elevation 明确；禁止纯 #000 / 死灰 soft；保留硬边 + 硬 offset。
  */
 html.dark {
   color-scheme: dark;
 
-  --paper-0: #12161c;
-  --paper-1: #1b222c;
-  --paper-2: #273140;
+  --paper-0: #1a1410;
+  --paper-1: #261e18;
+  --paper-2: #342a22;
 
-  --ink: #eef3f8;
-  --ink-muted: #b7c3d1;
-  --ink-faint: #8492a6;
+  --ink: #f7f1ea;
+  --ink-muted: #d4c4b4;
+  --ink-faint: #a08f7e;
 
-  --border: #c8d2de;
-  --border-strong: #dae4f0;
+  --border: #e8d7c4;
+  --border-strong: #f3e6d6;
 
-  --accent: #ff7b7b;
-  --accent-hover: #ff9191;
+  --accent: #ff7a6e;
+  --accent-hover: #ff9188;
   --accent-fg: #000000;
-  --accent-soft: #3a1d24;
+  --accent-soft: #4a221c;
 
-  --accent-teal: #5fd4cc;
-  --accent-yellow: #ffe27a;
-  --accent-mint: #9fe0d4;
-  --accent-coral: #ff8f8f;
+  --accent-teal: #6fd9c8;
+  --accent-yellow: #ffd978;
+  --accent-mint: #b4e6d6;
+  --accent-coral: #ff8f86;
 
-  --status-success: #5fd4cc;
-  --status-warning: #ffe27a;
-  --status-error: #ff7b7b;
-  --status-info: #9fe0d4;
+  --status-success: #6fd9c8;
+  --status-warning: #ffd978;
+  --status-error: #ff7a6e;
+  --status-info: #b4e6d6;
 
-  --focus-ring: #ffe27a;
+  --focus-ring: #ffd978;
 
-  --shadow-hard: 4px 4px 0 #c8d2de;
-  --shadow-paper: 4px 4px 0 #c8d2de;
-  --shadow-accent-red: 4px 4px 0 #ff7b7b;
-  --shadow-accent-teal: 4px 4px 0 #5fd4cc;
-  --shadow-accent-yellow: 4px 4px 0 #ffe27a;
+  --shadow-hard: 4px 4px 0 #e8d7c4;
+  --shadow-paper: 4px 4px 0 #e8d7c4;
+  --shadow-accent-red: 4px 4px 0 #ff7a6e;
+  --shadow-accent-teal: 4px 4px 0 #6fd9c8;
+  --shadow-accent-yellow: 4px 4px 0 #ffd978;
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --paper-0: #12161c;
-    --paper-1: #1b222c;
-    --paper-2: #273140;
+    --paper-0: #1a1410;
+    --paper-1: #261e18;
+    --paper-2: #342a22;
 
-    --ink: #eef3f8;
-    --ink-muted: #b7c3d1;
-    --ink-faint: #8492a6;
+    --ink: #f7f1ea;
+    --ink-muted: #d4c4b4;
+    --ink-faint: #a08f7e;
 
-    --border: #c8d2de;
-    --border-strong: #dae4f0;
+    --border: #e8d7c4;
+    --border-strong: #f3e6d6;
 
-    --accent: #ff7b7b;
-    --accent-hover: #ff9191;
+    --accent: #ff7a6e;
+    --accent-hover: #ff9188;
     --accent-fg: #000000;
-    --accent-soft: #3a1d24;
+    --accent-soft: #4a221c;
 
-    --accent-teal: #5fd4cc;
-    --accent-yellow: #ffe27a;
-    --accent-mint: #9fe0d4;
-    --accent-coral: #ff8f8f;
+    --accent-teal: #6fd9c8;
+    --accent-yellow: #ffd978;
+    --accent-mint: #b4e6d6;
+    --accent-coral: #ff8f86;
 
-    --status-success: #5fd4cc;
-    --status-warning: #ffe27a;
-    --status-error: #ff7b7b;
-    --status-info: #9fe0d4;
+    --status-success: #6fd9c8;
+    --status-warning: #ffd978;
+    --status-error: #ff7a6e;
+    --status-info: #b4e6d6;
 
-    --focus-ring: #ffe27a;
+    --focus-ring: #ffd978;
 
-    --shadow-hard: 4px 4px 0 #c8d2de;
-    --shadow-paper: 4px 4px 0 #c8d2de;
-    --shadow-accent-red: 4px 4px 0 #ff7b7b;
-    --shadow-accent-teal: 4px 4px 0 #5fd4cc;
-    --shadow-accent-yellow: 4px 4px 0 #ffe27a;
+    --shadow-hard: 4px 4px 0 #e8d7c4;
+    --shadow-paper: 4px 4px 0 #e8d7c4;
+    --shadow-accent-red: 4px 4px 0 #ff7a6e;
+    --shadow-accent-teal: 4px 4px 0 #6fd9c8;
+    --shadow-accent-yellow: 4px 4px 0 #ffd978;
   }
 }
 

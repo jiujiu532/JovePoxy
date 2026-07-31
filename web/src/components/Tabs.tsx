@@ -95,7 +95,7 @@ export function Tabs({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-9 max-w-full items-stretch overflow-hidden rounded-none border-2 border-border bg-paper-0 shadow-[3px_3px_0_var(--border)]",
+        "inline-flex h-9 max-w-full items-stretch overflow-hidden rounded-none border-2 border-border bg-paper-0 shadow-[3px_3px_0_var(--border)] select-none",
         className,
       )}
     >
@@ -110,7 +110,7 @@ export function Tabs({
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             className={cn(
-              "inline-flex h-full items-center gap-1.5 px-3.5 text-[13px] font-bold transition-[background-color,color] duration-100",
+              "inline-flex h-full shrink-0 items-center gap-1.5 px-3.5 text-[13px] font-bold transition-[background-color,color] duration-100 cursor-pointer select-none",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
               index > 0 && "border-l-2 border-border",
               selected
