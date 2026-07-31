@@ -1,8 +1,10 @@
+import { useCallback, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -69,7 +71,7 @@ type TipRow = {
   pct?: string | undefined;
 };
 
-/** 硬边即时浮层：无入场动画、无拖尾。 */
+/** 硬边即时浮层：无入场动画。 */
 function HardTooltip({
   active,
   label,
@@ -94,9 +96,7 @@ function HardTooltip({
       )}
     >
       {label ? (
-        <p className="mb-1.5 font-mono text-[11px] font-semibold text-ink">
-          {label}
-        </p>
+        <p className="mb-1.5 font-mono text-[11px] font-semibold text-ink">{label}</p>
       ) : null}
       <ul className="flex flex-col gap-1">
         {rows.map((r) => (
@@ -137,7 +137,7 @@ function HardTooltip({
   );
 }
 
-/** 多序列调用趋势：十字线 + 方点高亮，系列不淡出。 */
+/** 多序列调用趋势：硬竖线 + 方点。 */
 export function ModelCallTrendChart({
   data,
   models,
@@ -195,11 +195,7 @@ export function ModelCallTrendChart({
           <Tooltip
             isAnimationActive={false}
             animationDuration={0}
-            // 硬竖线十字：无虚线、无淡入
-            cursor={{
-              stroke: "var(--border)",
-              strokeWidth: 2,
-            }}
+            cursor={{ stroke: "var(--border)", strokeWidth: 2 }}
             content={({ active, label, payload }) => {
               const rows: TipRow[] = (payload ?? [])
                 .filter((p) => p.dataKey !== "total" && typeof p.value === "number")
@@ -244,7 +240,6 @@ export function ModelCallTrendChart({
                 name={m}
                 stroke={color}
                 strokeWidth={2.5}
-                // 直角点：硬边方块，悬停变黑边放大一档
                 dot={{
                   r: 3.5,
                   strokeWidth: 1.5,
@@ -267,7 +262,7 @@ export function ModelCallTrendChart({
   );
 }
 
-/** 占比环：仅换中心文案 + 硬边 tooltip，扇区不外扩。 */
+/** 占比环：悬停改中心数字，不弹浮层挡中心。 */
 export function ModelShareDonut({
   slices,
   height = 240,
@@ -281,8 +276,17 @@ export function ModelShareDonut({
   readonly centerLabel: string;
   readonly centerValue: string;
 }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const onEnter = useCallback((_: unknown, index: number) => {
+    setActiveIndex(index);
+  }, []);
+  const onLeave = useCallback(() => setActiveIndex(null), []);
+
   if (slices.length === 0) return null;
   const total = slices.reduce((s, x) => s + x.value, 0);
+  const active = activeIndex != null ? slices[activeIndex] : null;
+  const activePct =
+    active && total > 0 ? ((active.value / total) * 100).toFixed(1) : null;
 
   return (
     <div className={cn("relative w-full", className)} style={{ height }}>
@@ -293,65 +297,104 @@ export function ModelShareDonut({
             dataKey="value"
             nameKey="model"
             cx="50%"
-            cy="48%"
-            innerRadius="56%"
-            outerRadius="80%"
+            cy="46%"
+            innerRadius="58%"
+            outerRadius="82%"
             paddingAngle={2}
             stroke="var(--border)"
             strokeWidth={2}
             isAnimationActive={false}
+            onMouseEnter={onEnter}
+            onMouseLeave={onLeave}
           >
-            {slices.map((s) => (
-              <Cell key={s.model} fill={s.color} />
+            {slices.map((s, i) => (
+              <Cell
+                key={s.model}
+                fill={s.color}
+                // 悬停：当前扇区描边加粗，其余不变色不淡出（硬反馈）
+                stroke="var(--border)"
+                strokeWidth={activeIndex === i ? 3 : 2}
+              />
             ))}
           </Pie>
-          <Tooltip
-            isAnimationActive={false}
-            animationDuration={0}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const p = payload[0]!;
-              const value = Number(p.value ?? 0);
-              const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-              const name = String(p.name);
-              return (
-                <HardTooltip
-                  active
-                  rows={[
-                    {
-                      name,
-                      value,
-                      color: String(p.payload?.color ?? "var(--ink)"),
-                      pct: `${pct}%`,
-                    },
-                  ]}
-                />
-              );
-            }}
-          />
+          {/* 无 Tooltip：详情写在中心，避免遮挡 */}
           <Legend
             verticalAlign="bottom"
             iconType="square"
             wrapperStyle={{ fontSize: 11 }}
+            onMouseEnter={(e) => {
+              const name = String(e?.value ?? "");
+              const idx = slices.findIndex((s) => s.model === name);
+              if (idx >= 0) setActiveIndex(idx);
+            }}
+            onMouseLeave={onLeave}
             formatter={(value) => (
-              <span className="font-mono text-[11px] text-ink-muted">{value}</span>
+              <span
+                className={cn(
+                  "font-mono text-[11px]",
+                  active && active.model === value
+                    ? "font-semibold text-ink"
+                    : "text-ink-muted",
+                )}
+              >
+                {value}
+              </span>
             )}
           />
         </PieChart>
       </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-9">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-          {centerLabel}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-10">
+        <span
+          className="max-w-[9.5rem] truncate text-center text-[11px] font-medium tracking-wide text-ink-muted"
+          title={active ? active.model : undefined}
+        >
+          {active ? shortenModel(active.model, 18) : centerLabel}
         </span>
-        <span className="mt-0.5 font-mono text-[1.35rem] font-bold tabular-nums text-ink">
-          {centerValue}
+        <span className="mt-0.5 font-mono text-[1.45rem] font-bold tabular-nums leading-none text-ink">
+          {active ? formatCompact(active.value) : centerValue}
         </span>
+        {activePct ? (
+          <span className="mt-1 font-mono text-[12px] font-semibold tabular-nums text-ink-muted">
+            {activePct}%
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/** 排行柱：硬边描边 + 右侧数值，无淡出。 */
+/** 排行柱：数值用 LabelList 自定义绘制，与柱体拉开间距。 */
+function RankValueLabel(props: {
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly value?: number | string;
+}) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const height = Number(props.height ?? 0);
+  const value = Number(props.value ?? 0);
+  // 柱体末端再偏右 10px，避免与描边叠字
+  const tx = x + width + 10;
+  const ty = y + height / 2 + 4;
+  return (
+    <text
+      x={tx}
+      y={ty}
+      fill="var(--ink)"
+      fontSize={13}
+      fontWeight={700}
+      fontFamily="var(--font-mono)"
+      textAnchor="start"
+      style={{ paintOrder: "normal" }}
+    >
+      {formatCompact(value)}
+    </text>
+  );
+}
+
 export function ModelRankBars({
   items,
   height = 240,
@@ -373,7 +416,8 @@ export function ModelRankBars({
         <BarChart
           data={chartData}
           layout="vertical"
-          margin={{ top: 4, right: 36, left: 4, bottom: 4 }}
+          // 右侧留给数值标签
+          margin={{ top: 4, right: 44, left: 4, bottom: 4 }}
           barCategoryGap="30%"
         >
           <CartesianGrid
@@ -384,7 +428,7 @@ export function ModelRankBars({
           <XAxis
             type="number"
             allowDecimals={false}
-            domain={[0, Math.ceil(maxVal * 1.08)]}
+            domain={[0, Math.ceil(maxVal * 1.12)]}
             tick={{
               fill: "var(--ink-faint)",
               fontSize: 10,
@@ -427,8 +471,9 @@ export function ModelRankBars({
           <Tooltip
             isAnimationActive={false}
             animationDuration={0}
-            // 整行硬底高亮（非半透明扫光）
-            cursor={{ fill: "var(--accent-soft)", stroke: "var(--border)", strokeWidth: 0 }}
+            cursor={{ fill: "var(--accent-soft)" }}
+            // 浮层偏到光标外侧，不压住柱端数字
+            offset={16}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const row = payload[0]!.payload as ModelRankItem;
@@ -453,13 +498,6 @@ export function ModelRankBars({
             radius={0}
             isAnimationActive={false}
             maxBarSize={22}
-            label={{
-              position: "right",
-              fill: "var(--ink-muted)",
-              fontSize: 11,
-              fontFamily: "var(--font-mono)",
-              formatter: (v: number) => formatCompact(v),
-            }}
           >
             {chartData.map((item) => (
               <Cell
@@ -469,6 +507,7 @@ export function ModelRankBars({
                 strokeWidth={2}
               />
             ))}
+            <LabelList dataKey="value" content={<RankValueLabel />} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
