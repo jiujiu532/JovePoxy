@@ -1,4 +1,3 @@
-import { useCallback, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -10,7 +9,6 @@ import {
   Pie,
   PieChart,
   ResponsiveContainer,
-  Sector,
   Tooltip,
   XAxis,
   YAxis,
@@ -71,6 +69,7 @@ type TipRow = {
   pct?: string | undefined;
 };
 
+/** 硬边即时浮层：无入场动画、无拖尾。 */
 function HardTooltip({
   active,
   label,
@@ -93,24 +92,9 @@ function HardTooltip({
         "border-2 border-border bg-paper-0 px-3 py-2",
         "shadow-[3px_3px_0_var(--border)]",
       )}
-      style={{
-        // 轻入场，不走 recharts 位移动画（避免拖尾）
-        animation: "chart-tip-in 120ms ease-out",
-      }}
     >
-      <style>{`
-        @keyframes chart-tip-in {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          @keyframes chart-tip-in {
-            from, to { opacity: 1; transform: none; }
-          }
-        }
-      `}</style>
       {label ? (
-        <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-muted">
+        <p className="mb-1.5 font-mono text-[11px] font-semibold text-ink">
           {label}
         </p>
       ) : null}
@@ -153,7 +137,7 @@ function HardTooltip({
   );
 }
 
-/** Multi-series call trend (one line per model + daily total in tooltip). */
+/** 多序列调用趋势：十字线 + 方点高亮，系列不淡出。 */
 export function ModelCallTrendChart({
   data,
   models,
@@ -171,8 +155,6 @@ export function ModelCallTrendChart({
   readonly totalLabel: string;
   readonly empty?: boolean;
 }) {
-  const [focusModel, setFocusModel] = useState<string | null>(null);
-
   if (empty || data.length === 0 || models.length === 0) return null;
 
   return (
@@ -181,11 +163,10 @@ export function ModelCallTrendChart({
         <LineChart
           data={[...data]}
           margin={{ top: 10, right: 14, left: 0, bottom: 0 }}
-          onMouseLeave={() => setFocusModel(null)}
         >
           <CartesianGrid
             stroke="var(--border)"
-            strokeOpacity={0.16}
+            strokeOpacity={0.14}
             vertical={false}
           />
           <XAxis
@@ -212,13 +193,12 @@ export function ModelCallTrendChart({
             tickFormatter={formatCompact}
           />
           <Tooltip
-            // 关掉默认位移动画，改用 CSS 轻入，跟手不拖尾
             isAnimationActive={false}
             animationDuration={0}
+            // 硬竖线十字：无虚线、无淡入
             cursor={{
-              stroke: "var(--ink)",
-              strokeWidth: 1.25,
-              strokeOpacity: 0.28,
+              stroke: "var(--border)",
+              strokeWidth: 2,
             }}
             content={({ active, label, payload }) => {
               const rows: TipRow[] = (payload ?? [])
@@ -250,55 +230,34 @@ export function ModelCallTrendChart({
             height={40}
             iconType="plainline"
             wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
-            onMouseEnter={(e) => {
-              const id = String(e?.dataKey ?? e?.value ?? "");
-              if (id) setFocusModel(id);
-            }}
-            onMouseLeave={() => setFocusModel(null)}
             formatter={(value) => (
-              <span
-                className={cn(
-                  "font-mono text-[11px] transition-opacity duration-150",
-                  focusModel && focusModel !== value
-                    ? "text-ink-faint opacity-40"
-                    : "text-ink-muted",
-                )}
-              >
-                {value}
-              </span>
+              <span className="font-mono text-[11px] text-ink-muted">{value}</span>
             )}
           />
           {models.map((m, i) => {
             const color = colors[i] ?? modelColor(i);
-            const dimmed = focusModel != null && focusModel !== m;
-            const focused = focusModel === m;
             return (
               <Line
                 key={m}
-                type="monotone"
+                type="linear"
                 dataKey={m}
                 name={m}
                 stroke={color}
-                strokeWidth={focused ? 3 : 2.25}
-                strokeOpacity={dimmed ? 0.18 : 1}
+                strokeWidth={2.5}
+                // 直角点：硬边方块，悬停变黑边放大一档
                 dot={{
-                  r: focused ? 4 : 3,
+                  r: 3.5,
                   strokeWidth: 1.5,
-                  stroke: "var(--paper-0)",
+                  stroke: "var(--border)",
                   fill: color,
-                  fillOpacity: dimmed ? 0.2 : 1,
                 }}
                 activeDot={{
-                  r: 6,
+                  r: 5.5,
                   strokeWidth: 2,
                   stroke: "var(--border)",
                   fill: color,
-                  // 取消 activeDot 的弹跳感
-                  className: "recharts-active-dot-hard",
                 }}
                 isAnimationActive={false}
-                onMouseEnter={() => setFocusModel(m)}
-                onMouseLeave={() => setFocusModel(null)}
               />
             );
           })}
@@ -308,60 +267,7 @@ export function ModelCallTrendChart({
   );
 }
 
-type ActiveShapeProps = {
-  readonly cx?: number;
-  readonly cy?: number;
-  readonly innerRadius?: number;
-  readonly outerRadius?: number;
-  readonly startAngle?: number;
-  readonly endAngle?: number;
-  readonly fill?: string;
-  readonly stroke?: string;
-  readonly strokeWidth?: number;
-  readonly midAngle?: number;
-  readonly percent?: number;
-  readonly value?: number;
-  readonly name?: string;
-};
-
-function DonutActiveShape(props: unknown) {
-  const p = props as ActiveShapeProps;
-  const cx = p.cx ?? 0;
-  const cy = p.cy ?? 0;
-  const innerRadius = p.innerRadius ?? 0;
-  const outerRadius = p.outerRadius ?? 0;
-  const startAngle = p.startAngle ?? 0;
-  const endAngle = p.endAngle ?? 0;
-  const fill = p.fill ?? "var(--accent)";
-  return (
-    <g>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius - 1}
-        outerRadius={outerRadius + 7}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-        stroke="var(--border)"
-        strokeWidth={2}
-        style={{ transition: "all 140ms ease-out" }}
-      />
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={outerRadius + 10}
-        outerRadius={outerRadius + 13}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-        stroke="none"
-      />
-    </g>
-  );
-}
-
-/** Donut share of call counts by model. */
+/** 占比环：仅换中心文案 + 硬边 tooltip，扇区不外扩。 */
 export function ModelShareDonut({
   slices,
   height = 240,
@@ -375,17 +281,8 @@ export function ModelShareDonut({
   readonly centerLabel: string;
   readonly centerValue: string;
 }) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const onEnter = useCallback((_: unknown, index: number) => {
-    setActiveIndex(index);
-  }, []);
-  const onLeave = useCallback(() => setActiveIndex(null), []);
-
   if (slices.length === 0) return null;
   const total = slices.reduce((s, x) => s + x.value, 0);
-  const active = activeIndex != null ? slices[activeIndex] : null;
-  const activePct =
-    active && total > 0 ? ((active.value / total) * 100).toFixed(1) : null;
 
   return (
     <div className={cn("relative w-full", className)} style={{ height }}>
@@ -403,36 +300,26 @@ export function ModelShareDonut({
             stroke="var(--border)"
             strokeWidth={2}
             isAnimationActive={false}
-            {...(activeIndex != null ? { activeIndex } : {})}
-            activeShape={DonutActiveShape}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
           >
-            {slices.map((s, i) => (
-              <Cell
-                key={s.model}
-                fill={s.color}
-                fillOpacity={
-                  activeIndex == null || activeIndex === i ? 1 : 0.28
-                }
-                style={{ transition: "fill-opacity 140ms ease-out" }}
-              />
+            {slices.map((s) => (
+              <Cell key={s.model} fill={s.color} />
             ))}
           </Pie>
           <Tooltip
             isAnimationActive={false}
             animationDuration={0}
-            content={({ active: tipActive, payload }) => {
-              if (!tipActive || !payload?.length) return null;
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
               const p = payload[0]!;
               const value = Number(p.value ?? 0);
               const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+              const name = String(p.name);
               return (
                 <HardTooltip
                   active
                   rows={[
                     {
-                      name: String(p.name),
+                      name,
                       value,
                       color: String(p.payload?.color ?? "var(--ink)"),
                       pct: `${pct}%`,
@@ -446,45 +333,25 @@ export function ModelShareDonut({
             verticalAlign="bottom"
             iconType="square"
             wrapperStyle={{ fontSize: 11 }}
-            onMouseEnter={(e) => {
-              const name = String(e?.value ?? "");
-              const idx = slices.findIndex((s) => s.model === name);
-              if (idx >= 0) setActiveIndex(idx);
-            }}
-            onMouseLeave={onLeave}
             formatter={(value) => (
-              <span
-                className={cn(
-                  "font-mono text-[11px] transition-opacity duration-150",
-                  active && active.model !== value
-                    ? "text-ink-faint opacity-40"
-                    : "text-ink-muted",
-                )}
-              >
-                {value}
-              </span>
+              <span className="font-mono text-[11px] text-ink-muted">{value}</span>
             )}
           />
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-9">
         <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-          {active ? shortenModel(active.model, 16) : centerLabel}
+          {centerLabel}
         </span>
-        <span className="mt-0.5 font-mono text-[1.35rem] font-bold tabular-nums text-ink transition-[opacity,transform] duration-150">
-          {active ? formatCompact(active.value) : centerValue}
+        <span className="mt-0.5 font-mono text-[1.35rem] font-bold tabular-nums text-ink">
+          {centerValue}
         </span>
-        {activePct ? (
-          <span className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-muted">
-            {activePct}%
-          </span>
-        ) : null}
       </div>
     </div>
   );
 }
 
-/** Horizontal ranked bars for call counts. */
+/** 排行柱：硬边描边 + 右侧数值，无淡出。 */
 export function ModelRankBars({
   items,
   height = 240,
@@ -496,8 +363,6 @@ export function ModelRankBars({
   readonly className?: string;
   readonly unitLabel: string;
 }) {
-  const [hoverModel, setHoverModel] = useState<string | null>(null);
-
   if (items.length === 0) return null;
   const chartData = [...items].reverse();
   const maxVal = Math.max(1, ...items.map((i) => i.value));
@@ -510,7 +375,6 @@ export function ModelRankBars({
           layout="vertical"
           margin={{ top: 4, right: 36, left: 4, bottom: 4 }}
           barCategoryGap="30%"
-          onMouseLeave={() => setHoverModel(null)}
         >
           <CartesianGrid
             stroke="var(--border)"
@@ -544,17 +408,15 @@ export function ModelRankBars({
               };
               const full = String(payload.value);
               const text = shortenModel(full, 16);
-              const dimmed = hoverModel != null && hoverModel !== full;
               return (
                 <text
                   x={x}
                   y={y}
                   dy={4}
                   textAnchor="end"
-                  fill={dimmed ? "var(--ink-faint)" : "var(--ink)"}
+                  fill="var(--ink)"
                   fontSize={11}
                   fontFamily="var(--font-mono)"
-                  opacity={dimmed ? 0.45 : 1}
                 >
                   <title>{full}</title>
                   {text}
@@ -565,12 +427,11 @@ export function ModelRankBars({
           <Tooltip
             isAnimationActive={false}
             animationDuration={0}
-            cursor={{ fill: "var(--ink)", fillOpacity: 0.04 }}
+            // 整行硬底高亮（非半透明扫光）
+            cursor={{ fill: "var(--accent-soft)", stroke: "var(--border)", strokeWidth: 0 }}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const row = payload[0]!.payload as ModelRankItem;
-              const pct =
-                maxVal > 0 ? `${((row.value / maxVal) * 100).toFixed(0)}%` : "0%";
               return (
                 <HardTooltip
                   active
@@ -579,7 +440,6 @@ export function ModelRankBars({
                       name: row.model,
                       value: row.value,
                       color: row.color,
-                      pct,
                     },
                   ]}
                   totalLabel={unitLabel}
@@ -600,28 +460,15 @@ export function ModelRankBars({
               fontFamily: "var(--font-mono)",
               formatter: (v: number) => formatCompact(v),
             }}
-            onMouseEnter={(state) => {
-              const model = String(
-                (state as { model?: string } | undefined)?.model ?? "",
-              );
-              if (model) setHoverModel(model);
-            }}
-            onMouseLeave={() => setHoverModel(null)}
           >
-            {chartData.map((item) => {
-              const dimmed = hoverModel != null && hoverModel !== item.model;
-              const focused = hoverModel === item.model;
-              return (
-                <Cell
-                  key={item.model}
-                  fill={item.color}
-                  fillOpacity={dimmed ? 0.28 : 1}
-                  stroke="var(--border)"
-                  strokeWidth={focused ? 2.25 : 1.5}
-                  style={{ transition: "fill-opacity 140ms ease-out" }}
-                />
-              );
-            })}
+            {chartData.map((item) => (
+              <Cell
+                key={item.model}
+                fill={item.color}
+                stroke="var(--border)"
+                strokeWidth={2}
+              />
+            ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
