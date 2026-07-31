@@ -1,12 +1,11 @@
 import {
-  ChartBar,
+  ChartDonut,
   ChartLineUp,
   Coins,
   Lightning,
   Pulse,
-  Stack,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -17,13 +16,16 @@ import {
   SectionPanel,
   Skeleton,
 } from "@/components";
+import { StatusStackBar } from "@/components/charts";
 import {
-  HardBarChart,
-  HardLineChart,
-  ShareBar,
-  StatusStackBar,
-  type TrendPoint,
-} from "@/components/charts";
+  ModelCallTrendChart,
+  ModelRankBars,
+  ModelShareDonut,
+  modelColor,
+  type ModelRankItem,
+  type ModelSeriesPoint,
+  type ModelShareSlice,
+} from "@/components/model-charts";
 import {
   api,
   ApiError,
@@ -31,7 +33,6 @@ import {
   type OpsKPIsDTO,
   type OpsWindow,
   type OverviewDTO,
-  type UsageRecordDTO,
   type ZenPoolSummaryDTO,
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
@@ -51,6 +52,9 @@ function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
 }
 
 const TREND_DAYS = 7;
+/** Max distinct model series on the trend chart (rest → "other"). */
+const TREND_TOP_MODELS = 6;
+const LOG_FETCH_LIMIT = 2000;
 
 function dayKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -69,34 +73,95 @@ function recentDays(): string[] {
   return days;
 }
 
-function buildRequestTrend(logs: ReadonlyArray<LogDTO>): TrendPoint[] {
-  const bucket = new Map<string, number>(recentDays().map((d) => [d, 0]));
-  for (const log of logs) {
-    const t = new Date(log.created_at);
-    if (Number.isNaN(t.getTime())) continue;
-    const key = dayKey(t);
-    if (bucket.has(key)) bucket.set(key, (bucket.get(key) ?? 0) + 1);
-  }
-  return [...bucket.entries()].map(([label, value]) => ({ label, value }));
-}
-
-function buildTokenTrend(records: ReadonlyArray<UsageRecordDTO>): TrendPoint[] {
-  const bucket = new Map<string, number>(recentDays().map((d) => [d, 0]));
-  for (const r of records) {
-    const t = new Date(r.recorded_at);
-    if (Number.isNaN(t.getTime())) continue;
-    const key = dayKey(t);
-    if (bucket.has(key)) {
-      bucket.set(key, (bucket.get(key) ?? 0) + r.input_tokens + r.output_tokens);
-    }
-  }
-  return [...bucket.entries()].map(([label, value]) => ({ label, value }));
-}
-
 function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
+}
+
+type ModelAnalytics = {
+  readonly series: ModelSeriesPoint[];
+  readonly models: string[];
+  readonly colors: string[];
+  readonly slices: ModelShareSlice[];
+  readonly ranks: ModelRankItem[];
+  readonly totalCalls: number;
+};
+
+function buildModelAnalytics(
+  logs: ReadonlyArray<LogDTO>,
+  otherLabel: string,
+): ModelAnalytics {
+  const days = recentDays();
+  const daySet = new Set(days);
+
+  // Count per model overall (within window) for top-N selection.
+  const modelTotals = new Map<string, number>();
+  const dayModel = new Map<string, Map<string, number>>();
+  for (const d of days) dayModel.set(d, new Map());
+
+  for (const log of logs) {
+    const t = new Date(log.created_at);
+    if (Number.isNaN(t.getTime())) continue;
+    const key = dayKey(t);
+    if (!daySet.has(key)) continue;
+    const model = (log.model || "unknown").trim() || "unknown";
+    modelTotals.set(model, (modelTotals.get(model) ?? 0) + 1);
+    const bucket = dayModel.get(key)!;
+    bucket.set(model, (bucket.get(model) ?? 0) + 1);
+  }
+
+  const rankedAll = [...modelTotals.entries()].sort((a, b) => b[1] - a[1]);
+  const top = rankedAll.slice(0, TREND_TOP_MODELS).map(([m]) => m);
+  const topSet = new Set(top);
+  const hasOther = rankedAll.length > top.length;
+  const seriesModels = hasOther ? [...top, otherLabel] : top;
+
+  const colors = seriesModels.map((_, i) => modelColor(i));
+  const colorByModel = new Map(seriesModels.map((m, i) => [m, colors[i]!]));
+
+  const series: ModelSeriesPoint[] = days.map((day) => {
+    const bucket = dayModel.get(day) ?? new Map();
+    const row: Record<string, string | number> = { day, total: 0 };
+    for (const m of seriesModels) row[m] = 0;
+    let total = 0;
+    for (const [model, count] of bucket) {
+      total += count;
+      if (topSet.has(model)) {
+        row[model] = (row[model] as number) + count;
+      } else if (hasOther) {
+        row[otherLabel] = (row[otherLabel] as number) + count;
+      }
+    }
+    row["total"] = total;
+    return row as ModelSeriesPoint;
+  });
+
+  // Share + rank use full model list (not collapsed), capped for readability.
+  const shareSource = rankedAll.slice(0, 10);
+  const shareOther = rankedAll.slice(10).reduce((s, [, n]) => s + n, 0);
+  const slices: ModelShareSlice[] = shareSource.map(([model, value], i) => ({
+    model,
+    value,
+    color: modelColor(i),
+  }));
+  if (shareOther > 0) {
+    slices.push({
+      model: otherLabel,
+      value: shareOther,
+      color: modelColor(slices.length),
+    });
+  }
+
+  const ranks: ModelRankItem[] = rankedAll.slice(0, 8).map(([model, value], i) => ({
+    model,
+    value,
+    color: colorByModel.get(model) ?? modelColor(i),
+  }));
+
+  const totalCalls = rankedAll.reduce((s, [, n]) => s + n, 0);
+
+  return { series, models: seriesModels, colors, slices, ranks, totalCalls };
 }
 
 const OPS_WINDOWS: ReadonlyArray<OpsWindow> = ["1h", "24h", "7d"];
@@ -332,12 +397,16 @@ export function OverviewPage() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
   const [data, setData] = useState<OverviewDTO | null>(null);
-  const [requestTrend, setRequestTrend] = useState<TrendPoint[]>([]);
-  const [tokenTrend, setTokenTrend] = useState<TrendPoint[]>([]);
+  const [logs, setLogs] = useState<LogDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [opsWindow, setOpsWindow] = useState<OpsWindow>("24h");
   const [opsLoading, setOpsLoading] = useState(false);
+
+  const analytics = useMemo(
+    () => buildModelAnalytics(logs, t("overview.modelAnalytics.other")),
+    [logs, t],
+  );
 
   async function load(window: OpsWindow = opsWindow) {
     setLoading(true);
@@ -346,15 +415,8 @@ export function OverviewPage() {
       setData(overview);
       setError(null);
 
-      const [logsRes, usageRes] = await Promise.allSettled([api.logs(), api.usage()]);
-      setRequestTrend(
-        logsRes.status === "fulfilled" ? buildRequestTrend(logsRes.value.logs) : [],
-      );
-      setTokenTrend(
-        usageRes.status === "fulfilled"
-          ? buildTokenTrend(usageRes.value.records)
-          : [],
-      );
+      const logsRes = await Promise.allSettled([api.logs(LOG_FETCH_LIMIT)]);
+      setLogs(logsRes[0]?.status === "fulfilled" ? logsRes[0].value.logs : []);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setSessionHint(false);
@@ -398,6 +460,7 @@ export function OverviewPage() {
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-72 w-full" />
         <div className="grid gap-3 lg:grid-cols-2">
           <Skeleton className="h-56 w-full" />
           <Skeleton className="h-56 w-full" />
@@ -421,8 +484,6 @@ export function OverviewPage() {
   }
 
   if (!data) return null;
-
-  const modelMaxRequests = Math.max(1, ...data.by_model.map((m) => m.requests));
 
   const quotaHint = (() => {
     const n = data.quota_narrative;
@@ -462,6 +523,8 @@ export function OverviewPage() {
       tone: "white" as const,
     },
   ];
+
+  const hasAnalytics = analytics.totalCalls > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -517,116 +580,69 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* 3. 趋势：请求 + token 同屏 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SectionPanel
-          title={t("overview.requestTrend.title")}
-          description={t("overview.requestTrend.shortDesc", { days: TREND_DAYS })}
-          icon={ChartLineUp}
-          iconTone="yellow"
-        >
-          {requestTrend.some((p) => p.value > 0) ? (
-            <HardLineChart
-              points={requestTrend}
-              formatValue={formatCompact}
-              ariaLabel={t("overview.requestTrend.ariaLabel", { days: TREND_DAYS })}
-            />
-          ) : (
-            <EmptyState
-              compact
-              icon={ChartLineUp}
-              title={t("overview.requestTrend.emptyTitle")}
-              description={t("overview.requestTrend.emptyDescription")}
-            />
-          )}
-        </SectionPanel>
-
-        <SectionPanel
-          title={t("overview.tokenTrend.title")}
-          description={t("overview.tokenTrend.shortDesc", { days: TREND_DAYS })}
-          icon={ChartBar}
-          iconTone="teal"
-        >
-          {tokenTrend.some((p) => p.value > 0) ? (
-            <HardBarChart
-              points={tokenTrend}
-              formatValue={formatCompact}
-              ariaLabel={t("overview.tokenTrend.ariaLabel", { days: TREND_DAYS })}
-            />
-          ) : (
-            <EmptyState
-              compact
-              icon={ChartBar}
-              title={t("overview.tokenTrend.emptyTitle")}
-              description={t("overview.tokenTrend.emptyDescription")}
-            />
-          )}
-        </SectionPanel>
-      </div>
-
-      {/* 4. 按模型明细（额度细节见「额度监控」） */}
+      {/* 3. 模型调用分析：趋势 + 占比 + 排行 */}
       <SectionPanel
-        title={t("overview.byModel.title")}
-        description={t("overview.byModel.description")}
-        icon={Stack}
-        iconTone="default"
+        title={t("overview.modelAnalytics.trendTitle")}
+        description={t("overview.modelAnalytics.trendDesc", { days: TREND_DAYS })}
+        icon={ChartLineUp}
+        iconTone="yellow"
         actions={
-          <Button variant="ghost" onClick={() => void navigate("/app/logs?tab=usage")}>
-            {t("overview.byModel.viewUsage")}
+          <Button variant="ghost" onClick={() => void navigate("/app/logs")}>
+            {t("overview.modelAnalytics.viewLogs")}
           </Button>
         }
-        {...(data.by_model.length === 0 ? { bodyClassName: "p-0" } : {})}
+        {...(!hasAnalytics ? { bodyClassName: "p-0" } : {})}
       >
-        {data.by_model.length === 0 ? (
+        {hasAnalytics ? (
+          <ModelCallTrendChart
+            data={analytics.series}
+            models={analytics.models}
+            colors={analytics.colors}
+            totalLabel={t("overview.modelAnalytics.totalCalls")}
+          />
+        ) : (
           <EmptyState
             compact
-            icon={Stack}
-            title={t("overview.byModel.emptyTitle")}
-            description={t("overview.byModel.emptyDescription")}
+            icon={ChartLineUp}
+            title={t("overview.modelAnalytics.emptyTitle")}
+            description={t("overview.modelAnalytics.emptyDescription")}
             action={
-              <Button variant="secondary" onClick={() => void navigate("/app/logs?tab=usage")}>
-                {t("overview.byModel.emptyAction")}
+              <Button variant="secondary" onClick={() => void navigate("/app/logs")}>
+                {t("overview.modelAnalytics.viewLogs")}
               </Button>
             }
           />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[26rem] text-left text-sm md:min-w-[32rem]">
-              <thead>
-                <tr className="border-b-2 border-border text-caption text-ink-muted">
-                  <th className="pb-2 font-medium">{t("overview.byModel.table.model")}</th>
-                  <th className="pb-2 font-medium">{t("overview.byModel.table.share")}</th>
-                  <th className="pb-2 font-medium">{t("overview.byModel.table.requests")}</th>
-                  <th className="pb-2 font-medium">{t("overview.byModel.table.input")}</th>
-                  <th className="pb-2 font-medium">{t("overview.byModel.table.output")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.by_model.map((row) => (
-                  <tr
-                    key={row.model}
-                    className="border-b border-border last:border-b-0 transition-colors hover:bg-paper-0"
-                  >
-                    <td className="py-2.5 font-mono text-[13px] font-medium text-ink">
-                      {row.model}
-                    </td>
-                    <td className="py-2.5 pr-3">
-                      <ShareBar ratio={row.requests / modelMaxRequests} />
-                    </td>
-                    <td className="py-2.5 tabular-nums text-ink">{row.requests}</td>
-                    <td className="py-2.5 tabular-nums text-ink-muted">
-                      {formatCompact(row.input_tokens)}
-                    </td>
-                    <td className="py-2.5 tabular-nums text-ink-muted">
-                      {formatCompact(row.output_tokens)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </SectionPanel>
+
+      {hasAnalytics ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SectionPanel
+            title={t("overview.modelAnalytics.shareTitle")}
+            description={t("overview.modelAnalytics.shareDesc")}
+            icon={ChartDonut}
+            iconTone="teal"
+          >
+            <ModelShareDonut
+              slices={analytics.slices}
+              centerLabel={t("overview.modelAnalytics.centerLabel")}
+              centerValue={formatCompact(analytics.totalCalls)}
+            />
+          </SectionPanel>
+
+          <SectionPanel
+            title={t("overview.modelAnalytics.rankTitle")}
+            description={t("overview.modelAnalytics.rankDesc")}
+            icon={ChartLineUp}
+            iconTone="default"
+          >
+            <ModelRankBars
+              items={analytics.ranks}
+              unitLabel={t("overview.modelAnalytics.callsUnit")}
+            />
+          </SectionPanel>
+        </div>
+      ) : null}
     </div>
   );
 }

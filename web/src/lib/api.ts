@@ -415,7 +415,10 @@ export const api = {
         }>;
       }>;
     }>("/api/admin/ollama-quotas"),
-  usage: () => request<{ records: UsageRecordDTO[] }>("/api/admin/usage?limit=100"),
+  usage: (limit = 100) =>
+    request<{ records: UsageRecordDTO[] }>(
+      `/api/admin/usage?limit=${encodeURIComponent(String(limit))}`,
+    ),
   syncUsage: (accountId: string, maxPages = 3) =>
     request<UsageSyncResultDTO>("/api/admin/usage/sync", {
       method: "POST",
@@ -426,7 +429,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ account_id: accountId, max_pages: maxPages }),
     }),
-  logs: () => request<{ logs: LogDTO[] }>("/api/admin/logs?limit=100"),
+  logs: (limit = 100) =>
+    request<{ logs: LogDTO[] }>(
+      `/api/admin/logs?limit=${encodeURIComponent(String(limit))}`,
+    ),
   metrics: () => request<MetricsDTO>("/api/admin/metrics"),
   settings: () => request<SettingsDTO>("/api/admin/settings"),
   patchSettings: (body: {
