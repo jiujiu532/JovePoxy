@@ -131,4 +131,23 @@ describe("bucketKeyFor + buildBucketAxis", () => {
     // 00:00 .. 05:00 inclusive → 6 points
     expect(axis.length).toBe(6);
   });
+
+  it("same-day hour axis uses HH:mm labels without date prefix", () => {
+    const from = local(2026, 7, 31, 0, 0);
+    const to = local(2026, 7, 31, 23, 59);
+    const axis = buildBucketAxis(from, to, "1h");
+    expect(axis.length).toBeGreaterThan(12);
+    expect(axis[0]!.label).toBe("00:00");
+    expect(axis[15]!.label).toBe("15:00");
+    for (const item of axis) {
+      expect(item.label).toMatch(/^\d{2}:\d{2}$/);
+    }
+  });
+
+  it("multi-day hour axis keeps date in label", () => {
+    const from = local(2026, 7, 30, 20, 0);
+    const to = local(2026, 7, 31, 8, 0);
+    const axis = buildBucketAxis(from, to, "1h");
+    expect(axis.some((a) => a.label.includes("/"))).toBe(true);
+  });
 });

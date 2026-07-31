@@ -88,8 +88,17 @@ export function bucketKeyFor(date: Date, kind: BucketKind): string {
   }
 }
 
+export type BucketLabelOpts = {
+  /** When true (same local calendar day), hour/minute axes use HH:mm only. */
+  readonly sameDay?: boolean;
+};
+
 /** Display label for axis / tooltip (local). */
-export function bucketLabel(key: string, kind: BucketKind): string {
+export function bucketLabel(
+  key: string,
+  kind: BucketKind,
+  opts: BucketLabelOpts = {},
+): string {
   if (!key) return key;
   switch (kind) {
     case "15m":
@@ -99,11 +108,13 @@ export function bucketLabel(key: string, kind: BucketKind): string {
       const [datePart, timePart] = key.split("T");
       if (!datePart || !timePart) return key;
       const [, m, d] = datePart.split("-");
-      if (kind === "1h") {
-        // Today-ish: HH:00; multi-day hour axis: MM/DD HH:00
-        return `${m}/${d} ${timePart}`;
+      // Single calendar day: short clock only so ~24 hourly ticks don't pile up.
+      if (opts.sameDay || kind === "15m" || kind === "30m") {
+        return timePart;
       }
-      return timePart;
+      // Multi-day hour axis: compact MM/DD HH (drop :00 noise when on the hour)
+      const hm = timePart.endsWith(":00") ? timePart.slice(0, 2) : timePart;
+      return `${m}/${d} ${hm}`;
     }
     case "1d": {
       const [, m, d] = key.split("-");
@@ -235,6 +246,14 @@ export type BucketAxisItem = {
  * Ordered continuous axis covering [from, to] (inclusive of buckets that
  * intersect the range). Empty buckets are included so the axis stays continuous.
  */
+function sameLocalCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export function buildBucketAxis(
   from: Date,
   to: Date,
@@ -243,6 +262,9 @@ export function buildBucketAxis(
   const a = from.getTime() <= to.getTime() ? from : to;
   const b = from.getTime() <= to.getTime() ? to : from;
   const endMs = b.getTime();
+  const labelOpts: BucketLabelOpts = {
+    sameDay: sameLocalCalendarDay(a, b),
+  };
 
   let cursor = alignBucketStart(a, kind);
   // If alignment went before `from` for week/month, still include that bucket
@@ -253,7 +275,7 @@ export function buildBucketAxis(
 
   while (cursor.getTime() <= endMs && guard < maxGuard) {
     const key = bucketKeyFor(cursor, kind);
-    items.push({ key, label: bucketLabel(key, kind) });
+    items.push({ key, label: bucketLabel(key, kind, labelOpts) });
     cursor = nextBucketStart(cursor, kind);
     guard += 1;
   }
@@ -262,7 +284,7 @@ export function buildBucketAxis(
   // alignment skipped edge cases (e.g. to exactly on boundary already covered).
   if (items.length === 0) {
     const key = bucketKeyFor(a, kind);
-    items.push({ key, label: bucketLabel(key, kind) });
+    items.push({ key, label: bucketLabel(key, kind, labelOpts) });
   }
 
   return items;

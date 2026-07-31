@@ -123,6 +123,8 @@ export function ModelCallTrendChart({
           />
           <XAxis
             dataKey="day"
+            interval="preserveStartEnd"
+            minTickGap={28}
             tick={{
               fill: "var(--ink-faint)",
               fontSize: 11,
