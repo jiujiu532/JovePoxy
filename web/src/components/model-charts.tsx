@@ -1,10 +1,7 @@
 import { useCallback, useState } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
-  LabelList,
   Legend,
   Line,
   LineChart,
@@ -64,11 +61,6 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
-}
-
-function shortenModel(name: string, max = 18): string {
-  if (name.length <= max) return name;
-  return `${name.slice(0, max - 1)}…`;
 }
 
 /** 参考风格浮层：细硬边、白底、无阴影拖尾。 */
@@ -348,14 +340,15 @@ function DonutActiveShape(props: unknown) {
   );
 }
 
-/** 占比环：悬停放大 + 外侧 tooltip「模型: n 次 (pct%)」。 */
+/** 占比环：Smart Top-5 聚合 + 外置参考风 Tooltip 与高可读图例。 */
 export function ModelShareDonut({
   slices,
-  height = 240,
+  height = 280,
   className,
   centerLabel,
   centerValue,
   callsUnit,
+  otherLabel = "其他",
 }: {
   readonly slices: ReadonlyArray<ModelShareSlice>;
   readonly height?: number;
@@ -363,6 +356,7 @@ export function ModelShareDonut({
   readonly centerLabel: string;
   readonly centerValue: string;
   readonly callsUnit: string;
+  readonly otherLabel?: string;
 }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const onEnter = useCallback((_: unknown, index: number) => {
@@ -371,117 +365,141 @@ export function ModelShareDonut({
   const onLeave = useCallback(() => setActiveIndex(null), []);
 
   if (slices.length === 0) return null;
+
   const total = slices.reduce((s, x) => s + x.value, 0);
 
+  // 超过 5 个模型时：保留 Top 5 独立扇区，尾部模型聚合为「其他 (N个模型)」
+  const topSlices = slices.slice(0, 5);
+  const tailSlices = slices.slice(5);
+
+  const displaySlices: Array<ModelShareSlice & { readonly isTailAggregate?: boolean }> =
+    tailSlices.length > 0
+      ? [
+          ...topSlices,
+          {
+            model: `${otherLabel} (${tailSlices.length})`,
+            value: tailSlices.reduce((s, x) => s + x.value, 0),
+            color: "#cbd5e1",
+            isTailAggregate: true,
+          },
+        ]
+      : [...slices];
+
   return (
-    <div className={cn("relative w-full", className)} style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={[...slices]}
-            dataKey="value"
-            nameKey="model"
-            cx="50%"
-            cy="46%"
-            innerRadius="56%"
-            outerRadius="76%"
-            paddingAngle={2}
-            stroke="var(--border)"
-            strokeWidth={2}
-            isAnimationActive={false}
-            {...(activeIndex != null ? { activeIndex } : {})}
-            activeShape={DonutActiveShape}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
-          >
-            {slices.map((s) => (
-              <Cell key={s.model} fill={s.color} />
-            ))}
-          </Pie>
-          <Tooltip
-            isAnimationActive={false}
-            animationDuration={0}
-            // 外置偏移，避免压中心
-            offset={18}
-            allowEscapeViewBox={{ x: true, y: true }}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const p = payload[0]!;
-              const value = Number(p.value ?? 0);
-              const pct = total > 0 ? ((value / total) * 100).toFixed(0) : "0";
-              const name = String(p.name);
-              return (
-                <RefTooltip active>
-                  <p className="font-mono text-[12px] text-ink">
-                    <span className="font-semibold">{name}</span>
-                    <span className="text-ink-muted">
-                      {`: ${formatCompact(value)} ${callsUnit} (${pct}%)`}
-                    </span>
-                  </p>
-                </RefTooltip>
-              );
-            }}
-          />
-          <Legend
-            verticalAlign="bottom"
-            iconType="square"
-            wrapperStyle={{ fontSize: 11 }}
-            onMouseEnter={(e) => {
-              const name = String(e?.value ?? "");
-              const idx = slices.findIndex((s) => s.model === name);
-              if (idx >= 0) setActiveIndex(idx);
-            }}
-            onMouseLeave={onLeave}
-            formatter={(value) => (
-              <span className="font-mono text-[11px] text-ink-muted">{value}</span>
-            )}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-10">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-          {centerLabel}
-        </span>
-        <span className="mt-0.5 font-mono text-[1.45rem] font-bold tabular-nums leading-none text-ink">
-          {centerValue}
-        </span>
+    <div className={cn("relative w-full flex flex-col justify-between", className)} style={{ height }}>
+      <div className="relative flex-1 w-full min-h-[180px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={displaySlices}
+              dataKey="value"
+              nameKey="model"
+              cx="50%"
+              cy="50%"
+              innerRadius="58%"
+              outerRadius="78%"
+              paddingAngle={2}
+              stroke="var(--border)"
+              strokeWidth={2}
+              isAnimationActive={false}
+              {...(activeIndex != null ? { activeIndex } : {})}
+              activeShape={DonutActiveShape}
+              onMouseEnter={onEnter}
+              onMouseLeave={onLeave}
+            >
+              {displaySlices.map((s) => (
+                <Cell key={s.model} fill={s.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              isAnimationActive={false}
+              animationDuration={0}
+              offset={18}
+              allowEscapeViewBox={{ x: true, y: true }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0]!;
+                const value = Number(p.value ?? 0);
+                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+                const name = String(p.name);
+                const isTail = Boolean((p.payload as { isTailAggregate?: boolean })?.isTailAggregate);
+
+                return (
+                  <RefTooltip active>
+                    <p className="font-mono text-[12px] text-ink">
+                      <span className="font-semibold">{name}</span>
+                      <span className="text-ink-muted">
+                        {`: ${formatCompact(value)} ${callsUnit} (${pct}%)`}
+                      </span>
+                    </p>
+                    {isTail && tailSlices.length > 0 ? (
+                      <div className="mt-1.5 border-t border-border/20 pt-1 text-[11px] font-mono text-ink-muted">
+                        <p className="font-semibold mb-0.5">包含以下 {tailSlices.length} 个尾部模型：</p>
+                        <ul className="max-h-28 overflow-y-auto pr-1 flex flex-col gap-0.5">
+                          {tailSlices.map((ts) => (
+                            <li key={ts.model} className="flex justify-between gap-3">
+                              <span className="truncate max-w-[120px]">{ts.model}</span>
+                              <span className="font-semibold tabular-nums">{formatCompact(ts.value)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </RefTooltip>
+                );
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+            {centerLabel}
+          </span>
+          <span className="mt-0.5 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+            {centerValue}
+          </span>
+        </div>
+      </div>
+
+      {/* 底部精简图例 */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2 border-t-2 border-border/20">
+        {displaySlices.map((s, idx) => {
+          const isTop5 = idx < 5 && !s.isTailAggregate;
+          const pct = total > 0 ? Math.round((s.value / total) * 100) : 0;
+          const isActive = activeIndex === idx;
+          return (
+            <button
+              key={s.model}
+              type="button"
+              onMouseEnter={() => setActiveIndex(idx)}
+              onMouseLeave={() => setActiveIndex(null)}
+              className={cn(
+                "inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[11px] transition-all cursor-pointer",
+                isTop5
+                  ? "font-semibold border-border bg-paper-0 shadow-[1px_1px_0_var(--border)]"
+                  : "border-border/40 bg-paper-1 text-ink-muted",
+                isActive &&
+                  "border-border bg-accent-yellow text-black font-bold scale-105 shadow-[2px_2px_0_var(--border)]",
+              )}
+            >
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: s.color }}
+              />
+              <span className="truncate max-w-[110px]">{s.model}</span>
+              <span className="font-bold tabular-nums text-ink-faint">{pct}%</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function RankValueLabel(props: {
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number;
-  readonly height?: number;
-  readonly value?: number | string;
-}) {
-  const x = Number(props.x ?? 0);
-  const y = Number(props.y ?? 0);
-  const width = Number(props.width ?? 0);
-  const height = Number(props.height ?? 0);
-  const value = Number(props.value ?? 0);
-  const tx = x + width + 10;
-  const ty = y + height / 2 + 4;
-  return (
-    <text
-      x={tx}
-      y={ty}
-      fill="var(--ink)"
-      fontSize={13}
-      fontWeight={700}
-      fontFamily="var(--font-mono)"
-      textAnchor="start"
-    >
-      {formatCompact(value)}
-    </text>
-  );
-}
-
+/** 模型调用排行：高密度 Neo-Brutalist 交互列表。 */
 export function ModelRankBars({
   items,
-  height = 240,
+  height = 280,
   className,
   unitLabel,
 }: {
@@ -491,109 +509,73 @@ export function ModelRankBars({
   readonly unitLabel: string;
 }) {
   if (items.length === 0) return null;
-  const chartData = [...items].reverse();
+
+  const total = items.reduce((s, x) => s + x.value, 0);
   const maxVal = Math.max(1, ...items.map((i) => i.value));
 
   return (
-    <div className={cn("w-full", className)} style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={chartData}
-          layout="vertical"
-          margin={{ top: 4, right: 44, left: 4, bottom: 4 }}
-          barCategoryGap="30%"
-        >
-          <CartesianGrid
-            stroke="var(--border)"
-            strokeOpacity={0.12}
-            horizontal={false}
-          />
-          <XAxis
-            type="number"
-            allowDecimals={false}
-            domain={[0, Math.ceil(maxVal * 1.12)]}
-            tick={{
-              fill: "var(--ink-faint)",
-              fontSize: 10,
-              fontFamily: "var(--font-mono)",
-            }}
-            axisLine={{ stroke: "var(--border)", strokeWidth: 1 }}
-            tickLine={false}
-            tickFormatter={formatCompact}
-          />
-          <YAxis
-            type="category"
-            dataKey="model"
-            width={128}
-            tickLine={false}
-            axisLine={false}
-            tick={(props) => {
-              const { x, y, payload } = props as {
-                x: number;
-                y: number;
-                payload: { value: string };
-              };
-              const full = String(payload.value);
-              const text = shortenModel(full, 16);
-              return (
-                <text
-                  x={x}
-                  y={y}
-                  dy={4}
-                  textAnchor="end"
-                  fill="var(--ink)"
-                  fontSize={11}
-                  fontFamily="var(--font-mono)"
-                >
-                  <title>{full}</title>
-                  {text}
-                </text>
-              );
-            }}
-          />
-          <Tooltip
-            isAnimationActive={false}
-            animationDuration={0}
-            cursor={{ fill: "var(--accent-soft)" }}
-            offset={16}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const row = payload[0]!.payload as ModelRankItem;
-              return (
-                <RefTooltip active>
-                  <p className="flex items-center gap-2 font-mono text-[12px] text-ink">
-                    <span
-                      className="inline-block h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: row.color }}
-                      aria-hidden
-                    />
-                    <span className="font-semibold">{row.model}</span>
-                    <span className="text-ink-muted">
-                      {formatCompact(row.value)} {unitLabel}
-                    </span>
-                  </p>
-                </RefTooltip>
-              );
-            }}
-          />
-          <Bar
-            dataKey="value"
-            radius={0}
-            isAnimationActive={false}
-            maxBarSize={22}
+    <div
+      className={cn(
+        "w-full flex flex-col gap-1.5 overflow-y-auto pr-1 font-mono text-[12px]",
+        className,
+      )}
+      style={{ maxHeight: height }}
+    >
+      {items.map((item, index) => {
+        const rankNum = index + 1;
+        const isTop5 = index < 5;
+        const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0";
+        const fillPct = Math.max(4, Math.round((item.value / maxVal) * 100));
+
+        return (
+          <div
+            key={item.model}
+            className={cn(
+              "group flex items-center gap-2 border-2 border-border p-1.5 transition-all hover:bg-paper-2 hover:shadow-[2px_2px_0_var(--border)]",
+              isTop5 ? "bg-paper-0" : "bg-paper-1/60 opacity-90",
+            )}
+            title={`${item.model}: ${item.value} ${unitLabel} (${pct}%)`}
           >
-            {chartData.map((item) => (
-              <Cell
-                key={item.model}
-                fill={item.color}
-                stroke="var(--border)"
-                strokeWidth={2}
+            {/* Rank badge */}
+            <span
+              className={cn(
+                "inline-flex h-5 w-5 shrink-0 items-center justify-center border font-mono text-[10px] font-extrabold",
+                isTop5
+                  ? "border-border bg-accent-yellow text-black shadow-[1px_1px_0_var(--border)]"
+                  : "border-border/40 bg-paper-2 text-ink-muted",
+              )}
+            >
+              #{rankNum}
+            </span>
+
+            {/* Model Name */}
+            <span
+              className="w-32 shrink-0 truncate font-mono text-[11px] font-semibold text-ink"
+              title={item.model}
+            >
+              {item.model}
+            </span>
+
+            {/* Progress track */}
+            <div className="relative flex-1 h-3.5 border-1.5 border-border bg-paper-2 overflow-hidden">
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  width: `${fillPct}%`,
+                  backgroundColor: isTop5 ? item.color : "var(--accent-mint)",
+                  opacity: isTop5 ? 1 : 0.65,
+                }}
               />
-            ))}
-            <LabelList dataKey="value" content={<RankValueLabel />} />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+            </div>
+
+            {/* Value & Percentage */}
+            <div className="shrink-0 font-mono text-[11px] tabular-nums text-right min-w-[76px]">
+              <span className="font-bold text-ink">{formatCompact(item.value)}</span>
+              <span className="ml-1 text-[10px] text-ink-muted">({pct}%)</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
