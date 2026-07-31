@@ -9,12 +9,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
+  DateRangePicker,
   EmptyState,
   ErrorState,
   MetricRail,
   PageHeader,
+  presetRange,
+  rangeDayCount,
   SectionPanel,
   Skeleton,
+  type DateRangeValue,
 } from "@/components";
 import { StatusStackBar } from "@/components/charts";
 import {
@@ -51,7 +55,6 @@ function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
   });
 }
 
-const TREND_DAYS = 7;
 /** Max distinct model series on the trend chart (rest → "other"). */
 const TREND_TOP_MODELS = 6;
 const LOG_FETCH_LIMIT = 2000;
@@ -62,13 +65,23 @@ function dayKey(date: Date): string {
   return `${m}/${d}`;
 }
 
-function recentDays(): string[] {
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Inclusive calendar-day labels between from/to (local). Cap at 62 for chart density. */
+function daysInRange(from: Date, to: Date): string[] {
+  const start = startOfLocalDay(from);
+  const end = startOfLocalDay(to);
   const days: string[] = [];
-  const now = new Date();
-  for (let i = TREND_DAYS - 1; i >= 0; i -= 1) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    days.push(dayKey(d));
+  const cursor = new Date(start);
+  let guard = 0;
+  while (cursor.getTime() <= end.getTime() && guard < 62) {
+    days.push(dayKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+    guard += 1;
   }
   return days;
 }
@@ -77,6 +90,25 @@ function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
+}
+
+function rangeLabel(range: DateRangeValue, t: Translate): string {
+  switch (range.preset) {
+    case "today":
+      return t("overview.modelAnalytics.rangeToday");
+    case "7d":
+      return t("overview.modelAnalytics.range7d");
+    case "week":
+      return t("overview.modelAnalytics.rangeWeek");
+    case "30d":
+      return t("overview.modelAnalytics.range30d");
+    case "month":
+      return t("overview.modelAnalytics.rangeMonth");
+    default:
+      return t("overview.modelAnalytics.rangeDays", {
+        n: rangeDayCount(range.from, range.to),
+      });
+  }
 }
 
 type ModelAnalytics = {
@@ -91,9 +123,12 @@ type ModelAnalytics = {
 function buildModelAnalytics(
   logs: ReadonlyArray<LogDTO>,
   otherLabel: string,
+  range: DateRangeValue,
 ): ModelAnalytics {
-  const days = recentDays();
+  const days = daysInRange(range.from, range.to);
   const daySet = new Set(days);
+  const fromMs = range.from.getTime();
+  const toMs = range.to.getTime();
 
   // Count per model overall (within window) for top-N selection.
   const modelTotals = new Map<string, number>();
@@ -103,11 +138,14 @@ function buildModelAnalytics(
   for (const log of logs) {
     const t = new Date(log.created_at);
     if (Number.isNaN(t.getTime())) continue;
+    const ms = t.getTime();
+    if (ms < fromMs || ms > toMs) continue;
     const key = dayKey(t);
     if (!daySet.has(key)) continue;
     const model = (log.model || "unknown").trim() || "unknown";
     modelTotals.set(model, (modelTotals.get(model) ?? 0) + 1);
-    const bucket = dayModel.get(key)!;
+    const bucket = dayModel.get(key);
+    if (!bucket) continue;
     bucket.set(model, (bucket.get(model) ?? 0) + 1);
   }
 
@@ -402,10 +440,27 @@ export function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [opsWindow, setOpsWindow] = useState<OpsWindow>("24h");
   const [opsLoading, setOpsLoading] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
 
   const analytics = useMemo(
-    () => buildModelAnalytics(logs, t("overview.modelAnalytics.other")),
-    [logs, t],
+    () => buildModelAnalytics(logs, t("overview.modelAnalytics.other"), dateRange),
+    [logs, t, dateRange],
+  );
+  const analyticsRangeText = useMemo(() => rangeLabel(dateRange, t), [dateRange, t]);
+  const rangePickerLabels = useMemo(
+    () => ({
+      today: t("overview.modelAnalytics.rangeToday"),
+      last7d: t("overview.modelAnalytics.range7d"),
+      thisWeek: t("overview.modelAnalytics.rangeWeek"),
+      last30d: t("overview.modelAnalytics.range30d"),
+      thisMonth: t("overview.modelAnalytics.rangeMonth"),
+      apply: t("overview.modelAnalytics.rangeApply"),
+      clear: t("overview.modelAnalytics.rangeCancel"),
+      start: t("overview.modelAnalytics.rangeStart"),
+      end: t("overview.modelAnalytics.rangeEnd"),
+      placeholder: t("overview.modelAnalytics.rangePlaceholder"),
+    }),
+    [t],
   );
 
   async function load(window: OpsWindow = opsWindow) {
@@ -580,16 +635,24 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* 3. 模型调用分析：趋势 + 占比 + 排行 */}
+      {/* 3. 模型调用分析：日期筛选驱动趋势 + 占比 + 排行 */}
       <SectionPanel
         title={t("overview.modelAnalytics.trendTitle")}
-        description={t("overview.modelAnalytics.trendDesc", { days: TREND_DAYS })}
+        description={t("overview.modelAnalytics.trendDesc", { range: analyticsRangeText })}
         icon={ChartLineUp}
         iconTone="yellow"
         actions={
-          <Button variant="ghost" onClick={() => void navigate("/app/logs")}>
-            {t("overview.modelAnalytics.viewLogs")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              labels={rangePickerLabels}
+              lang={lang}
+            />
+            <Button variant="ghost" onClick={() => void navigate("/app/logs")}>
+              {t("overview.modelAnalytics.viewLogs")}
+            </Button>
+          </div>
         }
         {...(!hasAnalytics ? { bodyClassName: "p-0" } : {})}
       >
@@ -619,7 +682,9 @@ export function OverviewPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionPanel
             title={t("overview.modelAnalytics.shareTitle")}
-            description={t("overview.modelAnalytics.shareDesc")}
+            description={t("overview.modelAnalytics.shareDesc", {
+              range: analyticsRangeText,
+            })}
             icon={ChartDonut}
             iconTone="teal"
           >
@@ -633,7 +698,9 @@ export function OverviewPage() {
 
           <SectionPanel
             title={t("overview.modelAnalytics.rankTitle")}
-            description={t("overview.modelAnalytics.rankDesc")}
+            description={t("overview.modelAnalytics.rankDesc", {
+              range: analyticsRangeText,
+            })}
             icon={ChartLineUp}
             iconTone="default"
           >

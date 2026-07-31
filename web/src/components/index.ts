@@ -2,6 +2,16 @@ export { Badge } from "@/components/Badge";
 export { BrandMark } from "@/components/BrandMark";
 export { Button } from "@/components/Button";
 export { Card } from "@/components/Card";
+export {
+  DateRangePicker,
+  formatDateMD,
+  formatDateYMD,
+  presetRange,
+  rangeDayCount,
+  type DateRangeLabels,
+  type DateRangePreset,
+  type DateRangeValue,
+} from "@/components/DateRangePicker";
 export { DeleteButton } from "@/components/DeleteButton";
 export { Dialog } from "@/components/Dialog";
 export { EmptyState } from "@/components/EmptyState";
