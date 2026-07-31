@@ -43,8 +43,8 @@ function ModelIdCell({ id, family }: { readonly id: string; readonly family: str
     <div className="flex min-w-0 items-center gap-2.5">
       <span
         className={cn(
-          "inline-flex h-8 w-8 shrink-0 items-center justify-center border-2 border-border",
-          "text-[11px] font-bold tracking-tight shadow-[2px_2px_0_var(--border)]",
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center border-2 border-border",
+          "font-mono text-[10px] font-extrabold tracking-tight shadow-[1px_1px_0_var(--border)]",
           tone.bg,
           tone.text,
         )}
@@ -52,22 +52,26 @@ function ModelIdCell({ id, family }: { readonly id: string; readonly family: str
       >
         {familyInitials(family)}
       </span>
-      <span className="truncate font-mono text-[13px] font-medium text-ink">{id}</span>
+      <span className="truncate font-mono text-[13px] font-bold text-ink">{id}</span>
     </div>
   );
 }
 
-function RouteCell({ free, freeLabel, paidLabel }: {
+function RouteCell({
+  free,
+  freeLabel,
+  paidLabel,
+}: {
   readonly free: boolean;
   readonly freeLabel: string;
   readonly paidLabel: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-muted">
+    <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-ink-muted">
       {free ? (
-        <Globe size={14} weight="duotone" className="shrink-0 text-ink" aria-hidden />
+        <Globe size={14} weight="duotone" className="shrink-0 text-accent-yellow" aria-hidden />
       ) : (
-        <Coins size={14} weight="duotone" className="shrink-0 text-ink" aria-hidden />
+        <Coins size={14} weight="duotone" className="shrink-0 text-accent-coral" aria-hidden />
       )}
       <span className="truncate">{free ? freeLabel : paidLabel}</span>
     </span>
@@ -356,17 +360,17 @@ export function ModelsPage() {
                 <div className="hidden overflow-x-auto md:block">
                   <table className="w-full min-w-[40rem] text-left text-sm">
                     <thead>
-                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
-                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                      <tr className="border-b-2 border-border bg-paper-2 font-mono text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                        <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.id")}
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                        <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.family")}
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                        <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.kind")}
                         </th>
-                        <th className="whitespace-nowrap px-3 py-2.5 font-semibold">
+                        <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.route")}
                         </th>
                       </tr>
@@ -377,24 +381,24 @@ export function ModelsPage() {
                         return (
                           <tr
                             key={model.id}
-                            className="border-b border-border last:border-b-0 transition-colors hover:bg-accent-soft/40"
+                            className="border-b border-border/60 last:border-b-0 transition-colors hover:bg-paper-2/80"
                           >
-                            <td className="whitespace-nowrap px-3 py-2.5">
+                            <td className="whitespace-nowrap px-4 py-3">
                               <ModelIdCell id={model.id} family={family} />
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2.5">
-                              <span className="inline-flex items-center border border-border bg-paper-0 px-1.5 py-0.5 text-[12px] font-medium text-ink-muted">
+                            <td className="whitespace-nowrap px-4 py-3">
+                              <span className="inline-flex items-center border border-border bg-paper-0 px-2 py-0.5 font-mono text-[11px] font-bold text-ink shadow-[1px_1px_0_var(--border)]">
                                 {family}
                               </span>
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2.5">
+                            <td className="whitespace-nowrap px-4 py-3">
                               {model.free ? (
                                 <Badge kind="free">free</Badge>
                               ) : (
                                 <Badge kind="paid">paid</Badge>
                               )}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2.5">
+                            <td className="whitespace-nowrap px-4 py-3">
                               <RouteCell
                                 free={model.free}
                                 freeLabel={t("models.routeFree")}
