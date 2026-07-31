@@ -627,6 +627,7 @@ export function OverviewPage() {
               slices={analytics.slices}
               centerLabel={t("overview.modelAnalytics.centerLabel")}
               centerValue={formatCompact(analytics.totalCalls)}
+              callsUnit={t("overview.modelAnalytics.callsUnit")}
             />
           </SectionPanel>
 
