@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,10 +19,19 @@ type ModelAggregate struct {
 	OutputTokens int64
 }
 
+// ListFilter bounds usage listing. Zero From/To means open-ended.
+type ListFilter struct {
+	AccountID string
+	From      time.Time // inclusive if set (recorded_at)
+	To        time.Time // inclusive if set (recorded_at)
+	Limit     int
+	Offset    int
+}
+
 // Store persists usage records and sync cursors.
 type Store interface {
 	InsertIgnore(ctx context.Context, accountID string, records []Record) (int, error)
-	List(ctx context.Context, accountID string, limit, offset int) ([]StoredRecord, error)
+	List(ctx context.Context, filter ListFilter) ([]StoredRecord, error)
 	GetSyncState(ctx context.Context, accountID string) (SyncState, error)
 	SetSyncState(ctx context.Context, state SyncState) error
 	// AggregateTotals returns request count and token sum since the RFC3339 bound (inclusive).
@@ -70,10 +80,12 @@ func (store *sqliteStore) InsertIgnore(ctx context.Context, accountID string, re
 		if err != nil {
 			return inserted, err
 		}
+		// Normalize to fixed-ms RFC3339 so list bounds compare lexicographically.
+		recordedAt := normalizeRecordedAt(record.CreatedAt)
 		result, err := store.db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO usage_records (id, account_id, usg_id, model, input_tokens, output_tokens, recorded_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, id, accountID, record.USGID, record.Model, record.InputTokens, record.OutputTokens, record.CreatedAt)
+		`, id, accountID, record.USGID, record.Model, record.InputTokens, record.OutputTokens, recordedAt)
 		if err != nil {
 			return inserted, fmt.Errorf("insert usage record: %w", err)
 		}
@@ -83,17 +95,28 @@ func (store *sqliteStore) InsertIgnore(ctx context.Context, accountID string, re
 	return inserted, nil
 }
 
-func (store *sqliteStore) List(ctx context.Context, accountID string, limit, offset int) ([]StoredRecord, error) {
-	if limit <= 0 {
-		limit = 50
+func (store *sqliteStore) List(ctx context.Context, filter ListFilter) ([]StoredRecord, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 50
 	}
+	fromBound := ""
+	toBound := ""
+	if !filter.From.IsZero() {
+		fromBound = formatRecordedAtBound(filter.From)
+	}
+	if !filter.To.IsZero() {
+		toBound = formatRecordedAtBound(filter.To)
+	}
+	// Closed interval [from, to] on recorded_at (fixed-ms RFC3339 strings).
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, account_id, usg_id, model, input_tokens, output_tokens, recorded_at
 		FROM usage_records
 		WHERE (? = '' OR account_id = ?)
+		  AND (? = '' OR recorded_at >= ?)
+		  AND (? = '' OR recorded_at <= ?)
 		ORDER BY recorded_at DESC, usg_id DESC
 		LIMIT ? OFFSET ?
-	`, accountID, accountID, limit, offset)
+	`, filter.AccountID, filter.AccountID, fromBound, fromBound, toBound, toBound, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("list usage records: %w", err)
 	}
@@ -107,6 +130,28 @@ func (store *sqliteStore) List(ctx context.Context, accountID string, limit, off
 		out = append(out, record)
 	}
 	return out, rows.Err()
+}
+
+// recordedAtLayout is fixed-millisecond UTC so string compare matches chronological order
+// for OpenCode-style timestamps (e.g. 2026-07-30T12:00:00.000Z).
+const recordedAtLayout = "2006-01-02T15:04:05.000Z07:00"
+
+func formatRecordedAtBound(t time.Time) string {
+	return t.UTC().Format(recordedAtLayout)
+}
+
+func normalizeRecordedAt(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return ts.UTC().Format(recordedAtLayout)
+	}
+	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+		return ts.UTC().Format(recordedAtLayout)
+	}
+	return raw
 }
 
 func (store *sqliteStore) GetSyncState(ctx context.Context, accountID string) (SyncState, error) {

@@ -129,9 +129,22 @@ func (service *Service) Recent(limit int) []Entry {
 	return out
 }
 
-// List reads persisted logs newest first.
+// ListFilter bounds persisted log listing. Zero From/To means open-ended.
+type ListFilter struct {
+	From   time.Time // inclusive if set
+	To     time.Time // inclusive if set
+	Limit  int
+	Offset int
+}
+
+// List reads persisted logs newest first (no time filter).
 func (service *Service) List(ctx context.Context, limit, offset int) ([]Entry, error) {
-	return service.store.List(ctx, limit, offset)
+	return service.ListFiltered(ctx, ListFilter{Limit: limit, Offset: offset})
+}
+
+// ListFiltered reads persisted logs with optional created_at bounds.
+func (service *Service) ListFiltered(ctx context.Context, filter ListFilter) ([]Entry, error) {
+	return service.store.List(ctx, filter)
 }
 
 func (service *Service) pushRing(entry Entry) {
@@ -150,7 +163,7 @@ func newID() string {
 // Store is the persistence boundary for request logs.
 type Store interface {
 	Insert(context.Context, Entry) error
-	List(context.Context, int, int) ([]Entry, error)
+	List(context.Context, ListFilter) ([]Entry, error)
 }
 
 type sqliteStore struct{ db *sql.DB }
@@ -158,6 +171,15 @@ type sqliteStore struct{ db *sql.DB }
 // NewSQLiteStore persists request logs in SQLite.
 func NewSQLiteStore(database *sql.DB) Store {
 	return &sqliteStore{db: database}
+}
+
+// createdAtLayout pads fractional seconds to 9 digits so lexicographic order matches
+// chronological order. time.RFC3339Nano strips trailing zeros and breaks string compares
+// (e.g. "...00.5Z" < "...00Z").
+const createdAtLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+func formatCreatedAt(t time.Time) string {
+	return t.UTC().Format(createdAtLayout)
 }
 
 func (store *sqliteStore) Insert(ctx context.Context, entry Entry) error {
@@ -168,21 +190,34 @@ func (store *sqliteStore) Insert(ctx context.Context, entry Entry) error {
 	_, err := store.db.ExecContext(ctx, `
 		INSERT INTO request_logs (id, key_id, model, route, status, latency_ms, stream, error_class, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, entry.ID, keyID, entry.Model, entry.Route, entry.Status, entry.LatencyMS, boolToInt(entry.Stream), nullString(entry.ErrorClass), entry.CreatedAt.UTC().Format(time.RFC3339Nano))
+	`, entry.ID, keyID, entry.Model, entry.Route, entry.Status, entry.LatencyMS, boolToInt(entry.Stream), nullString(entry.ErrorClass), formatCreatedAt(entry.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("insert request log: %w", err)
 	}
 	return nil
 }
 
-func (store *sqliteStore) List(ctx context.Context, limit, offset int) ([]Entry, error) {
-	if limit <= 0 {
-		limit = 50
+func (store *sqliteStore) List(ctx context.Context, filter ListFilter) ([]Entry, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 50
 	}
+	fromBound := ""
+	toBound := ""
+	if !filter.From.IsZero() {
+		fromBound = formatCreatedAt(filter.From)
+	}
+	if !filter.To.IsZero() {
+		toBound = formatCreatedAt(filter.To)
+	}
+	// Closed interval [from, to] on fixed-width RFC3339Nano UTC strings.
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, key_id, model, route, status, latency_ms, stream, error_class, created_at
-		FROM request_logs ORDER BY created_at DESC LIMIT ? OFFSET ?
-	`, limit, offset)
+		FROM request_logs
+		WHERE (? = '' OR created_at >= ?)
+		  AND (? = '' OR created_at <= ?)
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`, fromBound, fromBound, toBound, toBound, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("list request logs: %w", err)
 	}

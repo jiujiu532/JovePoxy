@@ -208,7 +208,9 @@ type usageRecordDTO struct {
 }
 
 type usageResponse struct {
-	Records []usageRecordDTO `json:"records"`
+	Records   []usageRecordDTO `json:"records"`
+	Truncated bool             `json:"truncated,omitempty"`
+	Limit     int              `json:"limit,omitempty"`
 }
 
 type logDTO struct {
@@ -224,7 +226,9 @@ type logDTO struct {
 }
 
 type logsResponse struct {
-	Logs []logDTO `json:"logs"`
+	Logs      []logDTO `json:"logs"`
+	Truncated bool     `json:"truncated,omitempty"`
+	Limit     int      `json:"limit,omitempty"`
 }
 
 type settingsResponse struct {

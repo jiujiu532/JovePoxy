@@ -415,10 +415,25 @@ export const api = {
         }>;
       }>;
     }>("/api/admin/ollama-quotas"),
-  usage: (limit = 100) =>
-    request<{ records: UsageRecordDTO[] }>(
-      `/api/admin/usage?limit=${encodeURIComponent(String(limit))}`,
-    ),
+  usage: (opts?: {
+    limit?: number;
+    from?: string;
+    to?: string;
+    offset?: number;
+    account_id?: string;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(opts?.limit ?? 100));
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    if (opts?.offset != null) params.set("offset", String(opts.offset));
+    if (opts?.account_id) params.set("account_id", opts.account_id);
+    return request<{
+      records: UsageRecordDTO[];
+      truncated?: boolean;
+      limit?: number;
+    }>(`/api/admin/usage?${params.toString()}`);
+  },
   syncUsage: (accountId: string, maxPages = 3) =>
     request<UsageSyncResultDTO>("/api/admin/usage/sync", {
       method: "POST",
@@ -429,10 +444,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ account_id: accountId, max_pages: maxPages }),
     }),
-  logs: (limit = 100) =>
-    request<{ logs: LogDTO[] }>(
-      `/api/admin/logs?limit=${encodeURIComponent(String(limit))}`,
-    ),
+  logs: (opts?: {
+    limit?: number;
+    from?: string;
+    to?: string;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(opts?.limit ?? 100));
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    if (opts?.offset != null) params.set("offset", String(opts.offset));
+    return request<{
+      logs: LogDTO[];
+      truncated?: boolean;
+      limit?: number;
+    }>(`/api/admin/logs?${params.toString()}`);
+  },
   metrics: () => request<MetricsDTO>("/api/admin/metrics"),
   settings: () => request<SettingsDTO>("/api/admin/settings"),
   patchSettings: (body: {

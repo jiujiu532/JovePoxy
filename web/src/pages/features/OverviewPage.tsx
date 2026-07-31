@@ -41,6 +41,13 @@ import {
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { useI18n, type Lang, type Translate } from "@/lib/i18n";
+import {
+  bucketHintKey,
+  bucketKeyFor,
+  buildBucketAxis,
+  resolveBucketKind,
+  type BucketKind,
+} from "@/lib/time-buckets";
 
 function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
   if (!value) return t("overview.justSynced");
@@ -54,37 +61,9 @@ function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
   });
 }
 
-/** Max distinct model series on the trend chart (rest → "other"). */
-const TREND_TOP_MODELS = 6;
-const LOG_FETCH_LIMIT = 2000;
-const USAGE_FETCH_LIMIT = 2000;
-
-function dayKey(date: Date): string {
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${m}/${d}`;
-}
-
-function startOfLocalDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-/** Inclusive calendar-day labels between from/to (local). Cap at 62 for chart density. */
-function daysInRange(from: Date, to: Date): string[] {
-  const start = startOfLocalDay(from);
-  const end = startOfLocalDay(to);
-  const days: string[] = [];
-  const cursor = new Date(start);
-  let guard = 0;
-  while (cursor.getTime() <= end.getTime() && guard < 62) {
-    days.push(dayKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-    guard += 1;
-  }
-  return days;
-}
+/** Overview pulls a larger window; server may still truncate. */
+const LOG_FETCH_LIMIT = 5000;
+const USAGE_FETCH_LIMIT = 5000;
 
 function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -182,78 +161,70 @@ type ModelAnalytics = {
   readonly slices: ModelShareSlice[];
   readonly ranks: ModelRankItem[];
   readonly totalCalls: number;
+  readonly bucketKind: BucketKind;
 };
 
+/** R-B: all models in range; adaptive time buckets (no Top-N / synthetic "other"). */
 function buildModelAnalytics(
   logs: ReadonlyArray<LogDTO>,
-  otherLabel: string,
   range: DateRangeValue,
 ): ModelAnalytics {
-  const days = daysInRange(range.from, range.to);
-  const daySet = new Set(days);
   const fromMs = range.from.getTime();
   const toMs = range.to.getTime();
+  const bucketKind = resolveBucketKind(range.from, range.to);
+  const axis = buildBucketAxis(range.from, range.to, bucketKind);
+  const axisKeys = axis.map((a) => a.key);
+  const labelByKey = new Map(axis.map((a) => [a.key, a.label]));
+  const keySet = new Set(axisKeys);
 
   const modelTotals = new Map<string, number>();
-  const dayModel = new Map<string, Map<string, number>>();
-  for (const d of days) dayModel.set(d, new Map());
+  const bucketModel = new Map<string, Map<string, number>>();
+  for (const k of axisKeys) bucketModel.set(k, new Map());
 
   for (const log of logs) {
     const t = new Date(log.created_at);
     if (Number.isNaN(t.getTime())) continue;
     const ms = t.getTime();
     if (ms < fromMs || ms > toMs) continue;
-    const key = dayKey(t);
-    if (!daySet.has(key)) continue;
+    const key = bucketKeyFor(t, bucketKind);
+    if (!keySet.has(key)) continue;
     const model = (log.model || "unknown").trim() || "unknown";
     modelTotals.set(model, (modelTotals.get(model) ?? 0) + 1);
-    const bucket = dayModel.get(key);
+    const bucket = bucketModel.get(key);
     if (!bucket) continue;
     bucket.set(model, (bucket.get(model) ?? 0) + 1);
   }
 
+  // Rank by call volume for stable color index; do not drop any model (R-B).
   const rankedAll = [...modelTotals.entries()].sort((a, b) => b[1] - a[1]);
-  const top = rankedAll.slice(0, TREND_TOP_MODELS).map(([m]) => m);
-  const topSet = new Set(top);
-  const hasOther = rankedAll.length > top.length;
-  const seriesModels = hasOther ? [...top, otherLabel] : top;
-
+  const seriesModels = rankedAll.map(([m]) => m);
+  const seriesModelSet = new Set(seriesModels);
   const colors = seriesModels.map((_, i) => modelColor(i));
   const colorByModel = new Map(seriesModels.map((m, i) => [m, colors[i]!]));
 
-  const series: ModelSeriesPoint[] = days.map((day) => {
-    const bucket = dayModel.get(day) ?? new Map();
-    const row: Record<string, string | number> = { day, total: 0 };
+  const series: ModelSeriesPoint[] = axisKeys.map((key) => {
+    const bucket = bucketModel.get(key) ?? new Map();
+    const label = labelByKey.get(key) ?? key;
+    const row: Record<string, string | number> = { day: label, total: 0 };
     for (const m of seriesModels) row[m] = 0;
     let total = 0;
     for (const [model, count] of bucket) {
       total += count;
-      if (topSet.has(model)) {
+      if (seriesModelSet.has(model)) {
         row[model] = (row[model] as number) + count;
-      } else if (hasOther) {
-        row[otherLabel] = (row[otherLabel] as number) + count;
       }
     }
     row["total"] = total;
     return row as ModelSeriesPoint;
   });
 
-  const shareSource = rankedAll.slice(0, 10);
-  const shareOther = rankedAll.slice(10).reduce((s, [, n]) => s + n, 0);
-  const slices: ModelShareSlice[] = shareSource.map(([model, value], i) => ({
+  const slices: ModelShareSlice[] = rankedAll.map(([model, value], i) => ({
     model,
     value,
-    color: modelColor(i),
+    color: colorByModel.get(model) ?? modelColor(i),
   }));
-  if (shareOther > 0) {
-    slices.push({
-      model: otherLabel,
-      value: shareOther,
-      color: modelColor(slices.length),
-    });
-  }
 
-  const ranks: ModelRankItem[] = rankedAll.slice(0, 8).map(([model, value], i) => ({
+  const ranks: ModelRankItem[] = rankedAll.map(([model, value], i) => ({
     model,
     value,
     color: colorByModel.get(model) ?? modelColor(i),
@@ -261,7 +232,15 @@ function buildModelAnalytics(
 
   const totalCalls = rankedAll.reduce((s, [, n]) => s + n, 0);
 
-  return { series, models: seriesModels, colors, slices, ranks, totalCalls };
+  return {
+    series,
+    models: seriesModels,
+    colors,
+    slices,
+    ranks,
+    totalCalls,
+    bucketKind,
+  };
 }
 
 function formatSuccessRate(rate: number | null | undefined, requests: number): string {
@@ -435,6 +414,7 @@ export function OverviewPage() {
   const [data, setData] = useState<OverviewDTO | null>(null);
   const [logs, setLogs] = useState<LogDTO[]>([]);
   const [usage, setUsage] = useState<UsageRecordDTO[]>([]);
+  const [dataTruncated, setDataTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
@@ -457,8 +437,13 @@ export function OverviewPage() {
   );
 
   const analytics = useMemo(
-    () => buildModelAnalytics(logs, t("overview.modelAnalytics.other"), dateRange),
-    [logs, t, dateRange],
+    () => buildModelAnalytics(logs, dateRange),
+    [logs, dateRange],
+  );
+
+  const bucketText = useMemo(
+    () => t(bucketHintKey(analytics.bucketKind)),
+    [analytics.bucketKind, t],
   );
 
   const opsKpis = useMemo(() => buildOpsFromLogs(logs, dateRange), [logs, dateRange]);
@@ -472,19 +457,27 @@ export function OverviewPage() {
     [usage, dateRange],
   );
 
-  async function load() {
-    setLoading(true);
+  const rangeFromIso = dateRange.from.toISOString();
+  const rangeToIso = dateRange.to.toISOString();
+
+  async function load(opts?: { soft?: boolean }) {
+    if (!opts?.soft) setLoading(true);
     try {
       const overview = await api.overview();
       setData(overview);
       setError(null);
 
+      const from = dateRange.from.toISOString();
+      const to = dateRange.to.toISOString();
       const settled = await Promise.allSettled([
-        api.logs(LOG_FETCH_LIMIT),
-        api.usage(USAGE_FETCH_LIMIT),
+        api.logs({ limit: LOG_FETCH_LIMIT, from, to }),
+        api.usage({ limit: USAGE_FETCH_LIMIT, from, to }),
       ]);
-      setLogs(settled[0]?.status === "fulfilled" ? settled[0].value.logs : []);
-      setUsage(settled[1]?.status === "fulfilled" ? settled[1].value.records : []);
+      const logsRes = settled[0]?.status === "fulfilled" ? settled[0].value : null;
+      const usageRes = settled[1]?.status === "fulfilled" ? settled[1].value : null;
+      setLogs(logsRes?.logs ?? []);
+      setUsage(usageRes?.records ?? []);
+      setDataTruncated(Boolean(logsRes?.truncated || usageRes?.truncated));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setSessionHint(false);
@@ -498,9 +491,10 @@ export function OverviewPage() {
   }
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial mount only
-  }, [navigate]);
+    // Soft re-fetch when range changes so the page does not flash full skeleton.
+    void load({ soft: data != null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load closes over latest range via deps
+  }, [navigate, rangeFromIso, rangeToIso]);
 
   if (loading) {
     return (
@@ -632,10 +626,22 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* 3. 模型调用分析：同一区间 */}
+      {dataTruncated ? (
+        <p
+          role="status"
+          className="border-2 border-border bg-accent-yellow/20 px-3 py-2 font-mono text-[12px] text-ink"
+        >
+          {t("overview.dataTruncated")}
+        </p>
+      ) : null}
+
+      {/* 3. 模型调用分析：同一区间 + 自适应时间桶 */}
       <SectionPanel
         title={t("overview.modelAnalytics.trendTitle")}
-        description={t("overview.modelAnalytics.trendDesc", { range: rangeText })}
+        description={t("overview.modelAnalytics.trendDesc", {
+          range: rangeText,
+          bucket: bucketText,
+        })}
         icon={ChartLineUp}
         iconTone="yellow"
         actions={

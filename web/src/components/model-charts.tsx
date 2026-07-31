@@ -105,12 +105,16 @@ export function ModelCallTrendChart({
 }) {
   if (empty || data.length === 0 || models.length === 0) return null;
 
+  // Extra room for multi-line legend when many models (R-B full series).
+  const legendExtra = Math.min(80, Math.max(0, (models.length - 4) * 14));
+  const chartHeight = height + legendExtra;
+
   return (
-    <div className={cn("w-full", className)} style={{ height }}>
+    <div className={cn("w-full", className)} style={{ height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={[...data]}
-          margin={{ top: 10, right: 14, left: 0, bottom: 0 }}
+          margin={{ top: 10, right: 14, left: 0, bottom: 8 }}
         >
           <CartesianGrid
             stroke="var(--border)"
@@ -187,9 +191,14 @@ export function ModelCallTrendChart({
           />
           <Legend
             verticalAlign="bottom"
-            height={40}
             iconType="plainline"
-            wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
+            wrapperStyle={{
+              fontSize: 11,
+              paddingTop: 10,
+              maxHeight: 72,
+              overflowY: "auto",
+              width: "100%",
+            }}
             formatter={(value) => (
               <span className="font-mono text-[11px] text-ink-muted">{value}</span>
             )}

@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"jovepoxy/internal/auth"
 	"jovepoxy/internal/quota"
 	"jovepoxy/internal/reqlog"
+	"jovepoxy/internal/usage"
 	"jovepoxy/internal/zenpool"
 )
 
@@ -105,13 +107,35 @@ func (server server) listUsage(writer http.ResponseWriter, request *http.Request
 	}
 	limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(request.URL.Query().Get("offset"))
+	if limit <= 0 {
+		limit = 50
+	}
 	accountID := strings.TrimSpace(request.URL.Query().Get("account_id"))
-	records, err := server.usage.List(request.Context(), accountID, limit, offset)
+	from, err := parseTimeQuery(request.URL.Query().Get("from"))
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid from")
+		return
+	}
+	to, err := parseTimeQuery(request.URL.Query().Get("to"))
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid to")
+		return
+	}
+	records, err := server.usage.ListFiltered(request.Context(), usage.ListFilter{
+		AccountID: accountID,
+		From:      from,
+		To:        to,
+		Limit:     limit,
+		Offset:    offset,
+	})
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, "list usage failed")
 		return
 	}
-	writeJSON(writer, http.StatusOK, mapUsage(records))
+	resp := mapUsage(records)
+	resp.Limit = limit
+	resp.Truncated = len(records) >= limit
+	writeJSON(writer, http.StatusOK, resp)
 }
 
 type usageSyncRequest struct {
@@ -169,12 +193,47 @@ func (server server) listLogs(writer http.ResponseWriter, request *http.Request)
 	if limit <= 0 {
 		limit = 50
 	}
-	entries, err := server.logs.List(request.Context(), limit, offset)
+	from, err := parseTimeQuery(request.URL.Query().Get("from"))
 	if err != nil {
-		writeJSON(writer, http.StatusOK, mapLogs(server.logs.Recent(limit)))
+		writeError(writer, http.StatusBadRequest, "invalid from")
 		return
 	}
-	writeJSON(writer, http.StatusOK, mapLogs(entries))
+	to, err := parseTimeQuery(request.URL.Query().Get("to"))
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid to")
+		return
+	}
+	filter := reqlog.ListFilter{From: from, To: to, Limit: limit, Offset: offset}
+	entries, err := server.logs.ListFiltered(request.Context(), filter)
+	if err != nil {
+		// Fallback to in-memory ring (no time filter); still report limit/truncated.
+		recent := server.logs.Recent(limit)
+		resp := mapLogs(recent)
+		resp.Limit = limit
+		resp.Truncated = len(recent) >= limit
+		writeJSON(writer, http.StatusOK, resp)
+		return
+	}
+	resp := mapLogs(entries)
+	resp.Limit = limit
+	resp.Truncated = len(entries) >= limit
+	writeJSON(writer, http.StatusOK, resp)
+}
+
+// parseTimeQuery parses optional RFC3339 / RFC3339Nano query times as UTC.
+// Empty string yields zero time (open-ended filter bound).
+func parseTimeQuery(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return ts.UTC(), nil
+	}
+	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+		return ts.UTC(), nil
+	}
+	return time.Time{}, errors.New("invalid time")
 }
 
 func (server server) metrics(writer http.ResponseWriter, _ *http.Request) {

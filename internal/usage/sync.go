@@ -114,9 +114,14 @@ func (service *Service) Backfill(ctx context.Context, accountID, workspaceID, au
 	return SyncResult{Inserted: insertedTotal, PagesFetched: pagesFetched, SyncAt: syncAt}, nil
 }
 
-// List is a thin store passthrough for admin listing later.
+// List is a thin store passthrough for admin listing (no time filter).
 func (service *Service) List(ctx context.Context, accountID string, limit, offset int) ([]StoredRecord, error) {
-	return service.store.List(ctx, accountID, limit, offset)
+	return service.ListFiltered(ctx, ListFilter{AccountID: accountID, Limit: limit, Offset: offset})
+}
+
+// ListFiltered lists usage records with optional recorded_at bounds.
+func (service *Service) ListFiltered(ctx context.Context, filter ListFilter) ([]StoredRecord, error) {
+	return service.store.List(ctx, filter)
 }
 
 // Status returns the last sync cursor state.

@@ -78,16 +78,17 @@ export function rangeDayCount(from: Date, to: Date): number {
   return Math.floor(Math.abs(b - a) / 86_400_000) + 1;
 }
 
-/** Build preset range relative to `now` (local). */
+/** Build preset range relative to `now` (local). Preset `to` is current moment, not endOfDay. */
 export function presetRange(preset: Exclude<DateRangePreset, "custom">, now = new Date()): DateRangeValue {
   const today = startOfDay(now);
+  const toNow = new Date(now);
   switch (preset) {
     case "today":
-      return { from: today, to: endOfDay(now), preset };
+      return { from: today, to: toNow, preset };
     case "7d": {
       const from = new Date(today);
       from.setDate(today.getDate() - 6);
-      return { from, to: endOfDay(now), preset };
+      return { from, to: toNow, preset };
     }
     case "week": {
       // Monday-start week
@@ -95,19 +96,19 @@ export function presetRange(preset: Exclude<DateRangePreset, "custom">, now = ne
       const offset = day === 0 ? 6 : day - 1;
       const from = new Date(today);
       from.setDate(today.getDate() - offset);
-      return { from, to: endOfDay(now), preset };
+      return { from, to: toNow, preset };
     }
     case "30d": {
       const from = new Date(today);
       from.setDate(today.getDate() - 29);
-      return { from, to: endOfDay(now), preset };
+      return { from, to: toNow, preset };
     }
     case "month": {
       const from = new Date(today.getFullYear(), today.getMonth(), 1);
-      return { from, to: endOfDay(now), preset };
+      return { from, to: toNow, preset };
     }
     default:
-      return { from: today, to: endOfDay(now), preset: "today" };
+      return { from: today, to: toNow, preset: "today" };
   }
 }
 
