@@ -340,7 +340,7 @@ function DonutActiveShape(props: unknown) {
   );
 }
 
-/** 占比环：Smart Top-5 聚合 + 外置参考风 Tooltip 与高可读图例。 */
+/** 占比环：Smart Top-5 聚合 + 中心悬停联动 + 上浮尾部展开。 */
 export function ModelShareDonut({
   slices,
   height = 280,
@@ -385,8 +385,14 @@ export function ModelShareDonut({
         ]
       : [...slices];
 
+  const activeSlice = activeIndex != null ? displaySlices[activeIndex] : null;
+  const isTailActive = activeSlice?.isTailAggregate ?? false;
+
   return (
-    <div className={cn("relative w-full flex flex-col justify-between", className)} style={{ height }}>
+    <div
+      className={cn("relative w-full flex flex-col justify-between", className)}
+      style={{ height }}
+    >
       <div className="relative flex-1 w-full min-h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -411,55 +417,79 @@ export function ModelShareDonut({
                 <Cell key={s.model} fill={s.color} />
               ))}
             </Pie>
-            <Tooltip
-              isAnimationActive={false}
-              animationDuration={0}
-              offset={18}
-              allowEscapeViewBox={{ x: true, y: true }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const p = payload[0]!;
-                const value = Number(p.value ?? 0);
-                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-                const name = String(p.name);
-                const isTail = Boolean((p.payload as { isTailAggregate?: boolean })?.isTailAggregate);
-
-                return (
-                  <RefTooltip active>
-                    <p className="font-mono text-[12px] text-ink">
-                      <span className="font-semibold">{name}</span>
-                      <span className="text-ink-muted">
-                        {`: ${formatCompact(value)} ${callsUnit} (${pct}%)`}
-                      </span>
-                    </p>
-                    {isTail && tailSlices.length > 0 ? (
-                      <div className="mt-1.5 border-t border-border/20 pt-1 text-[11px] font-mono text-ink-muted">
-                        <p className="font-semibold mb-0.5">包含以下 {tailSlices.length} 个尾部模型：</p>
-                        <ul className="max-h-28 overflow-y-auto pr-1 flex flex-col gap-0.5">
-                          {tailSlices.map((ts) => (
-                            <li key={ts.model} className="flex justify-between gap-3">
-                              <span className="truncate max-w-[120px]">{ts.model}</span>
-                              <span className="font-semibold tabular-nums">{formatCompact(ts.value)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </RefTooltip>
-                );
-              }}
-            />
           </PieChart>
         </ResponsiveContainer>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
-            {centerLabel}
-          </span>
-          <span className="mt-0.5 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
-            {centerValue}
-          </span>
+
+        {/* 中心信息联动（替代阻挡文字的浮动 Tooltip） */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+          {activeSlice ? (
+            <>
+              <span className="flex items-center justify-center gap-1 max-w-[130px] truncate text-[11px] font-bold text-ink">
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: activeSlice.color }}
+                />
+                <span className="truncate">{activeSlice.model}</span>
+              </span>
+              <span className="mt-0.5 font-mono text-[1.3rem] font-extrabold tabular-nums leading-none text-ink">
+                {formatCompact(activeSlice.value)}{" "}
+                <span className="text-[11px] font-normal text-ink-muted">
+                  {callsUnit}
+                </span>
+              </span>
+              <span className="mt-1 font-mono text-[11px] font-bold text-accent-coral">
+                {total > 0
+                  ? `${((activeSlice.value / total) * 100).toFixed(1)}%`
+                  : "0%"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                {centerLabel}
+              </span>
+              <span className="mt-0.5 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+                {centerValue}
+              </span>
+            </>
+          )}
         </div>
       </div>
+
+      {/* 尾部模型展开浮层 (上浮避开卡片边缘裁切) */}
+      {isTailActive && tailSlices.length > 0 ? (
+        <div
+          className="absolute bottom-12 right-2 z-40 w-64 border-2 border-border bg-paper-0 p-2.5 shadow-[4px_4px_0_var(--border)]"
+          onMouseEnter={() => {
+            const tailIdx = displaySlices.findIndex((s) => s.isTailAggregate);
+            if (tailIdx >= 0) setActiveIndex(tailIdx);
+          }}
+          onMouseLeave={() => setActiveIndex(null)}
+        >
+          <div className="flex items-center justify-between border-b-2 border-border pb-1.5 font-mono text-[11px] font-bold text-ink">
+            <span>包含 {tailSlices.length} 个尾部模型</span>
+            <span className="text-ink-muted tabular-nums">
+              {formatCompact(tailSlices.reduce((s, x) => s + x.value, 0))} {callsUnit}
+            </span>
+          </div>
+          <ul className="mt-2 max-h-36 overflow-y-auto pr-1 font-mono text-[11px] flex flex-col gap-1">
+            {tailSlices.map((ts) => {
+              const tsPct = total > 0 ? ((ts.value / total) * 100).toFixed(1) : "0";
+              return (
+                <li key={ts.model} className="flex items-center justify-between gap-2 text-ink">
+                  <span className="truncate text-ink-muted max-w-[130px]" title={ts.model}>
+                    {ts.model}
+                  </span>
+                  <span className="font-bold tabular-nums">
+                    {formatCompact(ts.value)}{" "}
+                    <span className="text-[10px] text-ink-faint">({tsPct}%)</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       {/* 底部精简图例 */}
       <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2 border-t-2 border-border/20">
