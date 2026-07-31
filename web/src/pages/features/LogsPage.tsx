@@ -816,13 +816,15 @@ export function LogsPage() {
         }
       />
 
-      {tab === "gateway" ? (
+      <div className={tab === "gateway" ? "block" : "hidden"}>
         <GatewayLogsPanel t={t} />
-      ) : tab === "usage-oc" ? (
+      </div>
+      <div className={tab === "usage-oc" ? "block" : "hidden"}>
         <UsagePanel t={t} />
-      ) : (
+      </div>
+      <div className={tab === "usage-ol" ? "block" : "hidden"}>
         <OllamaUsagePanel t={t} />
-      )}
+      </div>
     </div>
   );
 }

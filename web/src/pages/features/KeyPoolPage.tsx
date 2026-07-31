@@ -83,7 +83,8 @@ export function KeyPoolPage() {
   const { t } = useI18n();
   const { push } = useToast();
   const [provider, setProvider] = useKeyProviderTab();
-  const [keys, setKeys] = useState<ZenKeyDTO[]>([]);
+  const [ocKeys, setOcKeys] = useState<ZenKeyDTO[]>([]);
+  const [olKeys, setOlKeys] = useState<ZenKeyDTO[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [weightFilter, setWeightFilter] = useState<WeightFilter>("all");
@@ -106,12 +107,19 @@ export function KeyPoolPage() {
 
   const keyProvider = provider as KeyProvider;
   const providerLabel = provider === "opencode" ? "OpenCode" : "Ollama";
+  const keys = provider === "opencode" ? ocKeys : olKeys;
 
-  async function load() {
-    setLoading(true);
+  async function load(soft = false) {
+    if (!soft && ocKeys.length === 0 && olKeys.length === 0) {
+      setLoading(true);
+    }
     try {
-      const res = await api.zenKeys(keyProvider);
-      setKeys(res.keys);
+      const [oc, ol] = await Promise.all([
+        api.zenKeys("opencode"),
+        api.zenKeys("ollama"),
+      ]);
+      setOcKeys(oc.keys);
+      setOlKeys(ol.keys);
       setListError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -126,6 +134,10 @@ export function KeyPoolPage() {
   }
 
   useEffect(() => {
+    void load();
+  }, []);
+
+  useEffect(() => {
     setQuery("");
     setStatus("all");
     setWeightFilter("all");
@@ -133,7 +145,6 @@ export function KeyPoolPage() {
     setPage(1);
     setShowAdd(false);
     setEditing(null);
-    void load();
   }, [provider]);
 
   async function onCreate(event: FormEvent) {
@@ -155,7 +166,7 @@ export function KeyPoolPage() {
       setWeight("1");
       setShowAdd(false);
       push(t("keypool.added"), "success");
-      await load();
+      await load(true);
     } catch (err) {
       push(friendlyError(err, t("keypool.addFailed"), t), "error");
     } finally {
@@ -187,7 +198,7 @@ export function KeyPoolPage() {
       await api.updateZenKey(editing.id, payload);
       setEditing(null);
       push(t("keypool.saved"), "success");
-      await load();
+      await load(true);
     } catch (err) {
       push(friendlyError(err, t("keypool.saveFailed"), t), "error");
     } finally {
@@ -270,7 +281,7 @@ export function KeyPoolPage() {
         ok > 0 ? "success" : "error",
       );
       selection.clear();
-      await load();
+      await load(true);
     } finally {
       setBulkBusy(false);
     }
@@ -292,7 +303,7 @@ export function KeyPoolPage() {
       }
       push(t("keypool.bulkDeleted", { n: ok }), ok > 0 ? "success" : "error");
       selection.clear();
-      await load();
+      await load(true);
     } finally {
       setBulkBusy(false);
     }
@@ -667,7 +678,7 @@ export function KeyPoolPage() {
                               onClick={() =>
                                 void api
                                   .setZenKeyEnabled(key.id, !key.enabled)
-                                  .then(load)
+                                  .then(() => void load(true))
                                   .catch((err) =>
                                     push(friendlyError(err, t("common.actionFailed"), t), "error"),
                                   )
@@ -680,7 +691,7 @@ export function KeyPoolPage() {
                                 if (window.confirm(t("keypool.deleteConfirm", { label: key.label }))) {
                                   void api
                                     .deleteZenKey(key.id)
-                                    .then(load)
+                                    .then(() => void load(true))
                                     .catch((err) =>
                                       push(
                                         friendlyError(err, t("keypool.deleteFailed"), t),
@@ -828,7 +839,7 @@ export function KeyPoolPage() {
                                   onClick={() =>
                                     void api
                                       .setZenKeyEnabled(key.id, !key.enabled)
-                                      .then(load)
+                                      .then(() => void load(true))
                                       .catch((err) =>
                                         push(
                                           friendlyError(err, t("common.actionFailed"), t),
@@ -844,7 +855,7 @@ export function KeyPoolPage() {
                                     if (window.confirm(t("keypool.deleteConfirm", { label: key.label }))) {
                                       void api
                                         .deleteZenKey(key.id)
-                                        .then(load)
+                                        .then(() => void load(true))
                                         .catch((err) =>
                                           push(
                                             friendlyError(err, t("keypool.deleteFailed"), t),
