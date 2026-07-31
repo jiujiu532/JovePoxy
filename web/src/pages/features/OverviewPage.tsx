@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/cn";
 import {
   Button,
   DateRangePicker,
@@ -267,6 +268,16 @@ function HealthBlock({
   const s2xx = kpis.status_2xx ?? 0;
   const s429 = kpis.status_429 ?? 0;
   const s5xx = kpis.status_5xx ?? 0;
+  const rate = kpis.success_rate;
+
+  const rateToneClass =
+    rate == null || requests === 0
+      ? "bg-paper-2 text-ink-muted border-border/40"
+      : rate >= 0.95
+        ? "bg-accent-teal/30 text-black border-border shadow-[1px_1px_0_var(--border)]"
+        : rate >= 0.85
+          ? "bg-accent-yellow/40 text-black border-border shadow-[1px_1px_0_var(--border)]"
+          : "bg-accent/30 text-black border-border shadow-[1px_1px_0_var(--border)]";
 
   return (
     <SectionPanel
@@ -282,56 +293,94 @@ function HealthBlock({
           title={t("overview.opsKpis.noData", { range: rangeText })}
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-px overflow-hidden border-2 border-border bg-border sm:grid-cols-4">
-            {[
-              {
-                label: t("overview.opsKpis.requests"),
-                value: requests,
-              },
-              {
-                label: t("overview.opsKpis.successRate"),
-                value: formatSuccessRate(kpis.success_rate, requests),
-              },
-              {
-                label: t("overview.opsKpis.latencyP50"),
-                value: formatLatencyMs(t, kpis.latency_p50_ms),
-              },
-              {
-                label: t("overview.opsKpis.latencyP95"),
-                value: formatLatencyMs(t, kpis.latency_p95_ms),
-              },
-            ].map((cell) => (
-              <div key={cell.label} className="bg-paper-0 px-3 py-2.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                  {cell.label}
-                </p>
-                <p className="mt-1 font-mono text-[1.35rem] font-bold leading-none tabular-nums text-ink">
-                  {cell.value}
-                </p>
-              </div>
-            ))}
+        <div className="flex flex-col gap-4">
+          {/* 4 Neo-Brutalist Metric Cards */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                {t("overview.opsKpis.requests")}
+              </span>
+              <span className="mt-1 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+                {formatCompact(requests)}
+              </span>
+              <span className="mt-2 text-[10px] font-mono text-ink-faint">
+                {t("overview.modelAnalytics.totalCalls")}
+              </span>
+            </div>
+
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                {t("overview.opsKpis.successRate")}
+              </span>
+              <span className="mt-1 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+                {formatSuccessRate(kpis.success_rate, requests)}
+              </span>
+              <span
+                className={cn(
+                  "mt-2 self-start inline-block border px-1.5 py-0.2 font-mono text-[10px] font-bold",
+                  rateToneClass,
+                )}
+              >
+                {rate == null ? "-" : rate >= 0.95 ? "优秀" : rate >= 0.85 ? "良好" : "偏低"}
+              </span>
+            </div>
+
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                {t("overview.opsKpis.latencyP50")}
+              </span>
+              <span className="mt-1 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+                {formatLatencyMs(t, kpis.latency_p50_ms)}
+              </span>
+              <span className="mt-2 text-[10px] font-mono text-ink-faint">
+                中位数
+              </span>
+            </div>
+
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+                {t("overview.opsKpis.latencyP95")}
+              </span>
+              <span className="mt-1 font-mono text-[1.4rem] font-extrabold tabular-nums leading-none text-ink">
+                {formatLatencyMs(t, kpis.latency_p95_ms)}
+              </span>
+              <span className="mt-2 text-[10px] font-mono text-ink-faint">
+                长尾 95%
+              </span>
+            </div>
           </div>
-          <StatusStackBar
-            ariaLabel={t("overview.opsKpis.title")}
-            segments={[
-              {
-                label: t("overview.opsKpis.status2xx"),
-                value: s2xx,
-                color: "var(--accent-teal)",
-              },
-              {
-                label: t("overview.opsKpis.status429"),
-                value: s429,
-                color: "var(--accent-yellow)",
-              },
-              {
-                label: t("overview.opsKpis.status5xx"),
-                value: s5xx,
-                color: "var(--accent)",
-              },
-            ]}
-          />
+
+          {/* HTTP Status Code Breakdown */}
+          <div className="border-2 border-border bg-paper-1/60 p-2.5">
+            <div className="mb-1.5 flex items-center justify-between font-mono text-[11px]">
+              <span className="font-bold uppercase tracking-wider text-ink-muted">
+                HTTP 状态码分布
+              </span>
+              <span className="text-[10px] text-ink-faint tabular-nums">
+                2xx: {s2xx} · 429: {s429} · 5xx: {s5xx}
+              </span>
+            </div>
+            <StatusStackBar
+              ariaLabel={t("overview.opsKpis.title")}
+              segments={[
+                {
+                  label: t("overview.opsKpis.status2xx"),
+                  value: s2xx,
+                  color: "var(--accent-teal)",
+                },
+                {
+                  label: t("overview.opsKpis.status429"),
+                  value: s429,
+                  color: "var(--accent-yellow)",
+                },
+                {
+                  label: t("overview.opsKpis.status5xx"),
+                  value: s5xx,
+                  color: "var(--accent)",
+                },
+              ]}
+            />
+          </div>
         </div>
       )}
     </SectionPanel>
@@ -354,6 +403,7 @@ function ZenPoolStrip({
   const cooled = pool?.cooled ?? 0;
   const disabled = pool?.disabled ?? 0;
   const benched = pool?.benched ?? 0;
+  const abnormal = cooled + benched + disabled;
   const by = pool?.by_provider;
   const oc = by?.["opencode"];
   const ol = by?.["ollama"];
@@ -365,45 +415,109 @@ function ZenPoolStrip({
       icon={Coins}
       iconTone="yellow"
       actions={
-        <Button variant="ghost" onClick={onOpen}>
+        <Button variant="ghost" size="sm" onClick={onOpen}>
           {t("overview.zenPool.openPool")}
         </Button>
       }
     >
-      <StatusStackBar
-        ariaLabel={t("overview.zenPool.title")}
-        segments={[
-          {
-            label: t("overview.zenPool.healthy"),
-            value: healthy,
-            color: "var(--accent-teal)",
-          },
-          {
-            label: t("overview.zenPool.cooled"),
-            value: cooled,
-            color: "var(--accent-yellow)",
-          },
-          {
-            label: t("overview.zenPool.benched"),
-            value: benched,
-            color: "var(--accent)",
-          },
-          {
-            label: t("overview.zenPool.disabled"),
-            value: disabled,
-            color: "var(--border)",
-          },
-        ]}
-      />
-      <p className="mt-2 text-[12px] text-ink-muted">
-        {t("overview.zenPool.total", { n: total })}
+      <div className="flex flex-col gap-3.5">
+        {/* Top Summary Rail */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+              总密钥数
+            </p>
+            <p className="mt-0.5 font-mono text-[1.3rem] font-extrabold tabular-nums leading-none text-ink">
+              {total}
+            </p>
+          </div>
+
+          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+              {t("overview.zenPool.healthy")}
+            </p>
+            <p className="mt-0.5 font-mono text-[1.3rem] font-extrabold tabular-nums leading-none text-accent-teal">
+              {healthy}
+            </p>
+          </div>
+
+          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
+              受限/异状
+            </p>
+            <p
+              className={cn(
+                "mt-0.5 font-mono text-[1.3rem] font-extrabold tabular-nums leading-none",
+                abnormal > 0 ? "text-accent-coral" : "text-ink-muted",
+              )}
+            >
+              {abnormal}
+            </p>
+          </div>
+        </div>
+
+        {/* Status Stack Bar */}
+        <StatusStackBar
+          ariaLabel={t("overview.zenPool.title")}
+          segments={[
+            {
+              label: t("overview.zenPool.healthy"),
+              value: healthy,
+              color: "var(--accent-teal)",
+            },
+            {
+              label: t("overview.zenPool.cooled"),
+              value: cooled,
+              color: "var(--accent-yellow)",
+            },
+            {
+              label: t("overview.zenPool.benched"),
+              value: benched,
+              color: "var(--accent-coral)",
+            },
+            {
+              label: t("overview.zenPool.disabled"),
+              value: disabled,
+              color: "var(--border)",
+            },
+          ]}
+        />
+
+        {/* Channel Provider Badges */}
         {oc || ol ? (
-          <>
-            {oc ? ` · ${t("overview.zenPool.opencode")} ${oc.healthy}/${oc.total}` : null}
-            {ol ? ` · ${t("overview.zenPool.ollama")} ${ol.healthy}/${ol.total}` : null}
-          </>
+          <div className="flex flex-wrap items-center gap-2 border-t-2 border-border/20 pt-2.5 font-mono text-[11px]">
+            <span className="font-bold text-ink-muted">渠道可用性:</span>
+            {oc ? (
+              <span className="inline-flex items-center gap-1.5 border-1.5 border-border bg-paper-0 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    oc.healthy > 0 ? "bg-accent-teal" : "bg-accent-coral",
+                  )}
+                />
+                <span className="font-semibold">{t("overview.zenPool.opencode")}</span>
+                <span className="font-bold tabular-nums">
+                  {oc.healthy}/{oc.total}
+                </span>
+              </span>
+            ) : null}
+            {ol ? (
+              <span className="inline-flex items-center gap-1.5 border-1.5 border-border bg-paper-0 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    ol.healthy > 0 ? "bg-accent-teal" : "bg-accent-coral",
+                  )}
+                />
+                <span className="font-semibold">{t("overview.zenPool.ollama")}</span>
+                <span className="font-bold tabular-nums">
+                  {ol.healthy}/{ol.total}
+                </span>
+              </span>
+            ) : null}
+          </div>
         ) : null}
-      </p>
+      </div>
     </SectionPanel>
   );
 }
