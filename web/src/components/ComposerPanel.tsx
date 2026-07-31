@@ -56,7 +56,7 @@ export function ComposerPanel({
       </header>
       <div className="px-4 py-4 sm:px-5">{children}</div>
       {footer ? (
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border bg-paper-0 px-4 py-3 sm:px-5">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-border bg-paper-2 px-4 py-3 sm:px-5">
           {footer}
         </footer>
       ) : null}

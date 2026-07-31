@@ -7,14 +7,18 @@ export type MetricRailItem = {
   readonly tone?: "yellow" | "teal" | "mint" | "accent" | "white";
 };
 
+/** 彩格永远黑字；中性格用 ink，避免 dark 奶油字压在黄/青底上失读。 */
 const toneClass: Record<NonNullable<MetricRailItem["tone"]>, string> = {
   yellow: "bg-accent-yellow text-black",
   teal: "bg-accent-teal text-black",
   mint: "bg-accent-mint text-black",
   accent: "bg-accent text-black",
-  /* 抬升面，避免 dark 下 paper-0 与 canvas 融成黑洞 */
+  /* 抬升中性面：用 paper-2，勿 paper-0（canvas 黑洞） */
   white: "bg-paper-2 text-ink",
 };
+
+const isColoredTone = (tone: NonNullable<MetricRailItem["tone"]>) =>
+  tone !== "white";
 
 export type MetricRailProps = {
   readonly items: ReadonlyArray<MetricRailItem>;
@@ -30,40 +34,56 @@ export function MetricRail({ items, className }: MetricRailProps) {
         className,
       )}
     >
-      {items.map((item, i) => (
-        <div
-          key={item.label}
-          className={cn(
-            "relative min-w-0 px-3.5 py-3 min-h-[108px] flex flex-col justify-between transition-transform duration-150 ease-out cursor-default select-none",
-            toneClass[item.tone ?? "white"],
-            // mobile 2-col: right border on left cells, bottom on first row
-            i % 2 === 0 && "border-r-2 border-border",
-            i < 2 && items.length > 2 && "border-b-2 border-border sm:border-b-0",
-            // desktop 4-col: right border except last
-            i < items.length - 1 && "sm:border-r-2 sm:border-border",
-            // left cells already have border-r on mobile; keep on sm for middle cells
-            i % 2 === 1 && i < items.length - 1 && "sm:border-r-2",
-            // GPU 独立图层微位移与亮度反馈 — 零布局抖动，下方元素绝不位移
-            "hover:z-10 hover:-translate-y-1 hover:brightness-[0.97]",
-          )}
-        >
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-ink">
-              {item.label}
+      {items.map((item, i) => {
+        const tone = item.tone ?? "white";
+        const colored = isColoredTone(tone);
+        return (
+          <div
+            key={item.label}
+            className={cn(
+              "relative min-w-0 px-3.5 py-3 min-h-[108px] flex flex-col justify-between",
+              "transition-[transform,filter,box-shadow] duration-150 ease-out cursor-default select-none",
+              toneClass[tone],
+              // mobile 2-col: right border on left cells, bottom on first row
+              i % 2 === 0 && "border-r-2 border-border",
+              i < 2 && items.length > 2 && "border-b-2 border-border sm:border-b-0",
+              // desktop 4-col: right border except last
+              i < items.length - 1 && "sm:border-r-2 sm:border-border",
+              // left cells already have border-r on mobile; keep on sm for middle cells
+              i % 2 === 1 && i < items.length - 1 && "sm:border-r-2",
+              // 抬升 + 略提亮；禁止 brightness < 1（dark 中性格会压成黑块）
+              "hover:z-10 hover:-translate-y-1 hover:brightness-[1.06]",
+              "hover:shadow-[3px_3px_0_var(--border)]",
+            )}
+          >
+            <div>
+              <div
+                className={cn(
+                  "text-[11px] font-bold uppercase tracking-wide",
+                  colored ? "text-black/75" : "text-ink-muted",
+                )}
+              >
+                {item.label}
+              </div>
+              <div className="mt-1 font-mono text-[clamp(1.75rem,4vw,2rem)] font-black leading-none tabular-nums tracking-tight">
+                {item.value}
+              </div>
             </div>
-            <div className="mt-1 font-mono text-[clamp(1.75rem,4vw,2rem)] font-black leading-none tabular-nums tracking-tight">
-              {item.value}
-            </div>
+            {item.hint ? (
+              <div
+                className={cn(
+                  "mt-1 text-[11px] font-semibold leading-snug",
+                  colored ? "text-black/65" : "text-ink-muted",
+                )}
+              >
+                {item.hint}
+              </div>
+            ) : (
+              <div className="mt-1 h-[14px]" aria-hidden />
+            )}
           </div>
-          {item.hint ? (
-            <div className="mt-1 text-[11px] font-semibold leading-snug text-ink-muted">
-              {item.hint}
-            </div>
-          ) : (
-            <div className="mt-1 h-[14px]" aria-hidden />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

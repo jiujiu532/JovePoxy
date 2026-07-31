@@ -25,19 +25,19 @@ Reading this as: **运维/技术操作者的产品管理台重设计**（非营�
 
 | 角色 | Token | Light | Dark（Espresso Night） | 用途 |
 |------|-------|-------|------|------|
-| App bg | `--paper-0` | `#ffffff` | `#100c0a` | 应用背景（深 espresso canvas） |
-| Surface | `--paper-1` | `#ffffff` | `#221a14` | 卡片、面板、顶栏/侧栏 |
-| Elevated | `--paper-2` | `#ffffff` | `#3f3126` | 模态、输入、表格头、嵌套抬升 |
-| Ink primary | `--ink` | `#000000` | `#faf6f1` | 标题、正文（暖近白） |
-| Ink muted | `--ink-muted` | `#1a1a1a` | `#e4d6c6` | 次级标签（高对比，禁止泥灰） |
-| Ink faint | `--ink-faint` | `#333333` | `#bda892` | 占位、分组标题 |
-| Border | `--border` | `#000000` | `#cbb79f` | 硬边框（奶油纸边，略降 chalk） |
-| Border strong | `--border-strong` | `#000000` | `#e8d7c4` | 强调/选中边框 |
+| App bg | `--paper-0` | `#ffffff` | `#16120f` | 应用背景（深 espresso canvas） |
+| Surface | `--paper-1` | `#ffffff` | `#2c221a` | 卡片、面板、顶栏/侧栏 |
+| Elevated | `--paper-2` | `#ffffff` | `#524033` | 模态、输入、表格头、嵌套抬升 |
+| Ink primary | `--ink` | `#000000` | `#fffaf4` | 标题、正文（暖近白） |
+| Ink muted | `--ink-muted` | `#1a1a1a` | `#f0e2d0` | 次级标签（高对比，禁止泥灰） |
+| Ink faint | `--ink-faint` | `#333333` | `#cbb49a` | 占位、分组标题 |
+| Border | `--border` | `#000000` | `#d4c0a8` | 硬边框（奶油纸边，略降 chalk） |
+| Border strong | `--border-strong` | `#000000` | `#ebdbc8` | 强调/选中边框 |
 | Accent primary | `--accent` | `#ff6b6b` | `#ff7a6e` | 主 CTA（Playful Red，dark 略提亮） |
 | Accent hover | `--accent-hover` | `#e85a5a` | `#ff9188` | dark 用更亮纯色反馈 |
 | Accent fg | `--accent-fg` | `#000000` | `#000000` | 强调色上的文字（主 CTA 黑字） |
-| Accent soft | `--accent-soft` | `#ffe0e0` | `#5c2c24` | 浅/深纯色块（咖啡红 soft，禁止死灰） |
-| Track | `--track` | `#ebe4dc` | `#4a3b2f` | 进度环/条轨道（非 border 奶油描边） |
+| Accent soft | `--accent-soft` | `#ffe0e0` | `#6a342c` | 浅/深纯色块（咖啡红 soft，禁止死灰） |
+| Track | `--track` | `#ebe4dc` | `#3d3026` | 进度环/条轨道（非 border 奶油描边） |
 | Success | `--status-success` | `#4ecdc4` | `#6fd9c8` | 健康 / teal 倾向 |
 | Warning | `--status-warning` | `#ffe66d` | `#ffd978` | 警告 / 黄 |
 | Error | `--status-error` | `#ff6b6b` | `#ff7a6e` | 错误 / playful red |
@@ -59,18 +59,18 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 ### 2.3 固定色值（source of truth）
 
 ```
---paper-0:          #ffffff / #100c0a
---paper-1:          #ffffff / #221a14
---paper-2:          #ffffff / #3f3126
---ink:              #000000 / #faf6f1
---ink-muted:        #1a1a1a / #e4d6c6
---ink-faint:        #333333 / #bda892
---border:           #000000 / #cbb79f
---border-strong:    #000000 / #e8d7c4
+--paper-0:          #ffffff / #16120f
+--paper-1:          #ffffff / #2c221a
+--paper-2:          #ffffff / #524033
+--ink:              #000000 / #fffaf4
+--ink-muted:        #1a1a1a / #f0e2d0
+--ink-faint:        #333333 / #cbb49a
+--border:           #000000 / #d4c0a8
+--border-strong:    #000000 / #ebdbc8
 --accent:           #ff6b6b / #ff7a6e
 --accent-hover:     #e85a5a / #ff9188
 --accent-fg:        #000000 / #000000
---accent-soft:      #ffe0e0 / #5c2c24
+--accent-soft:      #ffe0e0 / #6a342c
 --accent-teal:      #4ecdc4 / #6fd9c8
 --accent-yellow:    #ffe66d / #ffd978
 --accent-mint:      #95e1d3 / #b4e6d6
@@ -80,8 +80,8 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 --status-error:     #ff6b6b / #ff7a6e
 --status-info:      #95e1d3 / #b4e6d6
 --focus-ring:       #ffe66d / #ffd978
---track:            #ebe4dc / #4a3b2f
---shadow-hard:      4px 4px 0 #000000 / 4px 4px 0 #cbb79f
+--track:            #ebe4dc / #3d3026
+--shadow-hard:      4px 4px 0 #000000 / 4px 4px 0 #d4c0a8
 --shadow-paper:     同 --shadow-hard（兼容旧类名）
 --shadow-accent-red:    4px 4px 0 #ff6b6b / #ff7a6e
 --shadow-accent-teal:   4px 4px 0 #4ecdc4 / #6fd9c8
@@ -93,9 +93,9 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 
 - 黑/白为结构色；五强调色为交互与装饰。
 - 禁止柔和灰色正文/边框；次级文字必须高对比深色/浅色。
-- 禁止渐变、禁止 `color-mix` 做「模糊 soft tint」；soft 仅用纯色块（如 light `#ffe0e0` / dark `#5c2c24` 咖啡红块，**禁止** `#222` 死灰 soft）。
+- 禁止渐变、禁止 `color-mix` 做「模糊 soft tint」；soft 仅用纯色块（如 light `#ffe0e0` / dark `#6a342c` 咖啡红块，**禁止** `#222` 死灰 soft）。
 - Dark 必须保留 **paper-0 < paper-1 < paper-2** 三层 elevation；禁止把三层都压成近纯黑或中性炭灰。
-- Dark 基调为 **Espresso Night**（暖褐/焦糖）；硬边/硬阴影用奶油纸边 `#cbb79f`，避免纯 `#ffffff` chalk outline。
+- Dark 基调为 **Espresso Night**（暖褐/焦糖）；硬边/硬阴影用奶油纸边 `#d4c0a8`，避免纯 `#ffffff` chalk outline。
 - **嵌套表面规则**：卡片/面板内的 KPI 子块、表格头、筛选条、表单字段用 `paper-2`（或 `paper-1` 字段），**不要**再铺 `paper-0`（dark 下会与 canvas 融成黑洞）。
 - 进度环/条轨道用 `--track`，不要用 `--border`（cream stroke 会像脏边）。
 - 状态徽章：硬黑/白边 + 纯色填充，不靠圆角区分。
@@ -178,7 +178,7 @@ Primary / Secondary 结构色：`#000000` / `#ffffff`。
 
 | Token | Light | Dark |
 |-------|-------|------|
-| `--shadow-hard` / `--shadow-paper` | `4px 4px 0 #000` | `4px 4px 0 #e8d7c4` |
+| `--shadow-hard` / `--shadow-paper` | `4px 4px 0 #000` | `4px 4px 0 #d4c0a8` |
 | `--shadow-accent-red` | `4px 4px 0 #ff6b6b` | `4px 4px 0 #ff7a6e` |
 | `--shadow-accent-teal` | `4px 4px 0 #4ecdc4` | `4px 4px 0 #6fd9c8` |
 | `--shadow-accent-yellow` | `4px 4px 0 #ffe66d` | `4px 4px 0 #ffd978` |

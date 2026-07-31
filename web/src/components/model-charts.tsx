@@ -63,7 +63,7 @@ function formatCompact(value: number): string {
   return String(value);
 }
 
-/** 参考风格浮层：细硬边、白底、无阴影拖尾。 */
+/** 参考风格浮层：细硬边、抬升面、无阴影拖尾。dark 用 paper-1，勿 paper-0 黑洞。 */
 function RefTooltip({
   active,
   label,
@@ -75,7 +75,7 @@ function RefTooltip({
 }) {
   if (!active) return null;
   return (
-    <div className="pointer-events-none border-2 border-border bg-paper-0 px-3 py-2">
+    <div className="pointer-events-none border-2 border-border bg-paper-1 px-3 py-2 shadow-[3px_3px_0_var(--border)]">
       {label ? (
         <p className="mb-1.5 font-mono text-[12px] font-semibold text-ink">{label}</p>
       ) : null}
@@ -211,11 +211,12 @@ export function ModelCallTrendChart({
                       className={cn(
                         "inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[11px] transition-all cursor-pointer",
                         isTop5
-                          ? "font-semibold border-border bg-paper-0 shadow-[1px_1px_0_var(--border)]"
-                          : "border-border/40 bg-paper-1 text-ink-muted",
+                          ? "font-semibold border-border bg-paper-2 text-ink shadow-[1px_1px_0_var(--border)]"
+                          : "border-border/50 bg-paper-1 text-ink-muted",
                         isActive &&
                           "border-border bg-accent-yellow text-black font-bold scale-105 shadow-[2px_2px_0_var(--border)]",
-                        isDimmed && "opacity-35 border-transparent shadow-none",
+                        /* 弱化但不压成近黑不可读 */
+                        isDimmed && "opacity-45",
                       )}
                     >
                       <span
@@ -379,7 +380,7 @@ export function ModelShareDonut({
           {
             model: `${otherLabel} (${tailSlices.length})`,
             value: tailSlices.reduce((s, x) => s + x.value, 0),
-            color: "#cbd5e1",
+            color: "var(--ink-faint)",
             isTailAggregate: true,
           },
         ]

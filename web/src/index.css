@@ -117,30 +117,30 @@ html {
 }
 
 /*
- * Dark — Espresso Night（选型 B，可读性修订）
- * 更深 canvas + 更拉开的 paper-2 抬升；次级字提亮；边框略降 chalk 刺眼。
- * 禁止纯 #000 / 死灰 soft；保留硬边 + 硬 offset。
+ * Dark — Espresso Night（选型 B，可读性 v2）
+ * canvas 略抬 + paper-2 明显更浅，嵌套 KPI / 表头 / 中性 Metric 不再泥褐；
+ * 次级字再提亮；禁止纯 #000 / 死灰 soft；保留硬边 + 硬 offset。
  */
 html.dark {
   color-scheme: dark;
 
-  /* 三层 elevation：canvas < card < elevated/field */
-  --paper-0: #100c0a;
-  --paper-1: #221a14;
-  --paper-2: #3f3126;
+  /* 三层 elevation：canvas < card < elevated/field（台阶再拉开） */
+  --paper-0: #16120f;
+  --paper-1: #2c221a;
+  --paper-2: #524033;
 
-  --ink: #faf6f1;
-  --ink-muted: #e4d6c6;
-  --ink-faint: #bda892;
+  --ink: #fffaf4;
+  --ink-muted: #f0e2d0;
+  --ink-faint: #cbb49a;
 
-  /* 奶油纸边略降亮，避免满屏 chalk 描边 */
-  --border: #cbb79f;
-  --border-strong: #e8d7c4;
+  /* 奶油纸边：够亮可扫读，不过曝 */
+  --border: #d4c0a8;
+  --border-strong: #ebdbc8;
 
   --accent: #ff7a6e;
   --accent-hover: #ff9188;
   --accent-fg: #000000;
-  --accent-soft: #5c2c24;
+  --accent-soft: #6a342c;
 
   --accent-teal: #6fd9c8;
   --accent-yellow: #ffd978;
@@ -153,10 +153,10 @@ html.dark {
   --status-info: #b4e6d6;
 
   --focus-ring: #ffd978;
-  --track: #4a3b2f;
+  --track: #3d3026;
 
-  --shadow-hard: 4px 4px 0 #cbb79f;
-  --shadow-paper: 4px 4px 0 #cbb79f;
+  --shadow-hard: 4px 4px 0 #d4c0a8;
+  --shadow-paper: 4px 4px 0 #d4c0a8;
   --shadow-accent-red: 4px 4px 0 #ff7a6e;
   --shadow-accent-teal: 4px 4px 0 #6fd9c8;
   --shadow-accent-yellow: 4px 4px 0 #ffd978;
@@ -166,21 +166,21 @@ html.dark {
   html:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --paper-0: #100c0a;
-    --paper-1: #221a14;
-    --paper-2: #3f3126;
+    --paper-0: #16120f;
+    --paper-1: #2c221a;
+    --paper-2: #524033;
 
-    --ink: #faf6f1;
-    --ink-muted: #e4d6c6;
-    --ink-faint: #bda892;
+    --ink: #fffaf4;
+    --ink-muted: #f0e2d0;
+    --ink-faint: #cbb49a;
 
-    --border: #cbb79f;
-    --border-strong: #e8d7c4;
+    --border: #d4c0a8;
+    --border-strong: #ebdbc8;
 
     --accent: #ff7a6e;
     --accent-hover: #ff9188;
     --accent-fg: #000000;
-    --accent-soft: #5c2c24;
+    --accent-soft: #6a342c;
 
     --accent-teal: #6fd9c8;
     --accent-yellow: #ffd978;
@@ -193,10 +193,10 @@ html.dark {
     --status-info: #b4e6d6;
 
     --focus-ring: #ffd978;
-    --track: #4a3b2f;
+    --track: #3d3026;
 
-    --shadow-hard: 4px 4px 0 #cbb79f;
-    --shadow-paper: 4px 4px 0 #cbb79f;
+    --shadow-hard: 4px 4px 0 #d4c0a8;
+    --shadow-paper: 4px 4px 0 #d4c0a8;
     --shadow-accent-red: 4px 4px 0 #ff7a6e;
     --shadow-accent-teal: 4px 4px 0 #6fd9c8;
     --shadow-accent-yellow: 4px 4px 0 #ffd978;

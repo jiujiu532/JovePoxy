@@ -193,12 +193,13 @@ export function HardBarChart({
                   ) : null}
                   <div
                     className={cn(
-                      "w-full border-2 border-b-0 border-border transition-[background-color] duration-150",
-                      "group-hover:bg-ink",
+                      "w-full border-2 border-b-0 border-border transition-[filter,transform] duration-150",
+                      /* 提亮而非压成 ink（dark ink=奶油；旧 bg-ink 在部分上下文会显黑块） */
+                      "group-hover:brightness-110 group-hover:saturate-125",
                     )}
                     style={{
                       height: `${Math.max(ratio * 100, p.value > 0 ? 8 : 2)}%`,
-                      backgroundColor: p.value > 0 ? barFill : "var(--paper-0)",
+                      backgroundColor: p.value > 0 ? barFill : "var(--track)",
                     }}
                   />
                 </div>

@@ -13,7 +13,8 @@ export type StatCardProps = {
 };
 
 const toneIcon: Record<NonNullable<StatCardProps["tone"]>, string> = {
-  default: "bg-paper-0 text-ink",
+  /* paper-2：dark 下勿用 paper-0 图标底（与 canvas 融成黑洞） */
+  default: "bg-paper-2 text-ink",
   accent: "bg-accent text-black",
   success: "bg-accent-mint text-black",
   warning: "bg-accent-yellow text-black",
