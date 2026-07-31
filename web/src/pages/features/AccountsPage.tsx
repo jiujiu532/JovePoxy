@@ -577,7 +577,7 @@ export function AccountsPage() {
           />
 
       <div className="flex flex-col overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[var(--shadow-hard)]">
-        <div className="flex flex-col gap-2 border-b border-border bg-paper-0/35 px-3 py-2.5">
+        <div className="flex flex-col gap-2 border-b border-border bg-paper-2/60 px-3 py-2.5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <SearchField
@@ -597,7 +597,7 @@ export function AccountsPage() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
-              <label className="flex h-8 items-center gap-1.5 rounded-none border border-border bg-paper-0 px-2.5 text-[12px] text-ink-muted">
+              <label className="flex h-8 items-center gap-1.5 rounded-none border border-border bg-paper-1 px-2.5 text-[12px] text-ink-muted">
                 <input
                   type="checkbox"
                   checked={exportSecrets}
@@ -693,7 +693,7 @@ export function AccountsPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[28rem] text-left text-sm md:min-w-[40rem]">
                 <thead>
-                  <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
+                  <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                     <th className="w-10 px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -716,7 +716,7 @@ export function AccountsPage() {
                     ? pagedOc.map((account) => (
                         <tr
                           key={account.id}
-                          className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
+                          className="border-b border-border last:border-b-0 hover:bg-paper-2/40"
                         >
                           <td className="px-3 py-2.5">
                             <input
@@ -772,7 +772,7 @@ export function AccountsPage() {
                     : pagedOl.map((account) => (
                         <tr
                           key={account.id}
-                          className="border-b border-border last:border-b-0 hover:bg-paper-0/50"
+                          className="border-b border-border last:border-b-0 hover:bg-paper-2/40"
                         >
                           <td className="px-3 py-2.5">
                             <input
@@ -911,7 +911,7 @@ export function AccountsPage() {
           value={batchText}
           onChange={(e) => setBatchText(e.target.value)}
           rows={10}
-          className="w-full rounded-none border border-border bg-paper-0 p-3 font-mono text-[12px] text-ink outline-none focus:ring-2 focus:ring-focus-ring"
+          className="w-full rounded-none border border-border bg-paper-1 p-3 font-mono text-[12px] text-ink outline-none focus:ring-2 focus:ring-focus-ring"
           placeholder={
             tab === "opencode"
               ? "main|wrk_abc123|auth=xxxxx"
@@ -939,7 +939,7 @@ export function AccountsPage() {
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
           rows={12}
-          className="w-full rounded-none border border-border bg-paper-0 p-3 font-mono text-[12px] text-ink outline-none focus:ring-2 focus:ring-focus-ring"
+          className="w-full rounded-none border border-border bg-paper-1 p-3 font-mono text-[12px] text-ink outline-none focus:ring-2 focus:ring-focus-ring"
           placeholder='{"version":1,"provider":"opencode","accounts":[...]}'
         />
         <div className="mt-3 flex justify-end gap-2">

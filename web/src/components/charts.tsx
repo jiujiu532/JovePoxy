@@ -74,7 +74,7 @@ export function HardLineChart({
             viewBox={`0 0 ${plotW} ${plotH}`}
             preserveAspectRatio="none"
             style={{ height }}
-            className="block w-full border-2 border-border bg-paper-0"
+            className="block w-full border-2 border-border bg-paper-2"
             aria-hidden
           >
             {[0, 1, 2, 3, 4].map((i) => (
@@ -174,7 +174,7 @@ export function HardBarChart({
         </div>
         <div className="min-w-0 flex-1">
           <div
-            className="flex items-end gap-1.5 border-2 border-border bg-paper-0 px-2 pt-4"
+            className="flex items-end gap-1.5 border-2 border-border bg-paper-2 px-2 pt-4"
             style={{ height: plotH }}
           >
             {points.map((p) => {
@@ -250,7 +250,7 @@ export function StatusStackBar({
 
   return (
     <figure className={cn("m-0", className)} role="img" aria-label={ariaLabel}>
-      <div className="flex h-6 w-full overflow-hidden border-2 border-border bg-paper-0">
+      <div className="flex h-6 w-full overflow-hidden border-2 border-border bg-paper-2">
         {total === 0 ? (
           <div className="flex w-full items-center justify-center text-[11px] text-ink-faint">
             {t("charts.noRequests")}
@@ -302,7 +302,7 @@ export function ShareBar({
   const clamped = Math.min(1, Math.max(0, ratio));
   return (
     <div
-      className={cn("h-2.5 w-full max-w-[9rem] border border-border bg-paper-0", className)}
+      className={cn("h-2.5 w-full max-w-[9rem] border border-border bg-paper-2", className)}
       aria-hidden
     >
       <div

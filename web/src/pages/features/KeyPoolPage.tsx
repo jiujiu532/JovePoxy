@@ -591,7 +591,7 @@ export function KeyPoolPage() {
               />
             ) : (
           <div className="min-w-0">
-            <div className="flex items-center gap-2 border-b border-border bg-paper-0/40 px-3 py-2 md:hidden">
+            <div className="flex items-center gap-2 border-b border-border bg-paper-2/50 px-3 py-2 md:hidden">
               <input
                 type="checkbox"
                 checked={selection.allSelected}
@@ -712,7 +712,7 @@ export function KeyPoolPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-left text-sm">
                     <thead>
-                      <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink-muted">
+                      <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                         <th className="w-10 px-3 py-2">
                           <input
                             type="checkbox"
@@ -908,7 +908,7 @@ export function KeyPoolPage() {
               <HelpTip content={t("keypool.weightTipShort")} />
             </label>
             <input
-              className="h-10 w-full rounded-none border border-border bg-paper-0 px-3 text-sm text-ink"
+              className="h-10 w-full rounded-none border border-border bg-paper-1 px-3 text-sm text-ink"
               value={editWeight}
               onChange={(e) => setEditWeight(e.target.value)}
               inputMode="numeric"

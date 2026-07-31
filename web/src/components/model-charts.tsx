@@ -15,24 +15,24 @@ import {
 } from "recharts";
 import { cn } from "@/lib/cn";
 
-/** Playful hard-edge palette — no AI purple; enough stops for full-series legends. */
+/** Playful hard-edge palette — enough stops for full-series legends; dark-safe brights. */
 export const MODEL_COLORS = [
   "var(--accent)",
   "var(--accent-teal)",
   "var(--accent-yellow)",
   "var(--accent-coral)",
   "var(--accent-mint)",
-  "#2d3436",
-  "#00b894",
-  "#e17055",
-  "#0984e3",
-  "#636e72",
-  "#d63031",
-  "#6c5ce7",
-  "#00cec9",
-  "#fdcb6e",
-  "#e84393",
-  "#55a3ff",
+  "#7dd3fc",
+  "#86efac",
+  "#fbbf24",
+  "#c4b5fd",
+  "#f9a8d4",
+  "#67e8f9",
+  "#fdba74",
+  "#a5b4fc",
+  "#fca5a5",
+  "#5eead4",
+  "#fde68a",
 ] as const;
 
 export function modelColor(index: number): string {
@@ -119,7 +119,7 @@ export function ModelCallTrendChart({
         >
           <CartesianGrid
             stroke="var(--border)"
-            strokeOpacity={0.12}
+            strokeOpacity={0.28}
             vertical={false}
           />
           <XAxis
@@ -127,7 +127,7 @@ export function ModelCallTrendChart({
             interval="preserveStartEnd"
             minTickGap={28}
             tick={{
-              fill: "var(--ink-faint)",
+              fill: "var(--ink-muted)",
               fontSize: 11,
               fontFamily: "var(--font-mono)",
             }}
@@ -139,7 +139,7 @@ export function ModelCallTrendChart({
             allowDecimals={false}
             width={36}
             tick={{
-              fill: "var(--ink-faint)",
+              fill: "var(--ink-muted)",
               fontSize: 10,
               fontFamily: "var(--font-mono)",
             }}

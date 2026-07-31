@@ -88,4 +88,4 @@ export function CompactField({
 }
 
 export const fieldInputClass =
-  "h-10 w-full rounded-none border-2 border-border bg-paper-0 px-3 text-[13px] text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint hover:border-border focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1";
+  "h-10 w-full rounded-none border-2 border-border bg-paper-1 px-3 text-[13px] text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint hover:border-border focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1";

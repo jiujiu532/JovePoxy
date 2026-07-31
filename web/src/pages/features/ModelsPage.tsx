@@ -387,7 +387,7 @@ export function ModelsPage() {
                               <ModelIdCell id={model.id} family={family} />
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
-                              <span className="inline-flex items-center border border-border bg-paper-0 px-2 py-0.5 font-mono text-[11px] font-bold text-ink shadow-[1px_1px_0_var(--border)]">
+                              <span className="inline-flex items-center border border-border bg-paper-2 px-2 py-0.5 font-mono text-[11px] font-bold text-ink shadow-[1px_1px_0_var(--border)]">
                                 {family}
                               </span>
                             </td>

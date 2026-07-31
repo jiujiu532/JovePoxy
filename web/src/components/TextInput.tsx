@@ -41,7 +41,7 @@ export function TextInput({
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           className={cn(
-            "h-11 w-full rounded-none border-2 bg-paper-2 px-3 text-sm text-ink",
+            "h-11 w-full rounded-none border-2 bg-paper-1 px-3 text-sm text-ink",
             "placeholder:text-ink-faint transition-[border-color,box-shadow] duration-150",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
             error

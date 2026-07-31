@@ -63,13 +63,13 @@ export function Table<T>({
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[32rem] border-collapse border-2 border-border text-left text-sm">
           <thead>
-            <tr className="border-b-2 border-border bg-paper-0">
+            <tr className="border-b-2 border-border bg-paper-2">
               {columns.map((col) => (
                 <th
                   key={col.id}
                   scope="col"
                   className={cn(
-                    "whitespace-nowrap px-3 py-2 text-caption font-medium text-ink",
+                    "whitespace-nowrap px-3 py-2 text-caption font-semibold text-ink-muted",
                     col.className,
                   )}
                 >

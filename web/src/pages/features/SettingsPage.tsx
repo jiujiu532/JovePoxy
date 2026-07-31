@@ -106,7 +106,7 @@ function InfoList({ rows }: { readonly rows: readonly InfoRow[] }) {
           key={row.label}
           className={cn(
             "flex items-center justify-between gap-4 px-4 py-3 sm:px-5",
-            index % 2 === 1 && "bg-paper-0/35",
+            index % 2 === 1 && "bg-paper-2/35",
           )}
         >
           <div className="flex min-w-0 items-center gap-1.5">
@@ -307,7 +307,7 @@ export function SettingsPage() {
                   <HelpTip content={t("settings.loadPolicyTip")} label={t("settings.loadPolicy")} />
                 </span>
                 <select
-                  className="h-9 rounded-none border border-border bg-paper-0 px-2 text-[13px] text-ink"
+                  className="h-9 rounded-none border border-border bg-paper-1 px-2 text-[13px] text-ink"
                   value={loadPolicy}
                   onChange={(e) => setLoadPolicy(e.target.value === "sticky" ? "sticky" : "spread")}
                 >
@@ -324,7 +324,7 @@ export function SettingsPage() {
                   />
                 </span>
                 <select
-                  className="h-9 rounded-none border border-border bg-paper-0 px-2 text-[13px] text-ink"
+                  className="h-9 rounded-none border border-border bg-paper-1 px-2 text-[13px] text-ink"
                   value={String(maxAttempts)}
                   onChange={(e) => setMaxAttempts(Number(e.target.value))}
                 >
@@ -382,7 +382,7 @@ export function SettingsPage() {
               ).map(([env, tip]) => (
                 <div
                   key={env}
-                  className="flex items-center justify-between gap-2 rounded-none border border-border bg-paper-0 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-none border border-border bg-paper-2 px-3 py-2"
                 >
                   <code className="font-mono text-[12px] text-ink">{env}</code>
                   <HelpTip content={tip} label={env} />

@@ -249,7 +249,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[52rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
+                    <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.routeLabel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
@@ -536,7 +536,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[44rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
+                    <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colInput")}</th>
@@ -749,7 +749,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[28rem] md:min-w-[36rem] text-left text-sm">
                   <thead>
-                    <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
+                    <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium">{t("logs.accountLabel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colWindow")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>

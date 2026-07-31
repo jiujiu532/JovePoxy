@@ -23,8 +23,8 @@ function modeButtonClass(active: boolean): string {
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-paper-0",
     "active:scale-[0.98]",
     active
-      ? "bg-paper-1 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
-      : "text-ink-muted hover:bg-paper-1/70 hover:text-ink",
+      ? "bg-paper-2 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
+      : "text-ink-muted hover:bg-paper-2/80 hover:text-ink",
   );
 }
 
@@ -35,7 +35,7 @@ export function ViewModeToggle({ value, onChange, className }: ViewModeTogglePro
       role="group"
       aria-label={t("viewmode.switch")}
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5",
+        "inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-1 p-0.5",
         className,
       )}
     >

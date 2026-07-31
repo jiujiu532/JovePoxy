@@ -272,12 +272,12 @@ function HealthBlock({
 
   const rateToneClass =
     rate == null || requests === 0
-      ? "bg-paper-2 text-ink-muted border-border/40"
+      ? "bg-paper-2 text-ink-muted border-border"
       : rate >= 0.95
-        ? "bg-accent-teal/30 text-black border-border shadow-[1px_1px_0_var(--border)]"
+        ? "bg-accent-teal text-black border-border shadow-[1px_1px_0_var(--border)]"
         : rate >= 0.85
-          ? "bg-accent-yellow/40 text-black border-border shadow-[1px_1px_0_var(--border)]"
-          : "bg-accent/30 text-black border-border shadow-[1px_1px_0_var(--border)]";
+          ? "bg-accent-yellow text-black border-border shadow-[1px_1px_0_var(--border)]"
+          : "bg-accent text-black border-border shadow-[1px_1px_0_var(--border)]";
 
   return (
     <SectionPanel
@@ -296,7 +296,7 @@ function HealthBlock({
         <div className="flex flex-col gap-4">
           {/* 4 Neo-Brutalist Metric Cards */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-2 p-2.5 shadow-[2px_2px_0_var(--border)]">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                 {t("overview.opsKpis.requests")}
               </span>
@@ -308,7 +308,7 @@ function HealthBlock({
               </span>
             </div>
 
-            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-2 p-2.5 shadow-[2px_2px_0_var(--border)]">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                 {t("overview.opsKpis.successRate")}
               </span>
@@ -325,7 +325,7 @@ function HealthBlock({
               </span>
             </div>
 
-            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-2 p-2.5 shadow-[2px_2px_0_var(--border)]">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                 {t("overview.opsKpis.latencyP50")}
               </span>
@@ -337,7 +337,7 @@ function HealthBlock({
               </span>
             </div>
 
-            <div className="flex flex-col justify-between border-2 border-border bg-paper-0 p-2.5 shadow-[2px_2px_0_var(--border)]">
+            <div className="flex flex-col justify-between border-2 border-border bg-paper-2 p-2.5 shadow-[2px_2px_0_var(--border)]">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                 {t("overview.opsKpis.latencyP95")}
               </span>
@@ -351,7 +351,7 @@ function HealthBlock({
           </div>
 
           {/* HTTP Status Code Breakdown */}
-          <div className="border-2 border-border bg-paper-1/60 p-2.5">
+          <div className="border-2 border-border bg-paper-2 p-2.5">
             <div className="mb-1.5 flex items-center justify-between font-mono text-[11px]">
               <span className="font-bold uppercase tracking-wider text-ink-muted">
                 HTTP 状态码分布
@@ -423,7 +423,7 @@ function ZenPoolStrip({
       <div className="flex flex-col gap-3.5">
         {/* Top Summary Rail */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+          <div className="border-2 border-border bg-paper-2 p-2 shadow-[2px_2px_0_var(--border)]">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
               总密钥数
             </p>
@@ -432,7 +432,7 @@ function ZenPoolStrip({
             </p>
           </div>
 
-          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+          <div className="border-2 border-border bg-paper-2 p-2 shadow-[2px_2px_0_var(--border)]">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
               {t("overview.zenPool.healthy")}
             </p>
@@ -441,7 +441,7 @@ function ZenPoolStrip({
             </p>
           </div>
 
-          <div className="border-2 border-border bg-paper-0 p-2 shadow-[2px_2px_0_var(--border)]">
+          <div className="border-2 border-border bg-paper-2 p-2 shadow-[2px_2px_0_var(--border)]">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
               受限/异状
             </p>
@@ -488,7 +488,7 @@ function ZenPoolStrip({
           <div className="flex flex-wrap items-center gap-2 border-t-2 border-border/20 pt-2.5 font-mono text-[11px]">
             <span className="font-bold text-ink-muted">渠道可用性:</span>
             {oc ? (
-              <span className="inline-flex items-center gap-1.5 border-1.5 border-border bg-paper-0 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+              <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
                 <span
                   className={cn(
                     "h-2 w-2 rounded-full",
@@ -502,7 +502,7 @@ function ZenPoolStrip({
               </span>
             ) : null}
             {ol ? (
-              <span className="inline-flex items-center gap-1.5 border-1.5 border-border bg-paper-0 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+              <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
                 <span
                   className={cn(
                     "h-2 w-2 rounded-full",

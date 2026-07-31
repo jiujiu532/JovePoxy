@@ -34,7 +34,7 @@ export function SegmentedFilter({
       role="group"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-8 flex-wrap items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5",
+        "inline-flex h-8 flex-wrap items-center gap-0.5 rounded-none border-2 border-border bg-paper-1 p-0.5",
         className,
       )}
     >
@@ -50,7 +50,7 @@ export function SegmentedFilter({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
               active
                 ? "bg-accent text-accent-fg shadow-[2px_2px_0_var(--border)]"
-                : "text-ink-muted hover:bg-paper-1 hover:text-ink",
+                : "text-ink-muted hover:bg-paper-2 hover:text-ink",
             )}
             onClick={() => onChange(opt.value)}
           >
@@ -191,9 +191,9 @@ export function FilterSelect({
         aria-expanded={open}
         aria-controls={listId}
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-none border-2 border-border bg-paper-0 pl-2.5 pr-2",
+          "inline-flex h-8 items-center gap-1.5 rounded-none border-2 border-border bg-paper-1 pl-2.5 pr-2",
           "text-[12px] font-medium text-ink transition-colors",
-          "hover:bg-paper-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+          "hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
           open && "ring-2 ring-focus-ring",
         )}
         onClick={() => setOpen((v) => !v)}
@@ -239,9 +239,9 @@ export function SearchField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? t("common.search")}
         className={cn(
-          "h-8 w-full rounded-none border-2 border-border bg-paper-0 pl-8 pr-2.5 text-[12px] text-ink",
+          "h-8 w-full rounded-none border-2 border-border bg-paper-1 pl-8 pr-2.5 text-[12px] text-ink",
           "placeholder:text-ink-faint outline-none transition-[border-color,box-shadow] duration-150",
-          "hover:bg-paper-1 focus-visible:ring-2 focus-visible:ring-focus-ring",
+          "hover:bg-paper-0 focus-visible:ring-2 focus-visible:ring-focus-ring",
         )}
       />
     </label>
@@ -292,7 +292,7 @@ export function ListToolbar({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 border-b-2 border-border bg-paper-0 px-3 py-2.5",
+        "flex flex-col gap-2 border-b-2 border-border bg-paper-2 px-3 py-2.5",
         className,
       )}
     >
@@ -426,7 +426,7 @@ export function FilterStrip({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 border-b-2 border-border bg-paper-0 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-2 border-b-2 border-border bg-paper-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >

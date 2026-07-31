@@ -20,10 +20,10 @@ function pageBtnClass(active = false, disabled = false) {
     "transition-[transform,background-color,color,box-shadow] duration-150",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
     disabled
-      ? "cursor-not-allowed bg-paper-0 text-ink-faint opacity-45"
+      ? "cursor-not-allowed bg-paper-1 text-ink-faint opacity-45"
       : active
         ? "bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]"
-        : "bg-paper-0 text-ink hover:bg-paper-1 active:translate-x-px active:translate-y-px active:shadow-none",
+        : "bg-paper-1 text-ink hover:bg-paper-2 active:translate-x-px active:translate-y-px active:shadow-none",
   );
 }
 
@@ -160,10 +160,10 @@ function PageSizeSelect({
           aria-controls={listId}
           aria-label={t("pagination.perPage")}
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-none border-2 border-border bg-paper-0 px-2.5",
+            "inline-flex h-8 items-center gap-1.5 rounded-none border-2 border-border bg-paper-1 px-2.5",
             "text-[12px] font-semibold tabular-nums text-ink",
             "transition-[transform,background-color,box-shadow] duration-150",
-            "hover:bg-paper-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+            "hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
             "active:translate-x-px active:translate-y-px",
             open && "bg-accent-yellow shadow-[2px_2px_0_var(--border)]",
           )}

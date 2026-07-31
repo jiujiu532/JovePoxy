@@ -255,7 +255,7 @@ function CardShell({
   return (
     <article
       className={cn(
-        "flex h-full flex-col border-2 border-border bg-paper-0",
+        "flex h-full flex-col border-2 border-border bg-paper-2",
         "transition-[border-color,box-shadow] duration-150 hover:border-border",
         dense ? "p-3" : "p-3.5 md:p-4",
       )}
@@ -449,7 +449,7 @@ function TableView({
         <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full min-w-[40rem] text-left text-sm">
             <thead>
-              <tr className="border-b-2 border-border bg-paper-0 text-caption text-ink">
+              <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                 {headers.map((h) => (
                   <th key={h} className="whitespace-nowrap px-3 py-2.5 font-medium">
                     {h}

@@ -46,7 +46,7 @@ export function ProgressRing({
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="var(--border)"
+            stroke="var(--track)"
             strokeWidth={strokeWidth}
           />
           <circle
@@ -114,7 +114,7 @@ export function ProgressBar({
       </div>
       <div
         className={cn(
-          "mt-1 overflow-hidden rounded-none border border-border bg-paper-0",
+          "mt-1 overflow-hidden rounded-none border border-border bg-track",
           dense ? "h-1" : "h-1.5",
         )}
       >

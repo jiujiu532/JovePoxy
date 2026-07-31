@@ -8,11 +8,12 @@ export type MetricRailItem = {
 };
 
 const toneClass: Record<NonNullable<MetricRailItem["tone"]>, string> = {
-  yellow: "bg-accent-yellow",
-  teal: "bg-accent-teal",
-  mint: "bg-accent-mint",
+  yellow: "bg-accent-yellow text-black",
+  teal: "bg-accent-teal text-black",
+  mint: "bg-accent-mint text-black",
   accent: "bg-accent text-black",
-  white: "bg-paper-0",
+  /* 抬升面，避免 dark 下 paper-0 与 canvas 融成黑洞 */
+  white: "bg-paper-2 text-ink",
 };
 
 export type MetricRailProps = {
