@@ -35,12 +35,11 @@ import {
   ApiError,
   type LogDTO,
   type OpsKPIsDTO,
-  type OpsWindow,
   type OverviewDTO,
+  type UsageRecordDTO,
   type ZenPoolSummaryDTO,
 } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
-import { cn } from "@/lib/cn";
 import { useI18n, type Lang, type Translate } from "@/lib/i18n";
 
 function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
@@ -58,6 +57,7 @@ function formatUpdatedAt(lang: Lang, t: Translate, value?: string): string {
 /** Max distinct model series on the trend chart (rest → "other"). */
 const TREND_TOP_MODELS = 6;
 const LOG_FETCH_LIMIT = 2000;
+const USAGE_FETCH_LIMIT = 2000;
 
 function dayKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -95,20 +95,84 @@ function formatCompact(value: number): string {
 function rangeLabel(range: DateRangeValue, t: Translate): string {
   switch (range.preset) {
     case "today":
-      return t("overview.modelAnalytics.rangeToday");
+      return t("overview.range.today");
     case "7d":
-      return t("overview.modelAnalytics.range7d");
+      return t("overview.range.7d");
     case "week":
-      return t("overview.modelAnalytics.rangeWeek");
+      return t("overview.range.week");
     case "30d":
-      return t("overview.modelAnalytics.range30d");
+      return t("overview.range.30d");
     case "month":
-      return t("overview.modelAnalytics.rangeMonth");
+      return t("overview.range.month");
     default:
-      return t("overview.modelAnalytics.rangeDays", {
+      return t("overview.range.days", {
         n: rangeDayCount(range.from, range.to),
       });
   }
+}
+
+function inRange(iso: string, range: DateRangeValue): boolean {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return false;
+  const ms = t.getTime();
+  return ms >= range.from.getTime() && ms <= range.to.getTime();
+}
+
+function filterLogs(logs: ReadonlyArray<LogDTO>, range: DateRangeValue): LogDTO[] {
+  return logs.filter((log) => inRange(log.created_at, range));
+}
+
+/** Client-side ops KPIs from request logs in the selected range. */
+function buildOpsFromLogs(logs: ReadonlyArray<LogDTO>, range: DateRangeValue): OpsKPIsDTO {
+  const scoped = filterLogs(logs, range);
+  let s2xx = 0;
+  let s429 = 0;
+  let s5xx = 0;
+  const latencies: number[] = [];
+  for (const log of scoped) {
+    if (log.status === 429) s429 += 1;
+    else if (log.status >= 500) s5xx += 1;
+    else if (log.status >= 200 && log.status < 300) s2xx += 1;
+    if (typeof log.latency_ms === "number" && Number.isFinite(log.latency_ms)) {
+      latencies.push(log.latency_ms);
+    }
+  }
+  const requests = scoped.length;
+  latencies.sort((a, b) => a - b);
+  const percentile = (p: number): number | null => {
+    if (latencies.length === 0) return null;
+    if (latencies.length === 1) return latencies[0]!;
+    const rank = Math.ceil(p * latencies.length);
+    const idx = Math.min(latencies.length, Math.max(1, rank)) - 1;
+    return latencies[idx]!;
+  };
+  const p50 = percentile(0.5);
+  const p95 = percentile(0.95);
+  const result: OpsKPIsDTO = {
+    window: "range",
+    requests,
+    status_2xx: s2xx,
+    status_429: s429,
+    status_5xx: s5xx,
+  };
+  if (requests > 0) {
+    return {
+      ...result,
+      success_rate: s2xx / requests,
+      ...(p50 != null ? { latency_p50_ms: p50 } : {}),
+      ...(p95 != null ? { latency_p95_ms: p95 } : {}),
+    };
+  }
+  return result;
+}
+
+function periodTokens(records: ReadonlyArray<UsageRecordDTO>, range: DateRangeValue): number {
+  let sum = 0;
+  for (const r of records) {
+    if (!inRange(r.recorded_at, range)) continue;
+    sum += (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
+  }
+  return sum;
 }
 
 type ModelAnalytics = {
@@ -130,7 +194,6 @@ function buildModelAnalytics(
   const fromMs = range.from.getTime();
   const toMs = range.to.getTime();
 
-  // Count per model overall (within window) for top-N selection.
   const modelTotals = new Map<string, number>();
   const dayModel = new Map<string, Map<string, number>>();
   for (const d of days) dayModel.set(d, new Map());
@@ -175,7 +238,6 @@ function buildModelAnalytics(
     return row as ModelSeriesPoint;
   });
 
-  // Share + rank use full model list (not collapsed), capped for readability.
   const shareSource = rankedAll.slice(0, 10);
   const shareOther = rankedAll.slice(10).reduce((s, [, n]) => s + n, 0);
   const slices: ModelShareSlice[] = shareSource.map(([model, value], i) => ({
@@ -202,21 +264,6 @@ function buildModelAnalytics(
   return { series, models: seriesModels, colors, slices, ranks, totalCalls };
 }
 
-const OPS_WINDOWS: ReadonlyArray<OpsWindow> = ["1h", "24h", "7d"];
-
-function windowLabelKey(
-  window: OpsWindow,
-): "overview.opsKpis.window1h" | "overview.opsKpis.window24h" | "overview.opsKpis.window7d" {
-  switch (window) {
-    case "1h":
-      return "overview.opsKpis.window1h";
-    case "7d":
-      return "overview.opsKpis.window7d";
-    default:
-      return "overview.opsKpis.window24h";
-  }
-}
-
 function formatSuccessRate(rate: number | null | undefined, requests: number): string {
   if (requests <= 0 || rate == null) return "-";
   return `${(rate * 100).toFixed(1)}%`;
@@ -227,84 +274,34 @@ function formatLatencyMs(t: Translate, value: number | null | undefined): string
   return t("overview.opsKpis.ms", { n: value });
 }
 
-function WindowToggle({
-  window,
-  onWindowChange,
-  loading,
-  t,
-}: {
-  readonly window: OpsWindow;
-  readonly onWindowChange: (w: OpsWindow) => void;
-  readonly loading: boolean;
-  readonly t: Translate;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={t("overview.opsKpis.window")}
-      className="inline-flex items-center gap-0.5 rounded-none border-2 border-border bg-paper-0 p-0.5"
-    >
-      {OPS_WINDOWS.map((w) => {
-        const active = window === w;
-        return (
-          <button
-            key={w}
-            type="button"
-            aria-pressed={active}
-            disabled={loading}
-            className={cn(
-              "inline-flex h-8 items-center rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color] duration-150",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-paper-0",
-              active
-                ? "bg-paper-1 text-ink shadow-[2px_2px_0_var(--border)] ring-1 ring-border"
-                : "text-ink-muted hover:bg-paper-1/70 hover:text-ink",
-              loading && "opacity-60",
-            )}
-            onClick={() => onWindowChange(w)}
-          >
-            {t(windowLabelKey(w))}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 第一眼：健康 + 延迟，时窗可切换。 */
+/** 运维 KPI：跟随全局日期范围，无独立时窗切换。 */
 function HealthBlock({
   kpis,
-  window,
-  onWindowChange,
-  loading,
+  rangeText,
   t,
 }: {
-  readonly kpis?: OpsKPIsDTO | undefined;
-  readonly window: OpsWindow;
-  readonly onWindowChange: (w: OpsWindow) => void;
-  readonly loading: boolean;
+  readonly kpis: OpsKPIsDTO;
+  readonly rangeText: string;
   readonly t: Translate;
 }) {
-  const requests = kpis?.requests ?? 0;
-  const s2xx = kpis?.status_2xx ?? 0;
-  const s429 = kpis?.status_429 ?? 0;
-  const s5xx = kpis?.status_5xx ?? 0;
+  const requests = kpis.requests ?? 0;
+  const s2xx = kpis.status_2xx ?? 0;
+  const s429 = kpis.status_429 ?? 0;
+  const s5xx = kpis.status_5xx ?? 0;
 
   return (
     <SectionPanel
       title={t("overview.opsKpis.title")}
+      description={t("overview.opsKpis.description", { range: rangeText })}
       icon={ChartLineUp}
       iconTone="teal"
-      actions={
-        <WindowToggle
-          window={window}
-          onWindowChange={onWindowChange}
-          loading={loading}
-          t={t}
-        />
-      }
     >
       {requests === 0 ? (
-        <EmptyState compact icon={ChartLineUp} title={t("overview.opsKpis.noData")} />
+        <EmptyState
+          compact
+          icon={ChartLineUp}
+          title={t("overview.opsKpis.noData", { range: rangeText })}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-px overflow-hidden border-2 border-border bg-border sm:grid-cols-4">
@@ -315,15 +312,15 @@ function HealthBlock({
               },
               {
                 label: t("overview.opsKpis.successRate"),
-                value: formatSuccessRate(kpis?.success_rate, requests),
+                value: formatSuccessRate(kpis.success_rate, requests),
               },
               {
                 label: t("overview.opsKpis.latencyP50"),
-                value: formatLatencyMs(t, kpis?.latency_p50_ms),
+                value: formatLatencyMs(t, kpis.latency_p50_ms),
               },
               {
                 label: t("overview.opsKpis.latencyP95"),
-                value: formatLatencyMs(t, kpis?.latency_p95_ms),
+                value: formatLatencyMs(t, kpis.latency_p95_ms),
               },
             ].map((cell) => (
               <div key={cell.label} className="bg-paper-0 px-3 py-2.5">
@@ -385,6 +382,7 @@ function ZenPoolStrip({
   return (
     <SectionPanel
       title={t("overview.zenPool.title")}
+      description={t("overview.zenPool.liveHint")}
       icon={Coins}
       iconTone="yellow"
       actions={
@@ -436,42 +434,57 @@ export function OverviewPage() {
   const { t, lang } = useI18n();
   const [data, setData] = useState<OverviewDTO | null>(null);
   const [logs, setLogs] = useState<LogDTO[]>([]);
+  const [usage, setUsage] = useState<UsageRecordDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [opsWindow, setOpsWindow] = useState<OpsWindow>("24h");
-  const [opsLoading, setOpsLoading] = useState(false);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
+
+  const rangeText = useMemo(() => rangeLabel(dateRange, t), [dateRange, t]);
+  const rangePickerLabels = useMemo(
+    () => ({
+      today: t("overview.range.today"),
+      last7d: t("overview.range.7d"),
+      thisWeek: t("overview.range.week"),
+      last30d: t("overview.range.30d"),
+      thisMonth: t("overview.range.month"),
+      apply: t("overview.range.apply"),
+      clear: t("overview.range.cancel"),
+      start: t("overview.range.start"),
+      end: t("overview.range.end"),
+      placeholder: t("overview.range.placeholder"),
+    }),
+    [t],
+  );
 
   const analytics = useMemo(
     () => buildModelAnalytics(logs, t("overview.modelAnalytics.other"), dateRange),
     [logs, t, dateRange],
   );
-  const analyticsRangeText = useMemo(() => rangeLabel(dateRange, t), [dateRange, t]);
-  const rangePickerLabels = useMemo(
-    () => ({
-      today: t("overview.modelAnalytics.rangeToday"),
-      last7d: t("overview.modelAnalytics.range7d"),
-      thisWeek: t("overview.modelAnalytics.rangeWeek"),
-      last30d: t("overview.modelAnalytics.range30d"),
-      thisMonth: t("overview.modelAnalytics.rangeMonth"),
-      apply: t("overview.modelAnalytics.rangeApply"),
-      clear: t("overview.modelAnalytics.rangeCancel"),
-      start: t("overview.modelAnalytics.rangeStart"),
-      end: t("overview.modelAnalytics.rangeEnd"),
-      placeholder: t("overview.modelAnalytics.rangePlaceholder"),
-    }),
-    [t],
+
+  const opsKpis = useMemo(() => buildOpsFromLogs(logs, dateRange), [logs, dateRange]);
+
+  const periodRequestCount = useMemo(
+    () => filterLogs(logs, dateRange).length,
+    [logs, dateRange],
+  );
+  const periodTokenCount = useMemo(
+    () => periodTokens(usage, dateRange),
+    [usage, dateRange],
   );
 
-  async function load(window: OpsWindow = opsWindow) {
+  async function load() {
     setLoading(true);
     try {
-      const overview = await api.overview(window);
+      const overview = await api.overview();
       setData(overview);
       setError(null);
 
-      const logsRes = await Promise.allSettled([api.logs(LOG_FETCH_LIMIT)]);
-      setLogs(logsRes[0]?.status === "fulfilled" ? logsRes[0].value.logs : []);
+      const settled = await Promise.allSettled([
+        api.logs(LOG_FETCH_LIMIT),
+        api.usage(USAGE_FETCH_LIMIT),
+      ]);
+      setLogs(settled[0]?.status === "fulfilled" ? settled[0].value.logs : []);
+      setUsage(settled[1]?.status === "fulfilled" ? settled[1].value.records : []);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setSessionHint(false);
@@ -481,26 +494,6 @@ export function OverviewPage() {
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function changeOpsWindow(next: OpsWindow) {
-    if (next === opsWindow) return;
-    setOpsWindow(next);
-    setOpsLoading(true);
-    try {
-      const overview = await api.overview(next);
-      setData(overview);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
-      setError(err instanceof Error ? err.message : t("common.loadFailed"));
-    } finally {
-      setOpsLoading(false);
     }
   }
 
@@ -530,7 +523,7 @@ export function OverviewPage() {
         title={t("overview.loadFailed")}
         description={error}
         action={
-          <Button variant="secondary" onClick={() => void load(opsWindow)}>
+          <Button variant="secondary" onClick={() => void load()}>
             {t("common.retry")}
           </Button>
         }
@@ -554,15 +547,15 @@ export function OverviewPage() {
 
   const volumeRail = [
     {
-      label: t("overview.card.requestsToday"),
-      value: data.requests_today,
-      hint: t("overview.card.requestsTodayHint"),
+      label: t("overview.card.requestsPeriod", { range: rangeText }),
+      value: periodRequestCount,
+      hint: t("overview.card.requestsPeriodHint", { range: rangeText }),
       tone: "accent" as const,
     },
     {
-      label: t("overview.card.tokensToday"),
-      value: formatCompact(data.tokens_today),
-      hint: t("overview.card.tokensTodayHint"),
+      label: t("overview.card.tokensPeriod", { range: rangeText }),
+      value: formatCompact(periodTokenCount),
+      hint: t("overview.card.tokensPeriodHint"),
       tone: "yellow" as const,
     },
     {
@@ -589,21 +582,31 @@ export function OverviewPage() {
           time: formatUpdatedAt(lang, t, data.updated_at),
         })}
         actions={
-          <Button variant="secondary" onClick={() => void load(opsWindow)}>
-            <Pulse size={16} weight="bold" className="mr-1.5" aria-hidden />
-            {t("common.refresh")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              labels={rangePickerLabels}
+              lang={lang}
+            />
+            <Button variant="secondary" onClick={() => void load()}>
+              <Pulse size={16} weight="bold" className="mr-1.5" aria-hidden />
+              {t("common.refresh")}
+            </Button>
+          </div>
         }
       />
 
-      {/* 1. 流量体积置顶：今日 + 累计，一条轨道 */}
+      {/* 1. 流量体积：区间指标随全局日期变化，累计为全量 */}
       <section aria-label={t("overview.volume.title")}>
         <div className="mb-2 flex items-end justify-between gap-3">
           <div>
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-muted">
               {t("overview.volume.title")}
             </h2>
-            <p className="mt-0.5 text-[12px] text-ink-faint">{t("overview.volume.hint")}</p>
+            <p className="mt-0.5 text-[12px] text-ink-faint">
+              {t("overview.volume.hint", { range: rangeText })}
+            </p>
           </div>
           <div className="flex items-center gap-2 text-[12px] text-ink-muted">
             <Lightning size={14} weight="fill" className="text-accent-yellow" aria-hidden />
@@ -619,15 +622,9 @@ export function OverviewPage() {
         <MetricRail items={volumeRail} />
       </section>
 
-      {/* 2. 健康：KPI + 密钥池并排 */}
+      {/* 2. 健康：KPI 跟区间；密钥池为实时态 */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <HealthBlock
-          kpis={data.ops_kpis}
-          window={opsWindow}
-          onWindowChange={(w) => void changeOpsWindow(w)}
-          loading={opsLoading}
-          t={t}
-        />
+        <HealthBlock kpis={opsKpis} rangeText={rangeText} t={t} />
         <ZenPoolStrip
           pool={data.zen_pool}
           t={t}
@@ -635,24 +632,16 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* 3. 模型调用分析：日期筛选驱动趋势 + 占比 + 排行 */}
+      {/* 3. 模型调用分析：同一区间 */}
       <SectionPanel
         title={t("overview.modelAnalytics.trendTitle")}
-        description={t("overview.modelAnalytics.trendDesc", { range: analyticsRangeText })}
+        description={t("overview.modelAnalytics.trendDesc", { range: rangeText })}
         icon={ChartLineUp}
         iconTone="yellow"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangePicker
-              value={dateRange}
-              onChange={setDateRange}
-              labels={rangePickerLabels}
-              lang={lang}
-            />
-            <Button variant="ghost" onClick={() => void navigate("/app/logs")}>
-              {t("overview.modelAnalytics.viewLogs")}
-            </Button>
-          </div>
+          <Button variant="ghost" onClick={() => void navigate("/app/logs")}>
+            {t("overview.modelAnalytics.viewLogs")}
+          </Button>
         }
         {...(!hasAnalytics ? { bodyClassName: "p-0" } : {})}
       >
@@ -668,7 +657,9 @@ export function OverviewPage() {
             compact
             icon={ChartLineUp}
             title={t("overview.modelAnalytics.emptyTitle")}
-            description={t("overview.modelAnalytics.emptyDescription")}
+            description={t("overview.modelAnalytics.emptyDescription", {
+              range: rangeText,
+            })}
             action={
               <Button variant="secondary" onClick={() => void navigate("/app/logs")}>
                 {t("overview.modelAnalytics.viewLogs")}
@@ -682,9 +673,7 @@ export function OverviewPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionPanel
             title={t("overview.modelAnalytics.shareTitle")}
-            description={t("overview.modelAnalytics.shareDesc", {
-              range: analyticsRangeText,
-            })}
+            description={t("overview.modelAnalytics.shareDesc", { range: rangeText })}
             icon={ChartDonut}
             iconTone="teal"
           >
@@ -698,9 +687,7 @@ export function OverviewPage() {
 
           <SectionPanel
             title={t("overview.modelAnalytics.rankTitle")}
-            description={t("overview.modelAnalytics.rankDesc", {
-              range: analyticsRangeText,
-            })}
+            description={t("overview.modelAnalytics.rankDesc", { range: rangeText })}
             icon={ChartLineUp}
             iconTone="default"
           >
