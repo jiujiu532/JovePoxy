@@ -583,9 +583,15 @@ export function OverviewPage() {
               labels={rangePickerLabels}
               lang={lang}
             />
-            <Button variant="secondary" onClick={() => void load()}>
-              <Pulse size={16} weight="bold" className="mr-1.5" aria-hidden />
-              {t("common.refresh")}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void load()}
+              className="h-8 min-h-8 px-2.5 text-[12px] shadow-none"
+              title={t("common.refresh")}
+            >
+              <Pulse size={14} weight="bold" aria-hidden />
+              <span className="sr-only sm:not-sr-only sm:inline">{t("common.refresh")}</span>
             </Button>
           </div>
         }

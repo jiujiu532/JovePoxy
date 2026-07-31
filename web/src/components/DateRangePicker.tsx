@@ -79,7 +79,10 @@ export function rangeDayCount(from: Date, to: Date): number {
 }
 
 /** Build preset range relative to `now` (local). Preset `to` is current moment, not endOfDay. */
-export function presetRange(preset: Exclude<DateRangePreset, "custom">, now = new Date()): DateRangeValue {
+export function presetRange(
+  preset: Exclude<DateRangePreset, "custom">,
+  now = new Date(),
+): DateRangeValue {
   const today = startOfDay(now);
   const toNow = new Date(now);
   switch (preset) {
@@ -209,23 +212,23 @@ function MonthGrid({
   }
 
   return (
-    <div className="min-w-[240px] flex-1">
-      <div className="mb-2 flex items-center justify-between gap-1">
+    <div className="min-w-[228px] flex-1">
+      <div className="mb-2 flex items-center justify-between gap-1 border-2 border-border bg-paper-2 px-1 py-1">
         <button
           type="button"
           aria-label="prev-month"
           disabled={!showPrev || !onPrev}
           onClick={onPrev}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center border-2 border-transparent text-ink",
+            "inline-flex h-7 w-7 items-center justify-center border-2 border-transparent text-ink",
             showPrev
-              ? "hover:border-border hover:bg-paper-2"
-              : "opacity-0 pointer-events-none",
+              ? "hover:border-border hover:bg-paper-0"
+              : "pointer-events-none opacity-0",
           )}
         >
           <CaretLeft size={14} weight="bold" />
         </button>
-        <span className="font-mono text-[13px] font-semibold text-ink">
+        <span className="font-mono text-[12px] font-bold tracking-wide text-ink">
           {monthLabel(year, month, lang)}
         </span>
         <button
@@ -234,26 +237,26 @@ function MonthGrid({
           disabled={!showNext || !onNext}
           onClick={onNext}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center border-2 border-transparent text-ink",
+            "inline-flex h-7 w-7 items-center justify-center border-2 border-transparent text-ink",
             showNext
-              ? "hover:border-border hover:bg-paper-2"
-              : "opacity-0 pointer-events-none",
+              ? "hover:border-border hover:bg-paper-0"
+              : "pointer-events-none opacity-0",
           )}
         >
           <CaretRight size={14} weight="bold" />
         </button>
       </div>
-      <div className="mb-1 grid grid-cols-7 gap-0.5">
+      <div className="mb-1 grid grid-cols-7 gap-px bg-border p-px">
         {weeks.map((w) => (
           <div
             key={w}
-            className="py-1 text-center font-mono text-[11px] font-medium text-ink-faint"
+            className="bg-paper-2 py-1.5 text-center font-mono text-[10px] font-bold uppercase text-ink-muted"
           >
             {w}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-px bg-border p-px">
         {cells.map((cell) => {
           const day = startOfDay(cell.date);
           const isToday = sameDay(day, today);
@@ -264,6 +267,7 @@ function MonthGrid({
               ? day.getTime() >= selA.getTime() && day.getTime() <= selB.getTime()
               : false;
           const edge = isStart || isEnd;
+          const single = isStart && isEnd;
           return (
             <button
               key={`${day.getTime()}-${cell.inMonth ? "m" : "o"}`}
@@ -273,12 +277,29 @@ function MonthGrid({
               onMouseLeave={() => onHover(null)}
               onClick={() => onPick(day)}
               className={cn(
-                "relative h-8 w-full font-mono text-[12px] tabular-nums transition-colors",
-                !cell.inMonth && "pointer-events-none text-transparent",
-                cell.inMonth && !edge && !inRange && "text-ink hover:bg-paper-2",
-                cell.inMonth && inRange && !edge && "bg-accent-soft text-ink",
-                edge && "bg-accent font-semibold text-accent-fg",
-                isToday && cell.inMonth && !edge && "ring-1 ring-inset ring-border",
+                "relative h-8 w-full font-mono text-[12px] tabular-nums",
+                !cell.inMonth && "pointer-events-none bg-paper-1 text-transparent",
+                cell.inMonth && !edge && !inRange && "bg-paper-0 text-ink hover:bg-paper-2",
+                // mid-range: hard mint band (no soft pink wash)
+                cell.inMonth &&
+                  inRange &&
+                  !edge &&
+                  "bg-accent-mint font-medium text-black",
+                // range edges: solid accent hard blocks
+                edge &&
+                  !single &&
+                  isStart &&
+                  "bg-accent font-bold text-accent-fg",
+                edge &&
+                  !single &&
+                  isEnd &&
+                  "bg-accent font-bold text-accent-fg",
+                single && "bg-accent font-bold text-accent-fg",
+                // today marker when not selected
+                isToday &&
+                  cell.inMonth &&
+                  !edge &&
+                  "font-bold underline decoration-2 underline-offset-2",
               )}
             >
               {cell.date.getDate()}
@@ -390,7 +411,7 @@ export function DateRangePicker({
   ];
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative inline-block", className)}>
       <button
         type="button"
         aria-haspopup="dialog"
@@ -398,13 +419,14 @@ export function DateRangePicker({
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex h-9 max-w-full items-center gap-2 border-2 border-border bg-paper-0 px-2.5",
+          "inline-flex h-8 max-w-full items-center gap-1.5 border-2 border-border bg-paper-0 px-2",
           "font-mono text-[12px] text-ink shadow-[2px_2px_0_var(--border)]",
           "hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+          open && "bg-paper-2",
         )}
       >
-        <CalendarBlank size={14} weight="bold" className="shrink-0" aria-hidden />
-        <span className="truncate">{triggerText}</span>
+        <CalendarBlank size={13} weight="bold" className="shrink-0" aria-hidden />
+        <span className="truncate tabular-nums">{triggerText}</span>
       </button>
 
       {open ? (
@@ -413,64 +435,37 @@ export function DateRangePicker({
           role="dialog"
           aria-label={labels.placeholder}
           className={cn(
-            "absolute right-0 z-40 mt-2 w-[min(100vw-1.5rem,560px)] border-2 border-border bg-paper-0",
-            "p-3 shadow-[4px_4px_0_var(--border)]",
+            "absolute right-0 z-40 mt-2 w-[min(100vw-1.5rem,640px)] border-2 border-border bg-paper-0",
+            "shadow-[4px_4px_0_var(--border)]",
           )}
         >
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <MonthGrid
-              year={leftCursor.year}
-              month={leftCursor.month}
-              lang={lang}
-              draftFrom={draftFrom}
-              draftTo={draftTo}
-              hover={hover}
-              onPick={pick}
-              onHover={setHover}
-              showPrev
-              showNext={false}
-              onPrev={() =>
-                setLeftCursor((c) =>
-                  c.month === 0
-                    ? { year: c.year - 1, month: 11 }
-                    : { year: c.year, month: c.month - 1 },
-                )
-              }
-            />
-            <div className="hidden w-px bg-border sm:block" aria-hidden />
-            <MonthGrid
-              year={rightCursor.year}
-              month={rightCursor.month}
-              lang={lang}
-              draftFrom={draftFrom}
-              draftTo={draftTo}
-              hover={hover}
-              onPick={pick}
-              onHover={setHover}
-              showPrev={false}
-              showNext
-              onNext={() =>
-                setLeftCursor((c) =>
-                  c.month === 11
-                    ? { year: c.year + 1, month: 0 }
-                    : { year: c.year, month: c.month + 1 },
-                )
-              }
-            />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t-2 border-border pt-3">
-            <span className="font-mono text-[11px] text-ink-muted">
-              {labels.start} {draftFrom ? formatDateYMD(draftFrom) : "—"}
-            </span>
-            <span className="text-ink-faint">→</span>
-            <span className="font-mono text-[11px] text-ink-muted">
-              {labels.end} {draftTo ? formatDateYMD(draftTo) : draftFrom ? formatDateYMD(draftFrom) : "—"}
-            </span>
-            <div className="ml-auto flex items-center gap-2">
+          {/* header strip */}
+          <div className="flex items-center justify-between gap-2 border-b-2 border-border bg-paper-2 px-3 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-mono text-[11px]">
+              <span className="shrink-0 font-bold uppercase tracking-wide text-ink-muted">
+                {labels.start}
+              </span>
+              <span className="border-2 border-border bg-paper-0 px-1.5 py-0.5 font-semibold tabular-nums text-ink">
+                {draftFrom ? formatDateYMD(draftFrom) : "—"}
+              </span>
+              <span className="text-ink-faint" aria-hidden>
+                →
+              </span>
+              <span className="shrink-0 font-bold uppercase tracking-wide text-ink-muted">
+                {labels.end}
+              </span>
+              <span className="border-2 border-border bg-paper-0 px-1.5 py-0.5 font-semibold tabular-nums text-ink">
+                {draftTo
+                  ? formatDateYMD(draftTo)
+                  : draftFrom
+                    ? formatDateYMD(draftFrom)
+                    : "—"}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
-                className="h-8 border-2 border-border bg-paper-0 px-3 text-[12px] font-medium text-ink hover:bg-paper-2"
+                className="h-7 border-2 border-border bg-paper-0 px-2.5 text-[11px] font-semibold text-ink hover:bg-paper-1"
                 onClick={() => setOpen(false)}
               >
                 {labels.clear}
@@ -479,8 +474,8 @@ export function DateRangePicker({
                 type="button"
                 disabled={!draftFrom}
                 className={cn(
-                  "h-8 border-2 border-border bg-accent px-3 text-[12px] font-semibold text-accent-fg",
-                  "shadow-[2px_2px_0_var(--border)] hover:bg-accent-hover disabled:opacity-50",
+                  "h-7 border-2 border-border bg-accent px-2.5 text-[11px] font-bold text-accent-fg",
+                  "shadow-[2px_2px_0_var(--border)] hover:bg-accent-hover disabled:opacity-40",
                 )}
                 onClick={applyDraft}
               >
@@ -489,25 +484,70 @@ export function DateRangePicker({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {presets.map((p) => {
-              const active = value.preset === p.key;
-              return (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => applyPreset(p.key)}
-                  className={cn(
-                    "h-8 border-2 px-2.5 text-[12px] font-medium",
-                    active
-                      ? "border-border bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]"
-                      : "border-border bg-paper-0 text-ink hover:bg-paper-2",
-                  )}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
+          <div className="flex flex-col sm:flex-row">
+            {/* presets rail */}
+            <div className="flex flex-row flex-wrap gap-1.5 border-b-2 border-border p-3 sm:w-[118px] sm:flex-col sm:flex-nowrap sm:border-b-0 sm:border-r-2">
+              {presets.map((p) => {
+                const active = value.preset === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => applyPreset(p.key)}
+                    className={cn(
+                      "h-8 border-2 px-2 text-left text-[12px] font-semibold sm:w-full",
+                      active
+                        ? "border-border bg-accent-yellow text-black shadow-[2px_2px_0_var(--border)]"
+                        : "border-border bg-paper-0 text-ink hover:bg-paper-2",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* dual month */}
+            <div className="flex flex-1 flex-col gap-3 p-3 sm:flex-row sm:gap-3">
+              <MonthGrid
+                year={leftCursor.year}
+                month={leftCursor.month}
+                lang={lang}
+                draftFrom={draftFrom}
+                draftTo={draftTo}
+                hover={hover}
+                onPick={pick}
+                onHover={setHover}
+                showPrev
+                showNext={false}
+                onPrev={() =>
+                  setLeftCursor((c) =>
+                    c.month === 0
+                      ? { year: c.year - 1, month: 11 }
+                      : { year: c.year, month: c.month - 1 },
+                  )
+                }
+              />
+              <MonthGrid
+                year={rightCursor.year}
+                month={rightCursor.month}
+                lang={lang}
+                draftFrom={draftFrom}
+                draftTo={draftTo}
+                hover={hover}
+                onPick={pick}
+                onHover={setHover}
+                showPrev={false}
+                showNext
+                onNext={() =>
+                  setLeftCursor((c) =>
+                    c.month === 11
+                      ? { year: c.year + 1, month: 0 }
+                      : { year: c.year, month: c.month + 1 },
+                  )
+                }
+              />
+            </div>
           </div>
         </div>
       ) : null}

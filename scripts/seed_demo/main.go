@@ -179,29 +179,62 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 		}
 	}
 
-	// --- usage_records (drives overview tokens/requests + token trend + OpenCode usage tab) ---
-	models := []string{
-		"claude-sonnet-4-5",
-		"claude-haiku-4-5",
-		"gpt-5-mini",
-		"gemini-2.5-flash",
-		"deepseek-v3",
+	// --- model catalog (usage + request_logs share the same weighted pool) ---
+	// Weights bias free/popular models so overview legends show many series, not 5 equal blobs.
+	type modelWeight struct {
+		name   string
+		weight int
 	}
-	nUsage := 0
-	for day := 6; day >= 0; day-- {
-		dayBase := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -day)
-		// more volume today / yesterday
-		count := 8 + rng.Intn(10)
-		if day == 0 {
-			count = 28 + rng.Intn(12)
+	modelWeights := []modelWeight{
+		{"deepseek-v4-flash-free", 14},
+		{"big-pickle", 12},
+		{"claude-sonnet-4-5", 11},
+		{"claude-haiku-4-5", 9},
+		{"claude-opus-4", 5},
+		{"gpt-5", 7},
+		{"gpt-5-mini", 10},
+		{"gpt-4.1", 6},
+		{"gemini-2.5-flash", 10},
+		{"gemini-2.5-pro", 6},
+		{"llama-4-maverick", 5},
+		{"qwen3-235b", 5},
+		{"kimi-k2", 4},
+		{"grok-3-mini", 4},
+		{"mistral-small-3.1", 4},
+		{"glm-4.5", 3},
+	}
+	pickModel := func() string {
+		total := 0
+		for _, m := range modelWeights {
+			total += m.weight
 		}
-		if day == 1 {
-			count = 18 + rng.Intn(8)
+		r := rng.Intn(total)
+		for _, m := range modelWeights {
+			r -= m.weight
+			if r < 0 {
+				return m.name
+			}
+		}
+		return modelWeights[0].name
+	}
+	// fixed-width timestamps: bare RFC3339Nano varies fractional width and breaks
+	// lexicographic closed-interval filters on created_at / recorded_at.
+	const tsLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+	// --- usage_records (drives overview tokens/requests + OpenCode usage tab) ---
+	nUsage := 0
+	for day := 44; day >= 0; day-- {
+		dayBase := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -day)
+		count := 4 + rng.Intn(6)
+		if day <= 1 {
+			count = 18 + rng.Intn(12)
+		} else if day <= 7 {
+			count = 10 + rng.Intn(8)
 		}
 		for j := 0; j < count; j++ {
 			nUsage++
 			acc := accounts[rng.Intn(len(accounts))]
-			model := models[rng.Intn(len(models))]
+			model := pickModel()
 			inTok := 400 + rng.Intn(6000)
 			outTok := 80 + rng.Intn(2500)
 			ts := dayBase.Add(time.Duration(rng.Intn(23))*time.Hour + time.Duration(rng.Intn(3600))*time.Second)
@@ -210,37 +243,32 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 			if _, err := db.Exec(`
 				INSERT INTO usage_records (id, account_id, usg_id, model, input_tokens, output_tokens, recorded_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`, id, acc.id, usgID, model, inTok, outTok, ts.Format(time.RFC3339Nano)); err != nil {
+			`, id, acc.id, usgID, model, inTok, outTok, ts.UTC().Format(tsLayout)); err != nil {
 				return fmt.Errorf("usage %s: %w", id, err)
 			}
 		}
 	}
 
-	// --- request_logs (ops KPI windows + request trend chart) ---
+	// --- request_logs (ops KPI + model analytics charts) ---
 	routes := []string{"/v1/chat/completions", "/v1/messages", "/v1/responses"}
-	logModels := []string{
-		"deepseek-v4-flash-free",
-		"big-pickle",
-		"claude-sonnet-4-5",
-		"gpt-5-mini",
-		"gemini-2.5-flash",
-	}
 	nLog := 0
-	// spread across 7d, denser in last 24h / 1h
+	// denser near now; cover ~45d so custom multi-week ranges have series
 	type span struct {
 		from, to time.Duration
 		n        int
 	}
 	spans := []span{
-		{6 * 24 * time.Hour, 2 * 24 * time.Hour, 40},
-		{2 * 24 * time.Hour, 24 * time.Hour, 35},
-		{24 * time.Hour, time.Hour, 55},
-		{time.Hour, time.Minute, 28},
+		{45 * 24 * time.Hour, 21 * 24 * time.Hour, 70},
+		{21 * 24 * time.Hour, 7 * 24 * time.Hour, 80},
+		{7 * 24 * time.Hour, 2 * 24 * time.Hour, 70},
+		{2 * 24 * time.Hour, 24 * time.Hour, 50},
+		{24 * time.Hour, time.Hour, 70},
+		{time.Hour, time.Minute, 32},
 	}
 	for _, s := range spans {
 		for j := 0; j < s.n; j++ {
 			nLog++
-			// weighted status mix ~90% 2xx, 5% 429, 5% 5xx
+			// weighted status mix ~88% 2xx, 5% 429, 5% 5xx, rest 4xx
 			roll := rng.Intn(100)
 			status := 200
 			errClass := ""
@@ -263,7 +291,11 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 			if status >= 500 {
 				lat = int64(800 + rng.Intn(8000))
 			}
-			delta := s.to + time.Duration(rng.Int63n(int64(s.from-s.to)))
+			window := s.from - s.to
+			if window <= 0 {
+				window = time.Minute
+			}
+			delta := s.to + time.Duration(rng.Int63n(int64(window)))
 			ts := now.Add(-delta)
 			stream := 0
 			if rng.Intn(3) == 0 {
@@ -271,7 +303,7 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 			}
 			id := fmt.Sprintf("seed_rl_%04d", nLog)
 			route := routes[rng.Intn(len(routes))]
-			model := logModels[rng.Intn(len(logModels))]
+			model := pickModel()
 			var errAny any
 			if errClass != "" {
 				errAny = errClass
@@ -279,7 +311,7 @@ func seed(db *sql.DB, box *secretcrypto.Box) error {
 			if _, err := db.Exec(`
 				INSERT INTO request_logs (id, key_id, model, route, status, latency_ms, stream, error_class, created_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, id, localKeyID, model, route, status, lat, stream, errAny, ts.Format(time.RFC3339Nano)); err != nil {
+			`, id, localKeyID, model, route, status, lat, stream, errAny, ts.UTC().Format(tsLayout)); err != nil {
 				return fmt.Errorf("log %s: %w", id, err)
 			}
 		}

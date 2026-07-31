@@ -18,7 +18,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/cn";
 
-/** Playful hard-edge palette — no AI purple. */
+/** Playful hard-edge palette — no AI purple; enough stops for full-series legends. */
 export const MODEL_COLORS = [
   "var(--accent)",
   "var(--accent-teal)",
@@ -30,6 +30,12 @@ export const MODEL_COLORS = [
   "#e17055",
   "#0984e3",
   "#636e72",
+  "#d63031",
+  "#6c5ce7",
+  "#00cec9",
+  "#fdcb6e",
+  "#e84393",
+  "#55a3ff",
 ] as const;
 
 export function modelColor(index: number): string {
