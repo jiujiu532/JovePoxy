@@ -479,23 +479,7 @@ export function OverviewPage() {
         }
       />
 
-      {/* 1. 现在健康：KPI + 密钥池并排 */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <HealthBlock
-          kpis={data.ops_kpis}
-          window={opsWindow}
-          onWindowChange={(w) => void changeOpsWindow(w)}
-          loading={opsLoading}
-          t={t}
-        />
-        <ZenPoolStrip
-          pool={data.zen_pool}
-          t={t}
-          onOpen={() => void navigate("/app/key-pool")}
-        />
-      </div>
-
-      {/* 2. 流量体积：今日 + 累计，一条轨道 */}
+      {/* 1. 流量体积置顶：今日 + 累计，一条轨道 */}
       <section aria-label={t("overview.volume.title")}>
         <div className="mb-2 flex items-end justify-between gap-3">
           <div>
@@ -517,6 +501,22 @@ export function OverviewPage() {
         </div>
         <MetricRail items={volumeRail} />
       </section>
+
+      {/* 2. 健康：KPI + 密钥池并排 */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <HealthBlock
+          kpis={data.ops_kpis}
+          window={opsWindow}
+          onWindowChange={(w) => void changeOpsWindow(w)}
+          loading={opsLoading}
+          t={t}
+        />
+        <ZenPoolStrip
+          pool={data.zen_pool}
+          t={t}
+          onOpen={() => void navigate("/app/key-pool")}
+        />
+      </div>
 
       {/* 3. 趋势：请求 + token 同屏 */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -565,7 +565,7 @@ export function OverviewPage() {
         </SectionPanel>
       </div>
 
-      {/* 4. 额度窗口（有数据才显示） */}
+      {/* 4. 额度窗口（有数据才显示；主路径在流量体积旁注） */}
       {data.quota_windows && data.quota_windows.length > 0 ? (
         <SectionPanel
           title={t("overview.quotaWindows.title")}
