@@ -9,7 +9,6 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorState,
@@ -565,53 +564,7 @@ export function OverviewPage() {
         </SectionPanel>
       </div>
 
-      {/* 4. 额度窗口（有数据才显示；主路径在流量体积旁注） */}
-      {data.quota_windows && data.quota_windows.length > 0 ? (
-        <SectionPanel
-          title={t("overview.quotaWindows.title")}
-          description={t("overview.quotaWindows.description")}
-          icon={Coins}
-          iconTone="mint"
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            {data.quota_windows.map((window) => (
-              <div
-                key={window.label}
-                className="border-2 border-border bg-paper-0 p-3.5 shadow-[2px_2px_0_var(--border)]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-caption font-medium text-ink-muted">{window.label}</p>
-                  {window.blocked ? (
-                    <Badge kind="warning">{t("overview.quotaWindows.blocked")}</Badge>
-                  ) : (
-                    <Badge kind="healthy">{t("overview.quotaWindows.available")}</Badge>
-                  )}
-                </div>
-                <p className="mt-2 text-2xl font-semibold tabular-nums text-ink">
-                  {Number(window.effective_remaining ?? 0).toFixed(1)}%
-                </p>
-                <ShareBar
-                  className="mt-2 max-w-none"
-                  ratio={Number(window.effective_remaining ?? 0) / 100}
-                  color={
-                    window.blocked ? "var(--accent-yellow)" : "var(--accent-teal)"
-                  }
-                />
-                <p className="mt-2 text-[12px] text-ink-faint">
-                  {t("overview.quotaWindows.used", {
-                    percent: Number(window.used ?? 0).toFixed(1),
-                  })}
-                  {window.blocked_by
-                    ? t("overview.quotaWindows.blockedBy", { name: window.blocked_by })
-                    : ""}
-                </p>
-              </div>
-            ))}
-          </div>
-        </SectionPanel>
-      ) : null}
-
-      {/* 5. 按模型明细 */}
+      {/* 4. 按模型明细（额度细节见「额度监控」） */}
       <SectionPanel
         title={t("overview.byModel.title")}
         description={t("overview.byModel.description")}
