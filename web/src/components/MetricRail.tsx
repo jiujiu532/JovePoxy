@@ -33,7 +33,7 @@ export function MetricRail({ items, className }: MetricRailProps) {
         <div
           key={item.label}
           className={cn(
-            "min-w-0 px-3.5 py-3",
+            "relative min-w-0 px-3.5 py-3 transition-all duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] cursor-default select-none",
             toneClass[item.tone ?? "white"],
             // mobile 2-col: right border on left cells, bottom on first row
             i % 2 === 0 && "border-r-2 border-border",
@@ -42,6 +42,8 @@ export function MetricRail({ items, className }: MetricRailProps) {
             i < items.length - 1 && "sm:border-r-2 sm:border-border",
             // left cells already have border-r on mobile; keep on sm for middle cells
             i % 2 === 1 && i < items.length - 1 && "sm:border-r-2",
+            // Neo-Brutalist spring hover magnification
+            "hover:z-20 hover:scale-[1.035] hover:-translate-y-1 hover:border-2 hover:border-border hover:shadow-[4px_4px_0_var(--border)] hover:ring-2 hover:ring-border",
           )}
         >
           <div className="text-[11px] font-bold uppercase tracking-wide text-ink">
