@@ -33,7 +33,7 @@ export function MetricRail({ items, className }: MetricRailProps) {
         <div
           key={item.label}
           className={cn(
-            "relative min-w-0 px-3.5 py-3 transition-transform duration-150 ease-out cursor-default select-none",
+            "relative min-w-0 px-3.5 py-3 min-h-[108px] flex flex-col justify-between transition-transform duration-150 ease-out cursor-default select-none",
             toneClass[item.tone ?? "white"],
             // mobile 2-col: right border on left cells, bottom on first row
             i % 2 === 0 && "border-r-2 border-border",
@@ -46,15 +46,21 @@ export function MetricRail({ items, className }: MetricRailProps) {
             "hover:z-10 hover:-translate-y-1 hover:brightness-[0.97]",
           )}
         >
-          <div className="text-[11px] font-bold uppercase tracking-wide text-ink">
-            {item.label}
-          </div>
-          <div className="mt-0.5 font-mono text-[clamp(1.75rem,4vw,2rem)] font-black leading-none tabular-nums tracking-tight">
-            {item.value}
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-ink">
+              {item.label}
+            </div>
+            <div className="mt-1 font-mono text-[clamp(1.75rem,4vw,2rem)] font-black leading-none tabular-nums tracking-tight">
+              {item.value}
+            </div>
           </div>
           {item.hint ? (
-            <div className="mt-1 text-[11px] font-semibold text-ink-muted">{item.hint}</div>
-          ) : null}
+            <div className="mt-1 text-[11px] font-semibold leading-snug text-ink-muted">
+              {item.hint}
+            </div>
+          ) : (
+            <div className="mt-1 h-[14px]" aria-hidden />
+          )}
         </div>
       ))}
     </div>
