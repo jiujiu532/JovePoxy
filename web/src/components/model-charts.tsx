@@ -92,7 +92,7 @@ function RefTooltip({
   );
 }
 
-/** 多序列调用趋势：虚线竖标 + 空心圆点 + 参考风 tooltip。 */
+/** 多序列调用趋势：智能 Top-5 + 幽灵虚线 + 交互聚焦。 */
 export function ModelCallTrendChart({
   data,
   models,
@@ -109,10 +109,12 @@ export function ModelCallTrendChart({
   readonly totalLabel: string;
   readonly empty?: boolean;
 }) {
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+
   if (empty || data.length === 0 || models.length === 0) return null;
 
-  // Extra room for multi-line legend when many models (R-B full series).
-  const legendExtra = Math.min(80, Math.max(0, (models.length - 4) * 14));
+  // Extra room for multi-line chip legend when many models
+  const legendExtra = Math.min(100, Math.max(20, Math.ceil(models.length / 3) * 24));
   const chartHeight = height + legendExtra;
 
   return (
@@ -121,6 +123,7 @@ export function ModelCallTrendChart({
         <LineChart
           data={[...data]}
           margin={{ top: 10, right: 14, left: 0, bottom: 8 }}
+          onMouseLeave={() => setActiveModel(null)}
         >
           <CartesianGrid
             stroke="var(--border)"
@@ -199,20 +202,78 @@ export function ModelCallTrendChart({
           />
           <Legend
             verticalAlign="bottom"
-            iconType="plainline"
-            wrapperStyle={{
-              fontSize: 11,
-              paddingTop: 10,
-              maxHeight: 72,
-              overflowY: "auto",
-              width: "100%",
-            }}
-            formatter={(value) => (
-              <span className="font-mono text-[11px] text-ink-muted">{value}</span>
+            content={({ payload }) => (
+              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-3">
+                {payload?.map((entry) => {
+                  const m = String(entry.value);
+                  const i = models.indexOf(m);
+                  const isTop5 = i >= 0 && i < 5;
+                  const isActive = activeModel === m;
+                  const isDimmed = activeModel !== null && !isActive;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onMouseEnter={() => setActiveModel(m)}
+                      onMouseLeave={() => setActiveModel(null)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[11px] transition-all cursor-pointer",
+                        isTop5
+                          ? "font-semibold border-border bg-paper-0 shadow-[1px_1px_0_var(--border)]"
+                          : "border-border/40 bg-paper-1 text-ink-muted",
+                        isActive &&
+                          "border-border bg-accent-yellow text-black font-bold scale-105 shadow-[2px_2px_0_var(--border)]",
+                        isDimmed && "opacity-35 border-transparent shadow-none",
+                      )}
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: String(entry.color),
+                          opacity: isTop5 || isActive ? 1 : 0.6,
+                        }}
+                      />
+                      <span className="truncate max-w-[130px]">{m}</span>
+                      {isTop5 ? (
+                        <span className="text-[9px] font-extrabold uppercase text-ink-faint">
+                          #{i + 1}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           />
           {models.map((m, i) => {
             const color = colors[i] ?? modelColor(i);
+            const isTop5 = i < 5;
+            const isActive = activeModel === m;
+
+            let strokeWidth = 2;
+            let strokeOpacity = 1;
+            let strokeDasharray: string | undefined = undefined;
+
+            if (activeModel !== null) {
+              if (isActive) {
+                strokeWidth = 3.5;
+                strokeOpacity = 1;
+              } else {
+                strokeWidth = 1;
+                strokeOpacity = 0.12;
+                if (!isTop5) strokeDasharray = "3 3";
+              }
+            } else {
+              if (isTop5) {
+                strokeWidth = 2.5;
+                strokeOpacity = 1;
+              } else {
+                strokeWidth = 1.5;
+                strokeOpacity = 0.35;
+                strokeDasharray = "3 3";
+              }
+            }
+
             return (
               <Line
                 key={m}
@@ -220,13 +281,16 @@ export function ModelCallTrendChart({
                 dataKey={m}
                 name={m}
                 stroke={color}
-                strokeWidth={2}
-                // 默认小实心点；悬停空心放大（参考图灵动感）
-                dot={{
-                  r: 3,
-                  strokeWidth: 0,
-                  fill: color,
-                }}
+                strokeWidth={strokeWidth}
+                strokeOpacity={strokeOpacity}
+                strokeDasharray={strokeDasharray}
+                dot={
+                  isActive
+                    ? { r: 4, strokeWidth: 0, fill: color }
+                    : isTop5 && activeModel === null
+                      ? { r: 2.5, strokeWidth: 0, fill: color }
+                      : false
+                }
                 activeDot={{
                   r: 5,
                   strokeWidth: 2,
