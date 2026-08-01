@@ -13,6 +13,7 @@ import (
 	"jovepoxy/internal/quota"
 	"jovepoxy/internal/reqlog"
 	"jovepoxy/internal/usage"
+	"jovepoxy/internal/version"
 	"jovepoxy/internal/zenpool"
 )
 
@@ -248,7 +249,7 @@ func (server server) getVersion(writer http.ResponseWriter, request *http.Reques
 	force := request.URL.Query().Get("refresh") == "1" || request.URL.Query().Get("refresh") == "true"
 	if server.versions == nil {
 		writeJSON(writer, http.StatusOK, map[string]any{
-			"current": "0.0.1", "latest": "0.0.1", "update_available": false,
+			"current": version.Current, "latest": version.Current, "update_available": false,
 			"image": "jovepoxy", "source": "local",
 		})
 		return

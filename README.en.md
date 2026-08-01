@@ -4,7 +4,9 @@
 
 <h1 align="center">JovePoxy</h1>
 
-<p align="center">A single-process gateway that turns OpenCode Zen free models and a paid key pool into OpenAI / Anthropic compatible APIs, with an embedded Neo-Brutalist admin console</p>
+<p align="center">
+  Single-process gateway: unify <strong>OpenCode Zen</strong> free models + paid key pool and <strong>Ollama Cloud</strong> key pool into OpenAI / Anthropic compatible APIs, with an embedded Neo-Brutalist admin console
+</p>
 
 <p align="center">
   <a href="https://github.com/jiujiu532/JovePoxy"><img src="https://img.shields.io/github/stars/jiujiu532/JovePoxy?style=flat-square&logo=github" alt="GitHub stars"></a>
@@ -12,6 +14,7 @@
   <a href="https://github.com/jiujiu532/JovePoxy/pkgs/container/jovepoxy"><img src="https://img.shields.io/badge/GHCR-jovepoxy-4ecdc4?style=flat-square&logo=docker&logoColor=white" alt="GHCR"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
+  <img src="https://img.shields.io/badge/version-1.0.0-ff6b6b?style=flat-square" alt="Version">
 </p>
 
 <p align="center">
@@ -24,41 +27,56 @@
 
 ---
 
-JovePoxy is a single-binary gateway. It exposes OpenAI `/v1/chat/completions`, OpenAI `/v1/responses`, and Anthropic `/v1/messages` compatible endpoints, and routes requests either to OpenCode Zen free models (`Bearer public`) or to a pool of paid Zen API keys with failover. The full admin SPA is embedded on the same listener. All state lives in a single SQLite file; no local OpenCode process is required.
+## What it is
+
+JovePoxy (`module jovepoxy`) is a **single binary** gateway:
+
+| Surface | Role |
+|---------|------|
+| Data plane | `POST /v1/chat/completions`, `/v1/responses`, `/v1/messages` (SSE supported) |
+| Model catalog | Merges **OpenCode Zen public** list with **Ollama Cloud** when a healthy Ollama pool key exists |
+| Upstream | Free → Zen `Bearer public`; paid OpenCode → Zen key pool; paid Ollama → Ollama Cloud + Ollama key pool |
+| Control plane | `/api/admin/*` cookie session + embedded SPA on the same listener |
+| Storage | Single SQLite file; **no** local OpenCode or local Ollama runtime required |
+
+Version: `internal/version.Current` (default **1.0.0**); `--version` and `/health` report `jovepoxy 1.0.0`.
 
 ## Features
 
-- **Triple endpoint**: OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages (all with SSE streaming) behind one listener.
-- **Free / paid auto-routing**: the model catalog classifies free models to the public channel and paid models to the Zen key pool with automatic failover.
-- **Local API keys**: issue `sk-oc-...` keys for clients with optional RPM / daily limits and concurrent-session caps; only SHA-256 hashes are stored.
-- **Egress proxy pool**: when the free channel is rate-limited (429/5xx), requests retry through rotating egress proxies. Key = identity, proxy = egress IP; the two are independent.
-- **Quota & usage monitoring**: scrapes OpenCode / Ollama account quotas (cookies are control-plane only and never enter the chat path); usage is aggregated per model.
-- **Neo-Brutalist admin console**: overview dashboards (request trend / token bars / status distribution), model catalog, key pool, accounts, quotas, local keys, proxies, logs, settings; dark mode included.
-- **Safe defaults**: Zen keys / cookies / proxy URLs are stored AES-GCM encrypted; request logs never contain prompt or response bodies.
-- **Version check**: the console compares the running version against this repository's GitHub Releases.
+- **Triple endpoints**: OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages behind one local API key.
+- **Dual-source catalog**: always fetch Zen public models; if a healthy `provider=ollama` pool key exists, merge Ollama Cloud `/v1/models`.
+- **Provider-aware routing**: OpenCode free / OpenCode paid / Ollama paid use different bases and pools; Ollama uses plain Bearer (no OpenCode compatibility headers).
+- **Local keys `sk-oc-...`**: clients only talk to the gateway; optional RPM / daily limits and concurrent sessions; only SHA-256 is stored.
+- **Key pool + egress proxy pool**: key = identity, proxy = egress IP; free path can rotate proxies on 429/5xx; paid supports spread / sticky and failover.
+- **Quota & usage**: OpenCode / Ollama **account cookies are control-plane only** and never enter the chat path.
+- **Neo-Brutalist admin UI**: overview, model catalog (provider filter), key pool, accounts, quotas, local keys, proxies, logs, settings; dark mode.
+- **Safe defaults**: pool keys, cookies, and proxy URLs encrypted with `ADMIN_SECRET` (AES-GCM); request logs omit prompt/response bodies.
 
 ## Request flow
 
 <details>
-<summary><strong>Chat request routing</strong></summary>
+<summary><strong>Chat routing</strong></summary>
 
 ```mermaid
 flowchart LR
     CLIENT["Client<br/>OpenAI / Anthropic SDK"] -->|"sk-oc-... local key"| GW["JovePoxy /v1/*"]
     GW --> AUTH["Local key auth<br/>rate / session limits"]
-    AUTH --> CATALOG{"Model catalog"}
-    CATALOG -->|free model| FREE["Bearer public<br/>egress proxy rotation"]
-    CATALOG -->|paid model| PAID["Zen key pool<br/>selection + failover"]
+    AUTH --> CATALOG{"Catalog<br/>provider + free"}
+    CATALOG -->|opencode free| FREE["Bearer public<br/>egress proxy rotation"]
+    CATALOG -->|opencode paid| PAID_OC["OpenCode key pool<br/>+ Zen base"]
+    CATALOG -->|ollama paid| PAID_OL["Ollama key pool<br/>+ Ollama Cloud"]
     FREE --> ZEN["OpenCode Zen"]
-    PAID --> ZEN
-    ZEN --> RESP["Response / SSE stream"]
+    PAID_OC --> ZEN
+    PAID_OL --> OLLAMA["Ollama Cloud"]
+    ZEN --> RESP["Response / SSE"]
+    OLLAMA --> RESP
     RESP --> CLIENT
 ```
 
 </details>
 
 <details>
-<summary><strong>Control plane vs data plane</strong></summary>
+<summary><strong>Control vs data plane</strong></summary>
 
 ```mermaid
 flowchart TB
@@ -88,22 +106,25 @@ docker run -d --name jovepoxy \
   -e ADMIN_PASSWORD=your-password \
   -e ADMIN_SECRET=please-use-a-32-plus-char-secret \
   -v jovepoxy-data:/data \
-  ghcr.io/jiujiu532/jovepoxy:latest
+  ghcr.io/jiujiu532/jovepoxy:1.0.0
+# or :latest
 ```
 
-Open `http://127.0.0.1:6446/`, sign in with `ADMIN_PASSWORD`, create a local key, and use it as an OpenAI / Anthropic API key.
+Open `http://127.0.0.1:6446/`, sign in with `ADMIN_PASSWORD` → create a local key → add OpenCode and/or Ollama API keys in the key pool as needed.
 
 ### docker-compose
 
 ```yaml
 services:
   jovepoxy:
-    image: ghcr.io/jiujiu532/jovepoxy:latest
+    image: ghcr.io/jiujiu532/jovepoxy:1.0.0
     ports:
       - "6446:6446"
     environment:
       ADMIN_PASSWORD: your-password
       ADMIN_SECRET: please-use-a-32-plus-char-secret
+      DATA_DIR: /data
+      LISTEN: 0.0.0.0:6446
     volumes:
       - jovepoxy-data:/data
 volumes:
@@ -116,29 +137,36 @@ volumes:
 # frontend
 cd web && pnpm install --frozen-lockfile && pnpm build && cd ..
 
-# embed and compile (on Windows: make embed-web-win)
+# embed and compile (Windows: make embed-web-win)
 mkdir -p internal/webui/dist && cp -R web/dist/. internal/webui/dist/
-go build -o bin/jovepoxy ./cmd/server
+go build -ldflags "-X jovepoxy/internal/version.Current=1.0.0" -o bin/jovepoxy ./cmd/server
 
-ADMIN_PASSWORD=... ADMIN_SECRET=... DATA_DIR=./data LISTEN=127.0.0.1:6446 ./bin/jovepoxy
+# run (ADMIN_SECRET ≥ 32 chars)
+export ADMIN_PASSWORD=...
+export ADMIN_SECRET=...
+export DATA_DIR=./data
+export LISTEN=127.0.0.1:6446
+./bin/jovepoxy
 ```
+
+On Windows you can also use `start.bat` / `stop.bat` (default listen `127.0.0.1:6446`).
 
 ## Client examples
 
 ```bash
-# OpenAI compatible
+# OpenAI Chat Completions
 curl http://127.0.0.1:6446/v1/chat/completions \
   -H "Authorization: Bearer sk-oc-..." \
   -H "Content-Type: application/json" \
   -d '{"model":"big-pickle","messages":[{"role":"user","content":"hello"}]}'
 
-# OpenAI Responses compatible
+# OpenAI Responses
 curl http://127.0.0.1:6446/v1/responses \
   -H "Authorization: Bearer sk-oc-..." \
   -H "Content-Type: application/json" \
   -d '{"model":"big-pickle","input":"hello"}'
 
-# Anthropic compatible
+# Anthropic Messages
 curl http://127.0.0.1:6446/v1/messages \
   -H "x-api-key: sk-oc-..." \
   -H "anthropic-version: 2023-06-01" \
@@ -146,44 +174,61 @@ curl http://127.0.0.1:6446/v1/messages \
   -d '{"model":"claude-sonnet-4-5","max_tokens":256,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
+Public `GET /v1/models`: free only by default; set `SHOW_ALL_MODELS=true` to include paid. `owned_by` is `zen` (OpenCode) or `ollama`.
+
 ## Configuration
 
 | Env var | Required | Default | Description |
 |---------|----------|---------|-------------|
 | `ADMIN_PASSWORD` | yes | - | Admin console password |
-| `ADMIN_SECRET` | yes | - | 32+ chars; encrypts Zen keys / cookies / proxy URLs |
-| `LISTEN` | no | `127.0.0.1:6446` | Listen address (`0.0.0.0:6446` in the container) |
-| `DATA_DIR` | no | `./data` | SQLite data directory |
-| `ZEN_BASE` | no | official endpoint | OpenCode Zen upstream base URL |
-| `VERSION_REPO` | no | `jiujiu532/JovePoxy` | GitHub repo used for release version checks |
-| `COOKIE_SECURE` | no | `true` | Secure flag on the admin cookie (set `false` for plain HTTP) |
-| `SHOW_ALL_MODELS` | no | `false` | Show all upstream models in the catalog |
+| `ADMIN_SECRET` | yes | - | 32+ chars; encrypts pool keys / cookies / proxy URLs |
+| `LISTEN` | no | `0.0.0.0:6446` | Listen address; use `127.0.0.1:6446` for local-only |
+| `DATA_DIR` | no | `./data` | SQLite directory (`/data` in containers) |
+| `ZEN_BASE` | no | `https://opencode.ai/zen/v1` | OpenCode Zen OpenAI-compatible base |
+| `OLLAMA_BASE` | no | `https://ollama.com` | Ollama Cloud root; normalized to `…/v1` at runtime |
+| `MODEL_CACHE_TTL` | no | `5m` | Model catalog cache TTL |
+| `UPSTREAM_TIMEOUT` | no | `120s` | Upstream timeout |
+| `SHOW_ALL_MODELS` | no | `false` | When `true`, `/v1/models` lists all models |
+| `COOKIE_SECURE` | no | `false` | Secure flag on admin cookie; prefer `true` behind HTTPS |
+| `VERSION_REPO` | no | `jiujiu532/JovePoxy` | GitHub repo for admin release checks |
+| `HTTP_PROXY` / `HTTPS_PROXY` | no | - | Process-level upstream proxy (distinct from the admin egress pool) |
+| `ZEN_LOAD_POLICY` | no | `spread` | Paid pool policy: `spread` \| `sticky` (also mutable in settings) |
+| `ZEN_MAX_ATTEMPTS` | no | `2` | Paid failover attempts (2–4) |
 
-## Credential model
+## Credential model (do not mix)
 
-| Credential | Purpose | Enters chat path |
-|------------|---------|:---:|
-| Local key `sk-oc-...` | Client → gateway auth | yes |
-| `Bearer public` | Zen free models outbound | yes |
-| Zen API key pool | Zen paid models outbound | yes |
-| OpenCode / Ollama cookies | Quota / usage scraping | **no** |
-| `ADMIN_PASSWORD` | Admin console login | no |
+| Credential | Purpose | Chat path |
+|------------|---------|:---------:|
+| Local key `sk-oc-...` | Client → gateway | yes |
+| `Bearer public` | Zen free outbound | yes |
+| Pool key `provider=opencode` | Zen paid outbound | yes |
+| Pool key `provider=ollama` | Ollama Cloud outbound + catalog fetch | yes |
+| OpenCode / Ollama **account cookies** | Quota / usage scrape | **no** |
+| `ADMIN_PASSWORD` | Admin login | no |
+
+> **Note**: An Ollama **account + cookie** in the admin UI does **not** populate the model catalog or serve chat. To list Ollama models on the Models page, add an enabled Ollama **API key** to the **key pool**.
 
 ## Tech stack
 
-Go 1.25 · SQLite (modernc, CGO-free) · React 19 · Vite 7 · Tailwind CSS 4 · Phosphor Icons · Vitest
+Go 1.25 · SQLite (modernc, CGO-free) · React 19 · Vite 7 · Tailwind CSS 4 · Phosphor Icons · Vitest · pnpm
 
 ## Development
 
 ```bash
-make test          # Go tests
-make vet           # go vet
-cd web && pnpm dev # frontend dev server (proxies to :6446)
-cd web && pnpm test && pnpm typecheck
+make test              # go test -shuffle=on -count=1 ./...
+make vet
+make build             # go build -o bin/jovepoxy(.exe) ./cmd/server
+make embed-web-win     # build web into internal/webui/dist (Windows)
+make smoke             # local health / login / key create (no live Zen)
+
+cd web
+pnpm install --frozen-lockfile
+pnpm dev               # :5173, proxies /api /v1 /health → :6446
+pnpm test && pnpm typecheck
 ```
 
-CI builds multi-arch (amd64 / arm64) images to GHCR on pushes to `main` and `v*` tags; documentation-only changes do not trigger builds.
+Pushes to `main` (non-docs-only) and `v*` tags build **linux/amd64 + arm64** images to GHCR; the `VERSION` build-arg is injected into `version.Current`.
 
 ## License
 
-No license specified yet. Mind the OpenCode Zen terms of service when using this gateway.
+No license specified yet. Follow OpenCode Zen and Ollama Cloud terms of service when using this gateway.
