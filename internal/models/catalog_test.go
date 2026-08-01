@@ -179,6 +179,107 @@ func modelServer(t *testing.T, status int, body string) *httptest.Server {
 	return server
 }
 
+func TestCatalog_Refresh_merges_ollama_and_skips_id_conflicts(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "shared-model"}, {ID: "zen-only-free"}}}
+	ollamaSource := staticSource{models: []zen.Model{{ID: "shared-model"}, {ID: "ollama-only"}}}
+	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: ollamaSource})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if result.Stale {
+		t.Fatal("Refresh() should not be stale when both sources succeed")
+	}
+	if len(result.Models) != 3 {
+		t.Fatalf("models = %#v, want 3 (conflict skipped)", result.Models)
+	}
+	byID := map[ModelID]Model{}
+	for _, model := range result.Models {
+		byID[model.ID] = model
+	}
+	if got := byID["shared-model"]; got.Provider != ProviderOpenCode || got.Free {
+		t.Fatalf("shared-model = %#v, want opencode paid (OpenCode wins ID conflict)", got)
+	}
+	if got := byID["ollama-only"]; got.Provider != ProviderOllama || got.Free {
+		t.Fatalf("ollama-only = %#v, want ollama paid", got)
+	}
+	if got := byID["zen-only-free"]; got.Provider != ProviderOpenCode || !got.Free {
+		t.Fatalf("zen-only-free = %#v", got)
+	}
+}
+
+func TestCatalog_Refresh_marks_stale_when_ollama_fails_but_zen_ok(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: failingSource{err: errors.New("ollama down")}})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if !result.Stale {
+		t.Fatal("want stale when ollama fails")
+	}
+	if len(result.Models) != 1 || result.Models[0].ID != "zen-only" || result.Models[0].Provider != ProviderOpenCode {
+		t.Fatalf("models = %#v, want zen-only snapshot", result.Models)
+	}
+}
+
+func TestCatalog_Refresh_empty_ollama_is_not_error(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: staticSource{}})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if result.Stale || len(result.Models) != 1 {
+		t.Fatalf("result = %#v, want non-stale zen only", result)
+	}
+}
+
+func TestNormalizeProvider(t *testing.T) {
+	cases := []struct {
+		in   Provider
+		want Provider
+	}{
+		{in: "", want: ProviderOpenCode},
+		{in: ProviderOpenCode, want: ProviderOpenCode},
+		{in: ProviderOllama, want: ProviderOllama},
+		{in: Provider("weird"), want: ProviderOpenCode},
+	}
+	for _, tc := range cases {
+		if got := NormalizeProvider(tc.in); got != tc.want {
+			t.Fatalf("NormalizeProvider(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestCatalog_Refresh_skips_blank_ollama_ids(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	ollamaSource := staticSource{models: []zen.Model{{ID: "  "}, {ID: "ollama-ok"}}}
+	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: ollamaSource})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if len(result.Models) != 2 {
+		t.Fatalf("models = %#v, want zen + one ollama", result.Models)
+	}
+}
+
 func newCatalog(t *testing.T, baseURL string, settings Settings) *Catalog {
 	t.Helper()
 	client, err := zen.NewClient(config.Config{ZenBase: baseURL, OCVersion: "test", UpstreamTimeout: time.Second})
@@ -190,4 +291,20 @@ func newCatalog(t *testing.T, baseURL string, settings Settings) *Catalog {
 		t.Fatalf("NewCatalog() error = %v", err)
 	}
 	return catalog
+}
+
+type staticSource struct {
+	models []zen.Model
+}
+
+func (source staticSource) Models(context.Context) ([]zen.Model, error) {
+	return append([]zen.Model(nil), source.models...), nil
+}
+
+type failingSource struct {
+	err error
+}
+
+func (source failingSource) Models(context.Context) ([]zen.Model, error) {
+	return nil, source.err
 }

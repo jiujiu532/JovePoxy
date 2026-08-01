@@ -31,6 +31,7 @@ type Config struct {
 	AdminPassword   string
 	AdminSecret     string
 	ZenBase         string
+	OllamaBase      string
 	HTTPProxy       *url.URL
 	HTTPSProxy      *url.URL
 	ModelCacheTTL   time.Duration
@@ -55,6 +56,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	zenBase, err := serviceURL("ZEN_BASE", envOr("ZEN_BASE", "https://opencode.ai/zen/v1"))
+	if err != nil {
+		return Config{}, err
+	}
+	ollamaBase, err := serviceURL("OLLAMA_BASE", envOr("OLLAMA_BASE", "https://ollama.com"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -84,6 +89,7 @@ func Load() (Config, error) {
 		AdminPassword:   adminPassword,
 		AdminSecret:     adminSecret,
 		ZenBase:         zenBase,
+		OllamaBase:      ollamaBase,
 		HTTPProxy:       httpProxy,
 		HTTPSProxy:      httpsProxy,
 		ModelCacheTTL:   modelCacheTTL,

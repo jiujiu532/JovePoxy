@@ -6,7 +6,14 @@ export class ApiError extends Error {
   }
 }
 
-export type ModelDTO = { readonly id: string; readonly free: boolean };
+export type ModelProvider = "opencode" | "ollama";
+
+export type ModelDTO = {
+  readonly id: string;
+  readonly free: boolean;
+  /** Missing on older backends → treat as opencode. */
+  readonly provider?: ModelProvider;
+};
 export type LocalKeyDTO = {
   readonly id: string;
   readonly label: string;

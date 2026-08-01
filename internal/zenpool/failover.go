@@ -45,9 +45,13 @@ type ChatDialer interface {
 
 // ProxyPaid sends a chat request with up to MaxAttempts keys (default 2 = one failover).
 // affinityKey is optional hashed conversation material for sticky policy; empty falls back to spread.
-func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string) (*http.Response, error) {
+// provider empty defaults to ProviderOpenCode (AcquireFor compatibility).
+func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string, provider Provider) (*http.Response, error) {
 	if service == nil {
 		return nil, ErrNoHealthyKey
+	}
+	if provider == "" {
+		provider = ProviderOpenCode
 	}
 	maxAttempts := service.MaxAttempts()
 	policy := service.LoadPolicy()
@@ -55,6 +59,7 @@ func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body js
 	tried := make([]KeyID, 0, maxAttempts)
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		selected, err := service.AcquireFor(ctx, AcquireOptions{
+			Provider:    provider,
 			Excluded:    tried,
 			AffinityKey: affinityKey,
 			Policy:      policy,

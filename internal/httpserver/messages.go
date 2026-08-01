@@ -35,7 +35,7 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 		writeAnthropicCatalogError(writer, err)
 		return
 	}
-	free, found := classifyModel(result.Models, parsed.Model)
+	free, provider, found := classifyModel(result.Models, parsed.Model)
 	if !found {
 		writeAnthropicError(writer, http.StatusBadRequest, "invalid_request_error", "model is not available")
 		return
@@ -49,9 +49,9 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 		writeAnthropicError(writer, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
-	response, err := server.forwardChat(request.Context(), request, openAIBody, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, openAIBody, parsed.Stream, free, provider)
 	if err != nil {
-		if writePaidRouteAnthropicError(writer, request.Context(), server.pool, err) {
+		if writePaidRouteAnthropicError(writer, request.Context(), server.pool, err, provider) {
 			return
 		}
 		writeAnthropicUpstreamError(writer, err)

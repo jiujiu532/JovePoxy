@@ -42,8 +42,9 @@ type loginResponse struct {
 }
 
 type modelDTO struct {
-	ID   string `json:"id"`
-	Free bool   `json:"free"`
+	ID       string `json:"id"`
+	Free     bool   `json:"free"`
+	Provider string `json:"provider"`
 }
 
 type modelsResponse struct {
@@ -275,7 +276,8 @@ type overviewResponse struct {
 func mapModels(result models.Result) modelsResponse {
 	out := make([]modelDTO, 0, len(result.Models))
 	for _, model := range result.Models {
-		out = append(out, modelDTO{ID: string(model.ID), Free: model.Free})
+		provider := string(models.NormalizeProvider(model.Provider))
+		out = append(out, modelDTO{ID: string(model.ID), Free: model.Free, Provider: provider})
 	}
 	return modelsResponse{Models: out, Stale: result.Stale}
 }

@@ -35,7 +35,7 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 		writeCatalogError(writer, err)
 		return
 	}
-	free, found := classifyModel(result.Models, parsed.Model)
+	free, provider, found := classifyModel(result.Models, parsed.Model)
 	if !found {
 		writeOpenAIError(writer, http.StatusBadRequest, "model is not available", "invalid_request_error", "model", "model_not_available")
 		return
@@ -49,9 +49,9 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 		writeOpenAIError(writer, http.StatusBadRequest, err.Error(), "invalid_request_error", "", "invalid_request_error")
 		return
 	}
-	response, err := server.forwardChat(request.Context(), request, chatBody, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, chatBody, parsed.Stream, free, provider)
 	if err != nil {
-		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err) {
+		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {
 			return
 		}
 		writeUpstreamError(writer, err)

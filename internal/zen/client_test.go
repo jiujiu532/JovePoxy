@@ -264,6 +264,75 @@ func TestNewAPIKey_rejects_blank_value(t *testing.T) {
 	}
 }
 
+func TestClient_plain_headers_skip_opencode_compat(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("Authorization"); got != "Bearer ollama-secret" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if got := request.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q", got)
+		}
+		if got := request.Header.Get("x-opencode-client"); got != "" {
+			t.Errorf("x-opencode-client = %q, want empty", got)
+		}
+		if got := request.Header.Get("x-opencode-project"); got != "" {
+			t.Errorf("x-opencode-project = %q, want empty", got)
+		}
+		if got := request.Header.Get("x-opencode-request"); got != "" {
+			t.Errorf("x-opencode-request = %q, want empty", got)
+		}
+		if got := request.Header.Get("x-opencode-session"); got != "" {
+			t.Errorf("x-opencode-session = %q, want empty", got)
+		}
+		if strings.Contains(request.Header.Get("User-Agent"), "opencode/") {
+			t.Errorf("User-Agent = %q, want no opencode UA", request.Header.Get("User-Agent"))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client, err := NewPlainClient(config.Config{UpstreamTimeout: time.Second, OCVersion: "9.9.9"}, server.URL)
+	if err != nil {
+		t.Fatalf("NewPlainClient() error = %v", err)
+	}
+	auth, err := NewAPIKey("ollama-secret")
+	if err != nil {
+		t.Fatalf("NewAPIKey() error = %v", err)
+	}
+	response, err := client.ChatCompletions(context.Background(), auth, json.RawMessage(`{}`), false)
+	if err != nil {
+		t.Fatalf("ChatCompletions() error = %v", err)
+	}
+	_ = response.Body.Close()
+}
+
+func TestClient_ModelsWithAuth_uses_supplied_authorization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/models" {
+			t.Errorf("path = %q", request.URL.Path)
+		}
+		if got := request.Header.Get("Authorization"); got != "Bearer pool-key" {
+			t.Errorf("Authorization = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"cloud-model"}]}`))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, time.Second)
+	auth, err := NewAPIKey("pool-key")
+	if err != nil {
+		t.Fatalf("NewAPIKey() error = %v", err)
+	}
+	models, err := client.ModelsWithAuth(context.Background(), auth)
+	if err != nil {
+		t.Fatalf("ModelsWithAuth() error = %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "cloud-model" {
+		t.Fatalf("models = %#v", models)
+	}
+}
+
 func newTestClient(t *testing.T, baseURL string, timeout time.Duration) *Client {
 	t.Helper()
 	client, err := NewClient(config.Config{

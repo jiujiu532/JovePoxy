@@ -1,9 +1,10 @@
-// Package models maintains the cached, dynamically classified Zen model catalog.
+// Package models maintains the cached, dynamically classified model catalog.
 package models
 
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,10 +19,19 @@ var (
 // ModelID identifies an upstream model.
 type ModelID string
 
+// Provider identifies which upstream product owns a model.
+type Provider string
+
+const (
+	ProviderOpenCode Provider = "opencode"
+	ProviderOllama   Provider = "ollama"
+)
+
 // Model is the catalog's classified model value.
 type Model struct {
-	ID   ModelID
-	Free bool
+	ID       ModelID
+	Free     bool
+	Provider Provider // empty/zero treated as opencode
 }
 
 // Result exposes the current model snapshot and whether an upstream refresh
@@ -36,9 +46,11 @@ type Settings struct {
 	TTL           time.Duration
 	FreeAllowlist []ModelID
 	FreeDenylist  []ModelID
+	// Ollama is optional; when non-nil, Refresh merges its models (paid only).
+	Ollama Source
 }
 
-// Source is the typed boundary that supplies upstream Zen model values.
+// Source is the typed boundary that supplies upstream model values.
 type Source interface {
 	Models(context.Context) ([]zen.Model, error)
 }
@@ -55,6 +67,7 @@ func (err *RefreshError) Unwrap() error { return err.cause }
 // Catalog serializes refreshes and serves immutable copies of its last snapshot.
 type Catalog struct {
 	source Source
+	ollama Source
 	ttl    time.Duration
 	allow  map[ModelID]struct{}
 	deny   map[ModelID]struct{}
@@ -79,6 +92,7 @@ func NewCatalog(source Source, settings Settings) (*Catalog, error) {
 	}
 	return &Catalog{
 		source: source,
+		ollama: settings.Ollama,
 		ttl:    settings.TTL,
 		allow:  toSet(settings.FreeAllowlist),
 		deny:   toSet(settings.FreeDenylist),
@@ -115,7 +129,7 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 	catalog.inFlight = done
 	catalog.mu.Unlock()
 
-	upstreamModels, refreshErr := catalog.source.Models(ctx)
+	merged, partial, refreshErr := catalog.fetchAndMerge(ctx)
 	catalog.mu.Lock()
 	defer catalog.mu.Unlock()
 	defer close(done)
@@ -125,11 +139,51 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 		catalog.lastRefreshError = refreshErr
 		return catalog.resultOrErrorLocked(refreshErr)
 	}
-	catalog.models = catalog.classify(upstreamModels)
+	catalog.models = merged
 	catalog.fetchedAt = catalog.now()
-	catalog.lastRefreshFailed = false
-	catalog.lastRefreshError = nil
+	catalog.lastRefreshFailed = partial
+	if partial {
+		catalog.lastRefreshError = errors.New("models: ollama source failed")
+	} else {
+		catalog.lastRefreshError = nil
+	}
 	return catalog.resultLocked(), nil
+}
+
+func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, partial bool, err error) {
+	upstreamModels, refreshErr := catalog.source.Models(ctx)
+	if refreshErr != nil {
+		return nil, false, refreshErr
+	}
+	merged = catalog.classifyOpenCode(upstreamModels)
+	if catalog.ollama == nil {
+		return merged, false, nil
+	}
+	ollamaModels, ollamaErr := catalog.ollama.Models(ctx)
+	if ollamaErr != nil {
+		// Keep Zen snapshot; mark partial/stale so operators can observe the failure.
+		return merged, true, nil
+	}
+	if len(ollamaModels) == 0 {
+		return merged, false, nil
+	}
+	seen := make(map[ModelID]struct{}, len(merged))
+	for _, model := range merged {
+		seen[model.ID] = struct{}{}
+	}
+	for _, upstreamModel := range ollamaModels {
+		id := ModelID(strings.TrimSpace(upstreamModel.ID))
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		// Ollama Cloud has no public free path; always paid + ollama pool.
+		merged = append(merged, Model{ID: id, Free: false, Provider: ProviderOllama})
+		seen[id] = struct{}{}
+	}
+	return merged, false, nil
 }
 
 func (catalog *Catalog) currentResult() (Result, error) {
@@ -156,7 +210,7 @@ func (catalog *Catalog) resultLocked() Result {
 	return Result{Models: append([]Model(nil), catalog.models...), Stale: catalog.lastRefreshFailed}
 }
 
-func (catalog *Catalog) classify(upstreamModels []zen.Model) []Model {
+func (catalog *Catalog) classifyOpenCode(upstreamModels []zen.Model) []Model {
 	classified := make([]Model, 0, len(upstreamModels))
 	for _, upstreamModel := range upstreamModels {
 		id := ModelID(upstreamModel.ID)
@@ -166,7 +220,7 @@ func (catalog *Catalog) classify(upstreamModels []zen.Model) []Model {
 		if denied {
 			free = false
 		}
-		classified = append(classified, Model{ID: id, Free: free})
+		classified = append(classified, Model{ID: id, Free: free, Provider: ProviderOpenCode})
 	}
 	return classified
 }
@@ -181,4 +235,13 @@ func toSet(ids []ModelID) map[ModelID]struct{} {
 		set[id] = struct{}{}
 	}
 	return set
+}
+
+// NormalizeProvider clamps unknown/empty providers to OpenCode for routing safety.
+// Only ProviderOllama is treated as a distinct paid pool + dialer.
+func NormalizeProvider(provider Provider) Provider {
+	if provider == ProviderOllama {
+		return ProviderOllama
+	}
+	return ProviderOpenCode
 }

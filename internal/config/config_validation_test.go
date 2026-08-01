@@ -25,6 +25,20 @@ func TestLoad_rejects_malformed_zen_base(t *testing.T) {
 	}
 }
 
+func TestLoad_rejects_malformed_ollama_base(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD", "test-admin-password")
+	t.Setenv("ADMIN_SECRET", "01234567890123456789012345678901")
+	t.Setenv("OLLAMA_BASE", "not a URL")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want malformed OLLAMA_BASE rejection")
+	}
+	if !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("Load() error = %v, want ErrInvalidValue", err)
+	}
+}
+
 func TestLoad_rejects_short_explicit_admin_secret(t *testing.T) {
 	// Given
 	t.Setenv("ADMIN_PASSWORD", "test-admin-password")

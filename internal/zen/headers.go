@@ -31,6 +31,14 @@ func compatibilityHeaders(auth Auth, openCodeVersion string) (http.Header, error
 	return headers, nil
 }
 
+// plainAuthHeaders are minimal headers for OpenAI-compatible providers (e.g. Ollama Cloud).
+func plainAuthHeaders(auth Auth) http.Header {
+	headers := make(http.Header, 2)
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Authorization", auth.authorization())
+	return headers
+}
+
 func newOpenCodeID(prefix string) (string, error) {
 	randomBytes := make([]byte, 12)
 	if _, err := rand.Read(randomBytes); err != nil {

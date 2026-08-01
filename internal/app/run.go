@@ -59,17 +59,16 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		_ = database.Close()
 		return nil, fmt.Errorf("create zen client: %w", err)
 	}
-	catalog, err := models.NewCatalog(zenClient, models.Settings{TTL: cfg.ModelCacheTTL})
+	ollamaClient, err := zen.NewPlainClient(cfg, ollamaAPIBase(cfg.OllamaBase))
 	if err != nil {
 		_ = database.Close()
-		return nil, fmt.Errorf("create model catalog: %w", err)
+		return nil, fmt.Errorf("create ollama client: %w", err)
 	}
 	box, err := crypto.NewBox(cfg.AdminSecret)
 	if err != nil {
 		_ = database.Close()
 		return nil, fmt.Errorf("create secret box: %w", err)
 	}
-	keyService := keys.NewService(database, nil)
 	pool := zenpool.NewService(database, box, nil)
 	// Optional process env for paid-pool scheduling (runtime still mutable via PATCH /settings).
 	if policy := strings.TrimSpace(os.Getenv("ZEN_LOAD_POLICY")); policy != "" {
@@ -80,6 +79,15 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 			pool.SetMaxAttempts(n)
 		}
 	}
+	catalog, err := models.NewCatalog(zenClient, models.Settings{
+		TTL:    cfg.ModelCacheTTL,
+		Ollama: ollamaModelsSource{pool: pool, client: ollamaClient},
+	})
+	if err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("create model catalog: %w", err)
+	}
+	keyService := keys.NewService(database, nil)
 	proxies := proxypool.NewService(database, box, nil)
 	logs := reqlog.NewService(database, nil)
 	authService, err := auth.NewService(auth.Config{Database: database, Password: cfg.AdminPassword})
@@ -121,8 +129,8 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	usageStore := usage.NewSQLiteStore(database)
 	usageService := usage.NewService(usageStore, usageFetcher)
 	dataPlane := httpserver.New(httpserver.Dependencies{
-		Keys: keyService, Catalog: catalog, Zen: zenClient, Pool: pool, Proxies: proxies,
-		Logs: logs, Version: Version, ShowAllModels: cfg.ShowAllModels,
+		Keys: keyService, Catalog: catalog, Zen: zenClient, Ollama: ollamaClient,
+		Pool: pool, Proxies: proxies, Logs: logs, Version: Version, ShowAllModels: cfg.ShowAllModels,
 	})
 	quotaSnapshots := quota.NewSnapshotService(accounts, scraper, 30*time.Second)
 	admin := adminapi.New(adminapi.Dependencies{
@@ -192,4 +200,40 @@ func Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+// ollamaAPIBase ensures OpenAI-compatible paths under /v1 when OLLAMA_BASE is the host root.
+func ollamaAPIBase(base string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(base), "/")
+	if trimmed == "" {
+		return "https://ollama.com/v1"
+	}
+	if strings.HasSuffix(trimmed, "/v1") {
+		return trimmed
+	}
+	return trimmed + "/v1"
+}
+
+// ollamaModelsSource pulls Cloud models with a healthy Ollama pool key; empty pool is not an error.
+type ollamaModelsSource struct {
+	pool   *zenpool.Service
+	client *zen.Client
+}
+
+func (source ollamaModelsSource) Models(ctx context.Context) ([]zen.Model, error) {
+	if source.pool == nil || source.client == nil {
+		return nil, nil
+	}
+	selected, err := source.pool.AcquireFor(ctx, zenpool.AcquireOptions{Provider: zenpool.ProviderOllama})
+	if err != nil {
+		if errors.Is(err, zenpool.ErrNoHealthyKey) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	auth, err := zen.NewAPIKey(selected.Secret)
+	if err != nil {
+		return nil, err
+	}
+	return source.client.ModelsWithAuth(ctx, auth)
 }

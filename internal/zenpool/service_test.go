@@ -95,7 +95,7 @@ func TestProxyPaid_failsover_once_on_429(t *testing.T) {
 	}}
 
 	// When
-	response, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{"model":"paid"}`), false, "")
+	response, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{"model":"paid"}`), false, "", "")
 
 	// Then
 	if err != nil {
@@ -112,7 +112,7 @@ func TestProxyPaid_returns_no_healthy_key(t *testing.T) {
 	service := newPool(t)
 
 	// When
-	_, err := zenpool.ProxyPaid(context.Background(), service, &scriptedDialer{}, json.RawMessage(`{}`), false, "")
+	_, err := zenpool.ProxyPaid(context.Background(), service, &scriptedDialer{}, json.RawMessage(`{}`), false, "", "")
 
 	// Then
 	if !errors.Is(err, zenpool.ErrNoHealthyKey) {
@@ -135,7 +135,7 @@ func TestProxyPaid_401_benches_key(t *testing.T) {
 		{err: &zen.StatusError{StatusCode: http.StatusUnauthorized}},
 		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
 	}}
-	response, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{}`), false, "")
+	response, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{}`), false, "", "")
 	if err != nil {
 		t.Fatalf("ProxyPaid: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestProxyPaid_max_attempts_cap(t *testing.T) {
 		{err: &zen.StatusError{StatusCode: 500}},
 		{err: &zen.StatusError{StatusCode: 500}},
 	}}
-	_, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{}`), false, "")
+	_, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{}`), false, "", "")
 	if err == nil {
 		t.Fatal("expected error")
 	}

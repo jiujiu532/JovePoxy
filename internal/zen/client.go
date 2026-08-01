@@ -29,6 +29,8 @@ type Client struct {
 	baseURL         *url.URL
 	httpClient      *http.Client
 	openCodeVersion string
+	// plainHeaders skips OpenCode compatibility headers (for Ollama Cloud).
+	plainHeaders bool
 }
 
 // TimeoutError reports a request that exceeded the configured upstream timeout.
@@ -52,21 +54,32 @@ func (err *StatusError) Error() string {
 
 // NewClient creates a client from the already-validated application config.
 func NewClient(cfg config.Config) (*Client, error) {
+	return newClientFromBase(cfg, cfg.ZenBase, false)
+}
+
+// NewPlainClient creates a client that dials baseURL with minimal Authorization headers
+// (no OpenCode compatibility headers). Used for Ollama Cloud.
+func NewPlainClient(cfg config.Config, baseURL string) (*Client, error) {
+	return newClientFromBase(cfg, baseURL, true)
+}
+
+func newClientFromBase(cfg config.Config, base string, plainHeaders bool) (*Client, error) {
 	if cfg.UpstreamTimeout <= 0 {
 		return nil, ErrInvalidTimeout
 	}
-	baseURL, err := url.Parse(cfg.ZenBase)
-	if err != nil || baseURL.Scheme == "" || baseURL.Host == "" {
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return nil, ErrInvalidBaseURL
 	}
-	if baseURL.Scheme != "http" && baseURL.Scheme != "https" {
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, ErrInvalidBaseURL
 	}
 
 	return &Client{
-		baseURL:         baseURL,
+		baseURL:         parsed,
 		httpClient:      &http.Client{Transport: newTransport(cfg), Timeout: cfg.UpstreamTimeout},
 		openCodeVersion: cfg.OCVersion,
+		plainHeaders:    plainHeaders,
 	}, nil
 }
 
@@ -122,9 +135,15 @@ func (client *Client) ChatCompletionsWithProxy(ctx context.Context, auth Auth, b
 }
 
 func (client *Client) doChatCompletions(ctx context.Context, auth Auth, body json.RawMessage, stream bool, httpClient *http.Client) (*http.Response, error) {
-	headers, err := compatibilityHeaders(auth, client.openCodeVersion)
-	if err != nil {
-		return nil, fmt.Errorf("build compatibility headers: %w", err)
+	var headers http.Header
+	if client.plainHeaders {
+		headers = plainAuthHeaders(auth)
+	} else {
+		built, err := compatibilityHeaders(auth, client.openCodeVersion)
+		if err != nil {
+			return nil, fmt.Errorf("build compatibility headers: %w", err)
+		}
+		headers = built
 	}
 	endpoint := client.baseURL.JoinPath(chatCompletionsPath)
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(bytes.Clone(body)))

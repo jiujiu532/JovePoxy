@@ -22,7 +22,7 @@ import {
   StatCard,
   slicePage,
 } from "@/components";
-import { api, ApiError, type ModelDTO } from "@/lib/api";
+import { api, ApiError, type ModelDTO, type ModelProvider } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { cn } from "@/lib/cn";
 import { familyInitials, familyTone } from "@/lib/family-tone";
@@ -30,11 +30,17 @@ import { useI18n } from "@/lib/i18n";
 
 /** free≈public, paid≈zen — single axis. */
 type KindFilter = "all" | "free" | "paid";
+type ProviderFilter = "all" | ModelProvider;
 type SortKey = "id_asc" | "id_desc" | "free_first" | "paid_first";
 
 function modelFamily(id: string): string {
   const parts = id.split(/[-_/]/).filter(Boolean);
   return (parts[0] ?? id).toLowerCase();
+}
+
+/** Missing provider on older backends → opencode. */
+function modelProvider(model: ModelDTO): ModelProvider {
+  return model.provider === "ollama" ? "ollama" : "opencode";
 }
 
 function ModelIdCell({ id, family }: { readonly id: string; readonly family: string }) {
@@ -59,23 +65,43 @@ function ModelIdCell({ id, family }: { readonly id: string; readonly family: str
 
 function RouteCell({
   free,
+  provider,
   freeLabel,
   paidLabel,
+  ollamaLabel,
 }: {
   readonly free: boolean;
+  readonly provider: ModelProvider;
   readonly freeLabel: string;
   readonly paidLabel: string;
+  readonly ollamaLabel: string;
 }) {
+  const isOllama = provider === "ollama";
+  const label = free ? freeLabel : isOllama ? ollamaLabel : paidLabel;
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-ink-muted">
       {free ? (
         <Globe size={14} weight="duotone" className="shrink-0 text-accent-yellow" aria-hidden />
       ) : (
-        <Coins size={14} weight="duotone" className="shrink-0 text-accent-coral" aria-hidden />
+        <Coins
+          size={14}
+          weight="duotone"
+          className={cn("shrink-0", isOllama ? "text-accent-teal" : "text-accent-coral")}
+          aria-hidden
+        />
       )}
-      <span className="truncate">{free ? freeLabel : paidLabel}</span>
+      <span className="truncate">{label}</span>
     </span>
   );
+}
+
+function routeLabel(
+  model: ModelDTO,
+  labels: { free: string; paid: string; ollama: string },
+): string {
+  if (model.free) return labels.free;
+  if (modelProvider(model) === "ollama") return labels.ollama;
+  return labels.paid;
 }
 
 export function ModelsPage() {
@@ -85,6 +111,7 @@ export function ModelsPage() {
   const [stale, setStale] = useState(false);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("id_asc");
   const [page, setPage] = useState(1);
@@ -92,6 +119,15 @@ export function ModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const routeLabels = useMemo(
+    () => ({
+      free: t("models.routeFree"),
+      paid: t("models.routePaid"),
+      ollama: t("models.routeOllama"),
+    }),
+    [t],
+  );
 
   async function load(refresh = false) {
     if (refresh) setRefreshing(true);
@@ -120,7 +156,7 @@ export function ModelsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, kind, familyFilter, sortKey]);
+  }, [query, kind, providerFilter, familyFilter, sortKey]);
 
   const families = useMemo(() => {
     const set = new Set(models.map((m) => modelFamily(m.id)));
@@ -130,14 +166,21 @@ export function ModelsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = models.filter((model) => {
+      const provider = modelProvider(model);
       if (kind === "free" && !model.free) return false;
       if (kind === "paid" && model.free) return false;
+      if (providerFilter !== "all" && provider !== providerFilter) return false;
       if (familyFilter !== "all" && modelFamily(model.id) !== familyFilter) return false;
       if (!q) return true;
+      const routeText = routeLabel(model, routeLabels).toLowerCase();
       return (
         model.id.toLowerCase().includes(q) ||
         modelFamily(model.id).includes(q) ||
-        (model.free ? "free public" : "paid zen").includes(q)
+        provider.includes(q) ||
+        (model.free ? "free public" : "paid").includes(q) ||
+        routeText.includes(q) ||
+        (provider === "ollama" && "ollama".includes(q)) ||
+        (provider === "opencode" && ("opencode".includes(q) || "zen".includes(q)))
       );
     });
 
@@ -152,7 +195,7 @@ export function ModelsPage() {
       return a.id.localeCompare(b.id);
     });
     return rows;
-  }, [models, query, kind, familyFilter, sortKey]);
+  }, [models, query, kind, providerFilter, familyFilter, sortKey, routeLabels]);
 
   const paged = useMemo(
     () => slicePage(filtered, page, pageSize),
@@ -166,6 +209,7 @@ export function ModelsPage() {
   function resetFilters() {
     setQuery("");
     setKind("all");
+    setProviderFilter("all");
     setFamilyFilter("all");
     setSortKey("id_asc");
     setPage(1);
@@ -277,6 +321,16 @@ export function ModelsPage() {
                       { value: "paid", label: "Paid" },
                     ]}
                   />
+                  <SegmentedFilter
+                    aria-label={t("models.filterProviderLabel")}
+                    value={providerFilter}
+                    onChange={(v) => setProviderFilter(v as ProviderFilter)}
+                    options={[
+                      { value: "all", label: t("models.filterProviderAll") },
+                      { value: "opencode", label: t("models.filterProviderOpenCode") },
+                      { value: "ollama", label: t("models.filterProviderOllama") },
+                    ]}
+                  />
                   <FilterSelect
                     label={t("models.filterFamilyLabel")}
                     value={familyFilter}
@@ -344,8 +398,7 @@ export function ModelsPage() {
                         <div className="min-w-0">
                           <ModelIdCell id={model.id} family={family} />
                           <p className="mt-1.5 pl-[2.625rem] text-[12px] text-ink-muted">
-                            {family} ·{" "}
-                            {model.free ? t("models.routeFree") : t("models.routePaid")}
+                            {family} · {routeLabel(model, routeLabels)}
                           </p>
                         </div>
                         {model.free ? (
@@ -378,6 +431,7 @@ export function ModelsPage() {
                     <tbody>
                       {paged.map((model) => {
                         const family = modelFamily(model.id);
+                        const provider = modelProvider(model);
                         return (
                           <tr
                             key={model.id}
@@ -401,8 +455,10 @@ export function ModelsPage() {
                             <td className="whitespace-nowrap px-4 py-3">
                               <RouteCell
                                 free={model.free}
-                                freeLabel={t("models.routeFree")}
-                                paidLabel={t("models.routePaid")}
+                                provider={provider}
+                                freeLabel={routeLabels.free}
+                                paidLabel={routeLabels.paid}
+                                ollamaLabel={routeLabels.ollama}
                               />
                             </td>
                           </tr>

@@ -81,7 +81,7 @@ func (server server) listModels(writer http.ResponseWriter, request *http.Reques
 	response := modelsResponse{Object: "list", Data: make([]modelObject, 0, len(result.Models))}
 	for _, model := range result.Models {
 		if model.Free || server.showAllModels {
-			response.Data = append(response.Data, modelObject{ID: string(model.ID), Object: "model", OwnedBy: "zen"})
+			response.Data = append(response.Data, modelObject{ID: string(model.ID), Object: "model", OwnedBy: ownedBy(model.Provider)})
 		}
 	}
 	writer.Header().Set("Content-Type", "application/json")
@@ -106,7 +106,7 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 		writeCatalogError(writer, err)
 		return
 	}
-	free, found := classifyModel(result.Models, parsed.Model)
+	free, provider, found := classifyModel(result.Models, parsed.Model)
 	if !found {
 		writeOpenAIError(writer, http.StatusBadRequest, "model is not available", "invalid_request_error", "model", "model_not_available")
 		return
@@ -115,9 +115,9 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.model = parsed.Model
 	meta.stream = parsed.Stream
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
-	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free)
+	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, provider)
 	if err != nil {
-		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err) {
+		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {
 			return
 		}
 		writeUpstreamError(writer, err)
@@ -175,13 +175,25 @@ func parseChatRequest(writer http.ResponseWriter, request *http.Request) (json.R
 	return json.RawMessage(body), parsed, nil
 }
 
-func classifyModel(catalogModels []models.Model, requested string) (free bool, found bool) {
+func classifyModel(catalogModels []models.Model, requested string) (free bool, provider models.Provider, found bool) {
 	for _, model := range catalogModels {
 		if string(model.ID) == requested {
-			return model.Free, true
+			provider = models.NormalizeProvider(model.Provider)
+			free = model.Free
+			if provider == models.ProviderOllama {
+				free = false
+			}
+			return free, provider, true
 		}
 	}
-	return false, false
+	return false, models.ProviderOpenCode, false
+}
+
+func ownedBy(provider models.Provider) string {
+	if models.NormalizeProvider(provider) == models.ProviderOllama {
+		return "ollama"
+	}
+	return "zen"
 }
 
 func (server server) copyJSON(writer http.ResponseWriter, response *http.Response) {

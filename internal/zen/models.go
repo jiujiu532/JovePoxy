@@ -32,15 +32,20 @@ type modelsResponse struct {
 	Data   []Model `json:"data"`
 }
 
-// Models fetches and parses Zen's OpenAI-compatible model list.
+// Models fetches and parses Zen's OpenAI-compatible model list with Bearer public.
 func (client *Client) Models(ctx context.Context) (_ []Model, err error) {
+	return client.ModelsWithAuth(ctx, PublicAuth())
+}
+
+// ModelsWithAuth fetches models using the given Authorization (e.g. pool API key for Ollama).
+func (client *Client) ModelsWithAuth(ctx context.Context, auth Auth) (_ []Model, err error) {
 	endpoint := client.baseURL.JoinPath(modelsPath)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create Zen models request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", "Bearer public")
+	request.Header.Set("Authorization", auth.authorization())
 
 	response, err := client.httpClient.Do(request)
 	if err != nil {
