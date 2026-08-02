@@ -2,10 +2,23 @@ package adminapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"jovepoxy/internal/keys"
 )
+
+// writeLocalKeyError maps keys package errors to HTTP status codes.
+func writeLocalKeyError(writer http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, keys.ErrNotFound):
+		writeError(writer, http.StatusNotFound, "key not found")
+	case errors.Is(err, keys.ErrInvalidInput):
+		writeError(writer, http.StatusBadRequest, err.Error())
+	default:
+		writeError(writer, http.StatusBadRequest, err.Error())
+	}
+}
 
 func (server server) listLocalKeys(writer http.ResponseWriter, request *http.Request) {
 	if server.keys == nil {
@@ -38,7 +51,7 @@ func (server server) createLocalKey(writer http.ResponseWriter, request *http.Re
 
 func (server server) revokeLocalKey(writer http.ResponseWriter, request *http.Request) {
 	if err := server.keys.Revoke(request.Context(), keys.KeyID(request.PathValue("id"))); err != nil {
-		writeError(writer, http.StatusBadRequest, err.Error())
+		writeLocalKeyError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, okResponse{OK: true})
@@ -57,7 +70,7 @@ func (server server) updateLocalKey(writer http.ResponseWriter, request *http.Re
 	if err := server.keys.Update(request.Context(), keys.KeyID(request.PathValue("id")), keys.UpdateInput{
 		Label: body.Label, RPMLimit: body.RPMLimit, DailyLimit: body.DailyLimit,
 	}); err != nil {
-		writeError(writer, http.StatusBadRequest, err.Error())
+		writeLocalKeyError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, okResponse{OK: true})
@@ -69,7 +82,7 @@ func (server server) enableLocalKey(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	if err := server.keys.SetEnabled(request.Context(), keys.KeyID(request.PathValue("id")), true); err != nil {
-		writeError(writer, http.StatusBadRequest, err.Error())
+		writeLocalKeyError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, okResponse{OK: true})
@@ -81,7 +94,7 @@ func (server server) disableLocalKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 	if err := server.keys.SetEnabled(request.Context(), keys.KeyID(request.PathValue("id")), false); err != nil {
-		writeError(writer, http.StatusBadRequest, err.Error())
+		writeLocalKeyError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, okResponse{OK: true})

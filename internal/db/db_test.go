@@ -47,10 +47,10 @@ func TestOpen_initializes_versioned_schema_idempotently(t *testing.T) {
 	if err := database.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if migrations != 7 {
-		t.Fatalf("migration count = %d, want 7", migrations)
+	if migrations != 8 {
+		t.Fatalf("migration count = %d, want 8", migrations)
 	}
-	t.Logf("migration_version=7 migration_count=%d", migrations)
+	t.Logf("migration_version=8 migration_count=%d", migrations)
 }
 
 func TestOpen_configures_pragmas_on_second_connection(t *testing.T) {

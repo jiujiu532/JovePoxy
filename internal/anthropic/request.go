@@ -54,8 +54,8 @@ type anthropicMessage struct {
 }
 
 type contentBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 	// Thinking is the Anthropic official body for type=thinking blocks
 	// (string, or rarely a nested object with text/thinking).
 	Thinking  json.RawMessage `json:"thinking,omitempty"`
@@ -407,6 +407,10 @@ func convertMessage(message anthropicMessage) ([]map[string]any, error) {
 			results = append(results, map[string]any{
 				"role": "tool", "tool_call_id": block.ToolUseID, "content": toolResultText(block),
 			})
+		}
+		// 同条 message 里 tool_result 之外的文本 → 追加 user 消息
+		if text != "" {
+			results = append(results, map[string]any{"role": "user", "content": text})
 		}
 		return results, nil
 	}

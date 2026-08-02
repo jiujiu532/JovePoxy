@@ -316,6 +316,52 @@ func TestAdminAPI_login_rate_limits_same_ip_across_ports(t *testing.T) {
 	}
 }
 
+func TestAdminAPI_local_key_missing_returns_404(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	handler := adminapi.New(adminapi.Dependencies{
+		Auth: authService, Keys: keys.NewService(database, nil),
+		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false},
+	})
+	cookie := loginCookie(t, handler, "secret-admin")
+	const missingID = "key_missing_0000000000000000"
+
+	// When / Then: lifecycle ops on missing id → 404
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/revoke"},
+		{method: http.MethodPatch, path: "/api/admin/local-keys/" + missingID, body: `{"label":"x"}`},
+		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/enable"},
+		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/disable"},
+	} {
+		var bodyReader *bytes.Buffer
+		if tc.body != "" {
+			bodyReader = bytes.NewBufferString(tc.body)
+		} else {
+			bodyReader = bytes.NewBuffer(nil)
+		}
+		req := httptest.NewRequest(tc.method, tc.path, bodyReader)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s %s status = %d body=%s, want 404", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func loginCookie(t *testing.T, handler http.Handler, password string) *http.Cookie {
 	t.Helper()
 	loginBody := bytes.NewBufferString(`{"password":"` + password + `"}`)

@@ -11,6 +11,7 @@ type storedKey struct {
 	id            KeyID
 	label         string
 	ciphertext    string
+	keyPrefix     string
 	weight        int
 	enabled       bool
 	provider      Provider
@@ -24,7 +25,8 @@ type Store interface {
 	ListByProvider(context.Context, Provider) ([]storedKey, error)
 	SetEnabled(context.Context, KeyID, bool) error
 	SetCooldown(context.Context, KeyID, *time.Time) error
-	Update(context.Context, KeyID, string, int, *string) error
+	// Update patches label/weight; when ciphertext is non-nil also replaces secret and key_prefix.
+	Update(context.Context, KeyID, string, int, *string, *string) error
 	Delete(context.Context, KeyID) error
 	GetCiphertext(context.Context, KeyID) (string, error)
 }
@@ -43,9 +45,9 @@ func (store *sqliteStore) Insert(ctx context.Context, key storedKey) error {
 		provider = ProviderOpenCode
 	}
 	_, err := store.db.ExecContext(ctx, `
-		INSERT INTO zen_keys (id, label, key_ciphertext, weight, enabled, cooldown_until, created_at, provider)
-		VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
-	`, string(key.id), key.label, key.ciphertext, key.weight, boolToInt(key.enabled), key.createdAt, string(provider))
+		INSERT INTO zen_keys (id, label, key_ciphertext, key_prefix, weight, enabled, cooldown_until, created_at, provider)
+		VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+	`, string(key.id), key.label, key.ciphertext, key.keyPrefix, key.weight, boolToInt(key.enabled), key.createdAt, string(provider))
 	if err != nil {
 		return fmt.Errorf("insert zen key: %w", err)
 	}
@@ -54,7 +56,7 @@ func (store *sqliteStore) Insert(ctx context.Context, key storedKey) error {
 
 func (store *sqliteStore) List(ctx context.Context) ([]storedKey, error) {
 	return store.queryKeys(ctx, `
-		SELECT id, label, key_ciphertext, weight, enabled, cooldown_until, created_at, COALESCE(provider, 'opencode')
+		SELECT id, label, key_ciphertext, COALESCE(key_prefix, ''), weight, enabled, cooldown_until, created_at, COALESCE(provider, 'opencode')
 		FROM zen_keys ORDER BY created_at ASC, id ASC
 	`)
 }
@@ -64,7 +66,7 @@ func (store *sqliteStore) ListByProvider(ctx context.Context, provider Provider)
 		provider = ProviderOpenCode
 	}
 	return store.queryKeys(ctx, `
-		SELECT id, label, key_ciphertext, weight, enabled, cooldown_until, created_at, COALESCE(provider, 'opencode')
+		SELECT id, label, key_ciphertext, COALESCE(key_prefix, ''), weight, enabled, cooldown_until, created_at, COALESCE(provider, 'opencode')
 		FROM zen_keys
 		WHERE COALESCE(provider, 'opencode') = ?
 		ORDER BY created_at ASC, id ASC
@@ -83,7 +85,7 @@ func (store *sqliteStore) queryKeys(ctx context.Context, query string, args ...a
 		var enabled int
 		var provider string
 		if err := rows.Scan(
-			&key.id, &key.label, &key.ciphertext, &key.weight, &enabled,
+			&key.id, &key.label, &key.ciphertext, &key.keyPrefix, &key.weight, &enabled,
 			&key.cooldownUntil, &key.createdAt, &provider,
 		); err != nil {
 			return nil, fmt.Errorf("scan zen key: %w", err)
@@ -118,14 +120,18 @@ func (store *sqliteStore) SetCooldown(ctx context.Context, id KeyID, until *time
 	return requireRows(result)
 }
 
-// Update patches label/weight; when ciphertext is non-nil, also replaces secret material.
-func (store *sqliteStore) Update(ctx context.Context, id KeyID, label string, weight int, ciphertext *string) error {
+// Update patches label/weight; when ciphertext is non-nil, also replaces secret material and key_prefix.
+func (store *sqliteStore) Update(ctx context.Context, id KeyID, label string, weight int, ciphertext *string, keyPrefix *string) error {
 	var result sql.Result
 	var err error
 	if ciphertext != nil {
+		prefix := ""
+		if keyPrefix != nil {
+			prefix = *keyPrefix
+		}
 		result, err = store.db.ExecContext(ctx, `
-			UPDATE zen_keys SET label = ?, weight = ?, key_ciphertext = ? WHERE id = ?
-		`, label, weight, *ciphertext, string(id))
+			UPDATE zen_keys SET label = ?, weight = ?, key_ciphertext = ?, key_prefix = ? WHERE id = ?
+		`, label, weight, *ciphertext, prefix, string(id))
 	} else {
 		result, err = store.db.ExecContext(ctx, `
 			UPDATE zen_keys SET label = ?, weight = ? WHERE id = ?

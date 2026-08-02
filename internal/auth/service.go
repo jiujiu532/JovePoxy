@@ -13,20 +13,28 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const sessionTokenBytes = 32
+
+// bcryptCost balances login latency with brute-force resistance for admin passwords.
+const bcryptCost = 10
+
+// passwordSettingKey is the settings row for the admin password hash.
+// Value may be a bcrypt hash ($2a$/$2b$/$2y$) or a legacy hex-encoded SHA-256 digest.
+const passwordSettingKey = "admin_password_sha256"
 
 type realClock struct{}
 
 func (realClock) Now() time.Time { return time.Now().UTC() }
 
-const passwordSettingKey = "admin_password_sha256"
-
 // Service authenticates one control-plane administrator without HTTP coupling.
 type Service struct {
-	database     *sql.DB
-	passwordHash [sha256.Size]byte
+	database   *sql.DB
+	// passwordHash is either a bcrypt hash string or a 64-char hex SHA-256 digest (legacy).
+	passwordHash string
 	passwordMu   sync.RWMutex
 	clock        Clock
 	limiter      loginLimiter
@@ -42,9 +50,13 @@ func NewService(config Config) (*Service, error) {
 	if clock == nil {
 		clock = realClock{}
 	}
+	hash, err := hashPassword(config.Password)
+	if err != nil {
+		return nil, fmt.Errorf("hash admin password: %w", err)
+	}
 	service := &Service{
 		database:     config.Database,
-		passwordHash: sha256.Sum256([]byte(config.Password)),
+		passwordHash: hash,
 		clock:        clock,
 		limiter:      loginLimiter{attempts: make(map[string][]time.Time)},
 	}
@@ -56,18 +68,26 @@ func NewService(config Config) (*Service, error) {
 
 // Login verifies parsed credentials and issues a random, bounded-lifetime session.
 // A successful login clears prior failed attempts from that source.
+// Legacy SHA-256 hashes are transparently upgraded to bcrypt after a successful match.
 func (service *Service) Login(ctx context.Context, input LoginInput) (Session, error) {
 	now := service.clock.Now().UTC()
 	source := normalizedSource(input.Source)
-	providedHash := sha256.Sum256([]byte(input.Password))
 	service.passwordMu.RLock()
 	expected := service.passwordHash
 	service.passwordMu.RUnlock()
-	if subtle.ConstantTimeCompare(providedHash[:], expected[:]) != 1 {
+	if !verifyPassword(expected, input.Password) {
 		if !service.limiter.reserveFailure(source, now) {
 			return Session{}, ErrRateLimited
 		}
 		return Session{}, ErrUnauthorized
+	}
+	// Transparent upgrade: re-hash legacy SHA-256 on successful login.
+	if !isBcryptHash(expected) {
+		if err := service.upgradePasswordHash(ctx, input.Password); err != nil {
+			// Login still succeeds; upgrade failure is non-fatal for the session.
+			// Next successful login will retry the upgrade.
+			_ = err
+		}
 	}
 	service.limiter.clear(source)
 	token, err := newSessionToken()
@@ -119,8 +139,8 @@ func (service *Service) Authenticate(ctx context.Context, credential SessionCred
 	return service.Verify(ctx, credential.Token)
 }
 
-// ChangePassword verifies the current password, stores a new hash, updates memory,
-// and revokes every active admin session so clients must log in again.
+// ChangePassword verifies the current password, stores a new bcrypt hash, updates memory,
+// and revokes every active admin session in the same DB transaction.
 func (service *Service) ChangePassword(ctx context.Context, current, next string) error {
 	current = strings.TrimSpace(current)
 	next = strings.TrimSpace(next)
@@ -130,27 +150,49 @@ func (service *Service) ChangePassword(ctx context.Context, current, next string
 	if current == next {
 		return errors.New("new password must differ from current password")
 	}
-	currentHash := sha256.Sum256([]byte(current))
 	service.passwordMu.RLock()
 	expected := service.passwordHash
 	service.passwordMu.RUnlock()
-	if subtle.ConstantTimeCompare(currentHash[:], expected[:]) != 1 {
+	if !verifyPassword(expected, current) {
 		return ErrUnauthorized
 	}
-	nextHash := sha256.Sum256([]byte(next))
-	hexHash := hex.EncodeToString(nextHash[:])
-	if _, err := service.database.ExecContext(ctx, `
+	nextHash, err := hashPassword(next)
+	if err != nil {
+		return fmt.Errorf("hash new admin password: %w", err)
+	}
+
+	tx, err := service.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin password change transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-	`, passwordSettingKey, hexHash); err != nil {
+	`, passwordSettingKey, nextHash); err != nil {
 		return fmt.Errorf("persist admin password: %w", err)
 	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`UPDATE admin_sessions SET revoked_at = ? WHERE revoked_at IS NULL`,
+		service.clock.Now().UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		return fmt.Errorf("revoke all admin sessions: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit password change: %w", err)
+	}
+	committed = true
+
 	service.passwordMu.Lock()
 	service.passwordHash = nextHash
 	service.passwordMu.Unlock()
-	if err := service.RevokeAllSessions(ctx); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -182,13 +224,38 @@ func (service *Service) loadPasswordOverride(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load admin password override: %w", err)
 	}
-	decoded, err := hex.DecodeString(strings.TrimSpace(value))
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if isBcryptHash(value) {
+		service.passwordHash = value
+		return nil
+	}
+	// Legacy hex SHA-256 (64 chars).
+	decoded, err := hex.DecodeString(value)
 	if err != nil || len(decoded) != sha256.Size {
 		return nil
 	}
-	var hash [sha256.Size]byte
-	copy(hash[:], decoded)
+	service.passwordHash = value
+	return nil
+}
+
+// upgradePasswordHash rewrites a legacy SHA-256 setting to bcrypt after a successful login.
+func (service *Service) upgradePasswordHash(ctx context.Context, password string) error {
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+	if _, err := service.database.ExecContext(ctx, `
+		INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, passwordSettingKey, hash); err != nil {
+		return fmt.Errorf("upgrade admin password hash: %w", err)
+	}
+	service.passwordMu.Lock()
 	service.passwordHash = hash
+	service.passwordMu.Unlock()
 	return nil
 }
 
@@ -206,6 +273,34 @@ func (service *Service) Logout(ctx context.Context, token string) error {
 		return fmt.Errorf("revoke admin session: %w", err)
 	}
 	return nil
+}
+
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func isBcryptHash(hash string) bool {
+	return strings.HasPrefix(hash, "$2a$") ||
+		strings.HasPrefix(hash, "$2b$") ||
+		strings.HasPrefix(hash, "$2y$")
+}
+
+// verifyPassword accepts bcrypt hashes or legacy hex-encoded SHA-256 digests.
+func verifyPassword(storedHash, password string) bool {
+	if isBcryptHash(storedHash) {
+		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
+	}
+	// Legacy: hex SHA-256 of the password.
+	provided := sha256.Sum256([]byte(password))
+	expected, err := hex.DecodeString(strings.TrimSpace(storedHash))
+	if err != nil || len(expected) != sha256.Size {
+		return false
+	}
+	return subtle.ConstantTimeCompare(provided[:], expected) == 1
 }
 
 func newSessionToken() (string, error) {

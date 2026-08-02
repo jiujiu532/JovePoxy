@@ -512,3 +512,42 @@ func TestToOpenAIChat_unknown_thinking_type_omits_effort(t *testing.T) {
 		t.Fatalf("unknown thinking type must omit reasoning_effort: %s", openAIBody)
 	}
 }
+
+func TestToOpenAIChat_tool_result_with_text(t *testing.T) {
+	// 同条 user message 含 tool_result + text → tool 消息后追加 user 文本
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"demo-free","max_tokens":64,
+		"messages":[
+			{"role":"user","content":[
+				{"type":"tool_result","tool_use_id":"toolu_1","content":"result text"},
+				{"type":"text","text":"please continue"}
+			]}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload struct {
+		Messages []struct {
+			Role       string `json:"role"`
+			Content    string `json:"content"`
+			ToolCallID string `json:"tool_call_id"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(payload.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2 (tool + user); body=%s", len(payload.Messages), openAIBody)
+	}
+	if payload.Messages[0].Role != "tool" || payload.Messages[0].ToolCallID != "toolu_1" || payload.Messages[0].Content != "result text" {
+		t.Fatalf("tool msg = %+v", payload.Messages[0])
+	}
+	if payload.Messages[1].Role != "user" || payload.Messages[1].Content != "please continue" {
+		t.Fatalf("user text msg = %+v", payload.Messages[1])
+	}
+}

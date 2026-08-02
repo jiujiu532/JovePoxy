@@ -219,6 +219,10 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		return true
 	}
 	if !state.textOpen {
+		// tool→text：先关闭已 open 的 tool blocks（与 finish 路径一致）
+		if !state.closeOpenTools(writer) {
+			return false
+		}
 		if !state.closeThinking(writer) {
 			return false
 		}

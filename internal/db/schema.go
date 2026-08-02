@@ -150,3 +150,8 @@ CREATE TABLE egress_proxies (
 const zenKeyProviderSchema = `
 ALTER TABLE zen_keys ADD COLUMN provider TEXT NOT NULL DEFAULT 'opencode';
 `
+
+// zen_keys.key_prefix stores a secret-free display prefix so List never decrypts.
+const zenKeyPrefixSchema = `
+ALTER TABLE zen_keys ADD COLUMN key_prefix TEXT NOT NULL DEFAULT '';
+`

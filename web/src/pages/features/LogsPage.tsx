@@ -2,7 +2,7 @@ import {
   ClipboardText,
   Database,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
@@ -327,15 +327,21 @@ function UsagePanel({ t }: { readonly t: Translate }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  async function load() {
+  async function load(selectedAccountId?: string) {
     setLoading(true);
     try {
-      const [usage, accountList] = await Promise.all([api.usage(), api.accounts()]);
-      setRecords(usage.records);
+      const accountList = await api.accounts();
       setAccounts(accountList.accounts);
-      if (!accountId && accountList.accounts[0]) {
-        setAccountId(accountList.accounts[0].id);
+      const resolvedId =
+        selectedAccountId ??
+        (accountId || accountList.accounts[0]?.id || "");
+      if (resolvedId && resolvedId !== accountId) {
+        setAccountId(resolvedId);
       }
+      const usage = await api.usage(
+        resolvedId ? { account_id: resolvedId, limit: 500 } : { limit: 500 },
+      );
+      setRecords(usage.records);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -354,6 +360,18 @@ function UsagePanel({ t }: { readonly t: Translate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When the user switches account, re-scope the table via API + client filter.
+  const accountFilterReady = useRef(false);
+  useEffect(() => {
+    if (!accountId) return;
+    if (!accountFilterReady.current) {
+      accountFilterReady.current = true;
+      return;
+    }
+    void load(accountId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId]);
+
   useEffect(() => {
     setPage(1);
   }, [query, modelFilter, sortKey, accountId]);
@@ -370,7 +388,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
         : await api.syncUsage(accountId, 3);
       setMessage(t("logs.syncResult", { inserted: result.inserted, pages: result.pages_fetched }));
       setError(null);
-      await load();
+      await load(accountId);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("logs.syncFailed"));
     } finally {
@@ -386,6 +404,8 @@ function UsagePanel({ t }: { readonly t: Translate }) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = records.filter((row) => {
+      // Account filter must actually scope rows (mirrors OllamaUsagePanel).
+      if (accountId && row.account_id !== accountId) return false;
       if (modelFilter !== "all" && row.model !== modelFilter) return false;
       if (!q) return true;
       return (
@@ -400,7 +420,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       return b.input_tokens + b.output_tokens - (a.input_tokens + a.output_tokens);
     });
     return rows;
-  }, [records, query, modelFilter, sortKey]);
+  }, [records, query, modelFilter, sortKey, accountId]);
 
   const paged = useMemo(
     () => slicePage(filtered, page, pageSize),

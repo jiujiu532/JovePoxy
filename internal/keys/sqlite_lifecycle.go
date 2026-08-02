@@ -82,7 +82,7 @@ func requireAffectedRow(result sql.Result) error {
 		return fmt.Errorf("read local API key update count: %w", err)
 	}
 	if affected == 0 {
-		return ErrUnauthorized
+		return ErrNotFound
 	}
 	return nil
 }

@@ -26,6 +26,7 @@ import {
   Tabs,
   TextInput,
   slicePage,
+  useToast,
 } from "@/components";
 import {
   downloadJSON,
@@ -40,11 +41,26 @@ import {
 } from "@/lib/account-io";
 import { api, ApiError, type AccountDTO, type OllamaAccountDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type Translate } from "@/lib/i18n";
 import { isProviderTab, type ProviderTab } from "@/lib/routes";
 
 type StatusFilter = "all" | "enabled" | "disabled";
 type DialogMode = "closed" | "add" | "batch" | "import";
+
+function friendlyError(err: unknown, fallback: string, t: Translate): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return t("accounts.sessionExpired");
+    return err.message || fallback;
+  }
+  if (err instanceof TypeError) return t("accounts.connectFailed");
+  if (err instanceof Error) {
+    if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
+      return t("accounts.connectFailed");
+    }
+    return err.message || fallback;
+  }
+  return fallback;
+}
 
 function useProviderTab(
   defaultTab: ProviderTab = "opencode",
@@ -61,6 +77,7 @@ function useProviderTab(
 export function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { push } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useProviderTab("opencode");
   const [ocAccounts, setOcAccounts] = useState<AccountDTO[]>([]);
@@ -754,6 +771,17 @@ export function AccountsPage() {
                                   void api
                                     .setAccountEnabled(account.id, !account.enabled)
                                     .then(load)
+                                    .catch((err) => {
+                                      if (err instanceof ApiError && err.status === 401) {
+                                        setSessionHint(false);
+                                        void navigate("/login");
+                                        return;
+                                      }
+                                      push(
+                                        friendlyError(err, t("common.actionFailed"), t),
+                                        "error",
+                                      );
+                                    })
                                 }
                               >
                                 {account.enabled ? t("common.disable") : t("common.enable")}
@@ -761,7 +789,20 @@ export function AccountsPage() {
                               <DeleteButton
                                 onClick={() => {
                                   if (window.confirm(t("accounts.deleteConfirm", { name: account.name }))) {
-                                    void api.deleteAccount(account.id).then(load);
+                                    void api
+                                      .deleteAccount(account.id)
+                                      .then(load)
+                                      .catch((err) => {
+                                        if (err instanceof ApiError && err.status === 401) {
+                                          setSessionHint(false);
+                                          void navigate("/login");
+                                          return;
+                                        }
+                                        push(
+                                          friendlyError(err, t("accounts.deleteFailed"), t),
+                                          "error",
+                                        );
+                                      });
                                   }
                                 }}
                               />
@@ -807,6 +848,17 @@ export function AccountsPage() {
                                   void api
                                     .setOllamaAccountEnabled(account.id, !account.enabled)
                                     .then(load)
+                                    .catch((err) => {
+                                      if (err instanceof ApiError && err.status === 401) {
+                                        setSessionHint(false);
+                                        void navigate("/login");
+                                        return;
+                                      }
+                                      push(
+                                        friendlyError(err, t("common.actionFailed"), t),
+                                        "error",
+                                      );
+                                    })
                                 }
                               >
                                 {account.enabled ? t("common.disable") : t("common.enable")}
@@ -814,7 +866,20 @@ export function AccountsPage() {
                               <DeleteButton
                                 onClick={() => {
                                   if (window.confirm(t("accounts.deleteConfirm", { name: account.name }))) {
-                                    void api.deleteOllamaAccount(account.id).then(load);
+                                    void api
+                                      .deleteOllamaAccount(account.id)
+                                      .then(load)
+                                      .catch((err) => {
+                                        if (err instanceof ApiError && err.status === 401) {
+                                          setSessionHint(false);
+                                          void navigate("/login");
+                                          return;
+                                        }
+                                        push(
+                                          friendlyError(err, t("accounts.deleteFailed"), t),
+                                          "error",
+                                        );
+                                      });
                                   }
                                 }}
                               />

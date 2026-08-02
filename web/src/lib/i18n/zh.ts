@@ -95,6 +95,10 @@ export const zh = {
   "login.showPassword": "显示密码",
   "login.hidePassword": "隐藏密码",
 
+  /* ===== authGate ===== */
+  "authGate.loadFailed": "无法验证登录状态",
+  "authGate.loadFailedDesc": "网络异常或服务暂时不可用，请重试。不会强制退出登录。",
+
   /* ===== viewmode ===== */
   "viewmode.grid": "网格视图",
   "viewmode.compact": "紧凑视图",
@@ -656,6 +660,9 @@ export const zh = {
   "accounts.bulkDeleteConfirm": "确认删除选中的 {n} 个账号？",
   "accounts.bulkDeleted": "已批量删除",
   "accounts.bulkDeleteFailed": "批量删除失败",
+  "accounts.sessionExpired": "登录已过期，请重新登录",
+  "accounts.connectFailed": "无法连接服务，请确认后端已启动",
+  "accounts.deleteFailed": "删除失败",
 
   "localkeys.title": "分发管理",
   "localkeys.description": "向客户端发放本地 API Key，接入 Cursor / Claude Code。",

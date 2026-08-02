@@ -96,6 +96,10 @@ export const en: Record<MessageKey, string> = {
   "login.showPassword": "Show password",
   "login.hidePassword": "Hide password",
 
+  /* ===== authGate ===== */
+  "authGate.loadFailed": "Could not verify session",
+  "authGate.loadFailedDesc": "Network error or service unavailable. Retry — you will not be signed out.",
+
   /* ===== viewmode ===== */
   "viewmode.grid": "Grid view",
   "viewmode.compact": "Compact view",
@@ -657,6 +661,9 @@ export const en: Record<MessageKey, string> = {
   "accounts.bulkDeleteConfirm": "Delete {n} selected account(s)?",
   "accounts.bulkDeleted": "Bulk deleted",
   "accounts.bulkDeleteFailed": "Bulk delete failed",
+  "accounts.sessionExpired": "Session expired — please sign in again",
+  "accounts.connectFailed": "Cannot reach the server — is the backend running?",
+  "accounts.deleteFailed": "Delete failed",
 
   "localkeys.title": "Local Keys",
   "localkeys.description": "Issue local API keys to clients — works with Cursor / Claude Code.",

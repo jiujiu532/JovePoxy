@@ -222,3 +222,38 @@ func TestWriteStream_reasoning_only_closes_thinking(t *testing.T) {
 		t.Fatalf("reasoning-only must not invent text deltas:\n%s", body)
 	}
 }
+
+func TestWriteStream_tool_then_text_closes_tools(t *testing.T) {
+	// tool_use 后再 content：应先 content_block_stop 关闭 tool，再开 text
+	upstream := strings.NewReader(
+		"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{}\"}}]}}]}\n\n" +
+			"data: {\"choices\":[{\"delta\":{\"content\":\"after tool\"}}]}\n\n" +
+			"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+	)
+	recorder := httptest.NewRecorder()
+
+	anthropic.WriteStream(recorder, upstream, "demo-free", 1)
+
+	body := recorder.Body.String()
+	for _, want := range []string{
+		`"type":"tool_use"`,
+		`"type":"text_delta"`,
+		`"text":"after tool"`,
+		"event: message_stop",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in:\n%s", want, body)
+		}
+	}
+	// tool start 后、text start 前必须有 content_block_stop（关闭 tool）
+	toolStart := strings.Index(body, `"type":"tool_use"`)
+	textStart := strings.Index(body, `"type":"text"`)
+	if toolStart < 0 || textStart < 0 || toolStart > textStart {
+		t.Fatalf("expected tool_use before text block start:\n%s", body)
+	}
+	// 在 tool_use 与 text content_block 之间应出现 content_block_stop
+	middle := body[toolStart:textStart]
+	if !strings.Contains(middle, "content_block_stop") {
+		t.Fatalf("expected content_block_stop between tool and text:\n%s", body)
+	}
+}

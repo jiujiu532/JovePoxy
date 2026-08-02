@@ -152,15 +152,16 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (Metadata
 		return Metadata{}, err
 	}
 	now := service.clock.Now().UTC()
+	prefix := maskPrefix(secret)
 	record := storedKey{
-		id: id, label: label, ciphertext: ciphertext, weight: weight, enabled: true,
+		id: id, label: label, ciphertext: ciphertext, keyPrefix: prefix, weight: weight, enabled: true,
 		provider: provider, createdAt: now.Format(time.RFC3339Nano),
 	}
 	if err := service.store.Insert(ctx, record); err != nil {
 		return Metadata{}, err
 	}
 	return Metadata{
-		ID: id, Label: label, Prefix: maskPrefix(secret), Weight: weight,
+		ID: id, Label: label, Prefix: prefix, Weight: weight,
 		Enabled: true, Provider: provider, CreatedAt: now,
 	}, nil
 }
@@ -184,11 +185,7 @@ func (service *Service) ListByProvider(ctx context.Context, provider Provider) (
 	}
 	out := make([]Metadata, 0, len(records))
 	for _, record := range records {
-		meta, err := service.toMetadata(record)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, meta)
+		out = append(out, service.toMetadata(record))
 	}
 	return out, nil
 }
@@ -210,14 +207,17 @@ func (service *Service) Update(ctx context.Context, id KeyID, input UpdateInput)
 	}
 	secret := strings.TrimSpace(input.Secret)
 	var ciphertext *string
+	var keyPrefix *string
 	if secret != "" {
 		sealed, err := service.box.Seal(secret)
 		if err != nil {
 			return Metadata{}, fmt.Errorf("encrypt zen key: %w", err)
 		}
 		ciphertext = &sealed
+		prefix := maskPrefix(secret)
+		keyPrefix = &prefix
 	}
-	if err := service.store.Update(ctx, id, label, weight, ciphertext); err != nil {
+	if err := service.store.Update(ctx, id, label, weight, ciphertext, keyPrefix); err != nil {
 		return Metadata{}, err
 	}
 	records, err := service.store.List(ctx)
@@ -228,7 +228,7 @@ func (service *Service) Update(ctx context.Context, id KeyID, input UpdateInput)
 		if record.id != id {
 			continue
 		}
-		return service.toMetadata(record)
+		return service.toMetadata(record), nil
 	}
 	return Metadata{}, sql.ErrNoRows
 }
@@ -353,9 +353,12 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 				continue
 			}
 		}
-		if cooling, err := isCooling(record.cooldownUntil, now); err != nil {
-			return Selected{}, err
-		} else if cooling {
+		cooling, coolErr := isCooling(record.cooldownUntil, now)
+		if coolErr != nil {
+			// Dirty cooldown_until: skip this key rather than failing the whole pool.
+			continue
+		}
+		if cooling {
 			continue
 		}
 		candidates = append(candidates, record)
@@ -391,11 +394,9 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 	return Selected{ID: chosen.id, Secret: secret, Label: chosen.label}, nil
 }
 
-func (service *Service) toMetadata(record storedKey) (Metadata, error) {
-	secret, err := service.box.Open(record.ciphertext)
-	if err != nil {
-		return Metadata{}, fmt.Errorf("decrypt zen key for prefix: %w", err)
-	}
+// toMetadata builds secret-free admin metadata without failing List on bad ciphertext.
+// Prefers the stored key_prefix column; optional Open is only a best-effort legacy backfill.
+func (service *Service) toMetadata(record storedKey) Metadata {
 	createdAt, err := time.Parse(time.RFC3339Nano, record.createdAt)
 	if err != nil {
 		createdAt, _ = time.Parse(time.RFC3339, record.createdAt)
@@ -404,20 +405,27 @@ func (service *Service) toMetadata(record storedKey) (Metadata, error) {
 	if provider == "" {
 		provider = ProviderOpenCode
 	}
+	prefix := record.keyPrefix
+	// Legacy rows may lack key_prefix; never fail List on decrypt — empty is fine.
+	if prefix == "" && record.ciphertext != "" && service != nil && service.box != nil {
+		if secret, openErr := service.box.Open(record.ciphertext); openErr == nil {
+			prefix = maskPrefix(secret)
+		}
+	}
 	meta := Metadata{
-		ID: record.id, Label: record.label, Prefix: maskPrefix(secret),
+		ID: record.id, Label: record.label, Prefix: prefix,
 		Weight: record.weight, Enabled: record.enabled, Provider: provider, CreatedAt: createdAt,
 	}
 	if record.cooldownUntil.Valid && record.cooldownUntil.String != "" {
-		until, err := time.Parse(time.RFC3339Nano, record.cooldownUntil.String)
-		if err != nil {
-			until, err = time.Parse(time.RFC3339, record.cooldownUntil.String)
+		until, parseErr := time.Parse(time.RFC3339Nano, record.cooldownUntil.String)
+		if parseErr != nil {
+			until, parseErr = time.Parse(time.RFC3339, record.cooldownUntil.String)
 		}
-		if err == nil {
+		if parseErr == nil {
 			meta.CooldownUntil = &until
 		}
 	}
-	return meta, nil
+	return meta
 }
 
 func isCooling(value sql.NullString, now time.Time) (bool, error) {

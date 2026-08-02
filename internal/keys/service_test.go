@@ -109,6 +109,24 @@ func TestService_rejects_disabled_or_revoked_keys(t *testing.T) {
 	}
 }
 
+func TestService_lifecycle_missing_id_returns_ErrNotFound(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	service, _ := newService(t)
+	const missing keys.KeyID = "key_does_not_exist_000000000000"
+
+	// When / Then
+	if err := service.Revoke(ctx, missing); !errors.Is(err, keys.ErrNotFound) {
+		t.Fatalf("Revoke(missing) error = %v, want ErrNotFound", err)
+	}
+	if err := service.SetEnabled(ctx, missing, false); !errors.Is(err, keys.ErrNotFound) {
+		t.Fatalf("SetEnabled(missing) error = %v, want ErrNotFound", err)
+	}
+	if err := service.Update(ctx, missing, keys.UpdateInput{Label: "ghost"}); !errors.Is(err, keys.ErrNotFound) {
+		t.Fatalf("Update(missing) error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestService_enforces_optional_rpm_and_daily_limits(t *testing.T) {
 	// Given
 	ctx := context.Background()

@@ -22,6 +22,7 @@ var migrations = []migration{
 	{version: 5, sql: ollamaAccountsSchema},
 	{version: 6, sql: egressProxiesSchema},
 	{version: 7, sql: zenKeyProviderSchema},
+	{version: 8, sql: zenKeyPrefixSchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -97,6 +98,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		tables = []string{"egress_proxies"}
 	case 7:
 		return validateZenKeyProviderColumn(ctx, tx)
+	case 8:
+		return validateZenKeyPrefixColumn(ctx, tx)
 	default:
 		return nil
 	}
@@ -128,6 +131,17 @@ func validateZenKeyProviderColumn(ctx context.Context, tx *sql.Tx) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("migration 7 missing provider column: %w", ErrMigrationState)
+	}
+	return nil
+}
+
+func validateZenKeyPrefixColumn(ctx context.Context, tx *sql.Tx) error {
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('zen_keys') WHERE name = ?", "key_prefix").Scan(&count); err != nil {
+		return fmt.Errorf("validate migration 8 key_prefix column: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("migration 8 missing key_prefix column: %w", ErrMigrationState)
 	}
 	return nil
 }

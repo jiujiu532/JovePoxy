@@ -9,6 +9,8 @@ var (
 	ErrInvalidInput = errors.New("invalid local API key input")
 	ErrUnauthorized = errors.New("local API key unauthorized")
 	ErrRateLimited  = errors.New("local API key rate limited")
+	// ErrNotFound is returned when a lifecycle mutation targets a missing key id.
+	ErrNotFound = errors.New("local API key not found")
 )
 
 type KeyID string

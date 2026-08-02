@@ -2,6 +2,7 @@ package zenpool_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -332,6 +333,108 @@ func (dialer *scriptedDialer) ChatCompletions(_ context.Context, _ zen.Auth, _ j
 	return result.response, result.err
 }
 
+
+func TestService_create_stores_key_prefix(t *testing.T) {
+	// Given
+	database, service := newPoolWithDB(t)
+	ctx := context.Background()
+	const secret = "super-secret-zen-key"
+
+	// When
+	created, err := service.Create(ctx, zenpool.CreateInput{Label: "main", Secret: secret})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Then — response prefix is masked, not the full secret
+	if created.Prefix == "" || created.Prefix == secret || strings.Contains(created.Prefix, secret[6:]) {
+		t.Fatalf("create prefix leaked or empty: %+v", created)
+	}
+	list, err := service.List(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].Prefix != created.Prefix {
+		t.Fatalf("list prefix = %+v, want %q", list, created.Prefix)
+	}
+	var stored string
+	if err := database.QueryRowContext(ctx, "SELECT key_prefix FROM zen_keys WHERE id = ?", string(created.ID)).Scan(&stored); err != nil {
+		t.Fatalf("read key_prefix: %v", err)
+	}
+	if stored != created.Prefix {
+		t.Fatalf("stored key_prefix = %q, want %q", stored, created.Prefix)
+	}
+}
+
+func TestService_acquire_skips_dirty_cooldown(t *testing.T) {
+	// Given two healthy keys; poison one cooldown_until so isCooling would error.
+	database, service := newPoolWithDB(t)
+	ctx := context.Background()
+	dirty, err := service.Create(ctx, zenpool.CreateInput{Label: "dirty", Secret: "secret-dirty"})
+	if err != nil {
+		t.Fatalf("create dirty: %v", err)
+	}
+	clean, err := service.Create(ctx, zenpool.CreateInput{Label: "clean", Secret: "secret-clean"})
+	if err != nil {
+		t.Fatalf("create clean: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, "UPDATE zen_keys SET cooldown_until = ? WHERE id = ?", "not-a-timestamp", string(dirty.ID)); err != nil {
+		t.Fatalf("poison cooldown: %v", err)
+	}
+
+	// When / Then — Acquire must not fail; only the clean key is selectable.
+	for range 6 {
+		selected, err := service.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("acquire with dirty cooldown: %v", err)
+		}
+		if selected.ID != clean.ID {
+			t.Fatalf("selected %s, want clean %s (dirty key must be skipped)", selected.ID, clean.ID)
+		}
+	}
+}
+
+func TestService_list_tolerates_bad_ciphertext(t *testing.T) {
+	// Given one good key and one row with unreadable ciphertext.
+	database, service := newPoolWithDB(t)
+	ctx := context.Background()
+	good, err := service.Create(ctx, zenpool.CreateInput{Label: "good", Secret: "secret-good-key"})
+	if err != nil {
+		t.Fatalf("create good: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+		INSERT INTO zen_keys (id, label, key_ciphertext, key_prefix, weight, enabled, cooldown_until, created_at, provider)
+		VALUES (?, ?, ?, ?, 1, 1, NULL, ?, ?)
+	`, "zk_badcipher", "bad", "not-valid-ciphertext", "badpre…", "2026-07-15T12:00:00Z", "opencode"); err != nil {
+		t.Fatalf("insert bad ciphertext row: %v", err)
+	}
+
+	// When
+	list, err := service.List(ctx)
+
+	// Then — whole list succeeds; good key intact; bad row degraded (prefix from column).
+	if err != nil {
+		t.Fatalf("list with bad ciphertext: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("list len = %d, want 2", len(list))
+	}
+	byID := map[zenpool.KeyID]zenpool.Metadata{}
+	for _, item := range list {
+		byID[item.ID] = item
+	}
+	if byID[good.ID].Prefix != good.Prefix || byID[good.ID].Label != "good" {
+		t.Fatalf("good key degraded: %+v", byID[good.ID])
+	}
+	bad := byID[zenpool.KeyID("zk_badcipher")]
+	if bad.Label != "bad" {
+		t.Fatalf("bad row missing: %+v", list)
+	}
+	if bad.Prefix != "badpre…" {
+		t.Fatalf("bad prefix = %q, want stored key_prefix", bad.Prefix)
+	}
+}
+
 func newPool(t *testing.T) *zenpool.Service {
 	t.Helper()
 	database, err := db.Open(context.Background(), t.TempDir())
@@ -344,6 +447,22 @@ func newPool(t *testing.T) *zenpool.Service {
 		t.Fatalf("box: %v", err)
 	}
 	return zenpool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
+}
+
+
+func newPoolWithDB(t *testing.T) (*sql.DB, *zenpool.Service) {
+	t.Helper()
+	database, err := db.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	box, err := crypto.NewBox(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	service := zenpool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
+	return database, service
 }
 
 // serviceClock is unused helper placeholder to keep test file free of reflection.

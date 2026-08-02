@@ -5,7 +5,7 @@ import {
   Lightning,
   Pulse,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import {
@@ -36,6 +36,7 @@ import {
   ApiError,
   type LogDTO,
   type OpsKPIsDTO,
+  type OpsWindow,
   type OverviewDTO,
   type UsageRecordDTO,
   type ZenPoolSummaryDTO,
@@ -156,6 +157,19 @@ function periodTokens(records: ReadonlyArray<UsageRecordDTO>, range: DateRangeVa
     sum += (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
   }
   return sum;
+}
+
+/**
+ * Map UI date range onto backend ops window when it roughly fits.
+ * Returns undefined for custom/longer ranges so we fall back to client logs.
+ */
+function opsWindowForRange(range: DateRangeValue): OpsWindow | undefined {
+  if (range.preset === "today") return "24h";
+  if (range.preset === "7d" || range.preset === "week") return "7d";
+  const days = rangeDayCount(range.from, range.to);
+  if (days <= 1) return "24h";
+  if (days <= 7) return "7d";
+  return undefined;
 }
 
 type ModelAnalytics = {
@@ -532,6 +546,8 @@ export function OverviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
+  /** Monotonic sequence so fast range changes drop stale responses. */
+  const loadSeqRef = useRef(0);
 
   const rangeText = useMemo(() => rangeLabel(dateRange, t), [dateRange, t]);
   const rangePickerLabels = useMemo(
@@ -560,7 +576,14 @@ export function OverviewPage() {
     [analytics.bucketKind, t],
   );
 
-  const opsKpis = useMemo(() => buildOpsFromLogs(logs, dateRange), [logs, dateRange]);
+  // Prefer backend ops_kpis when we requested a matching ops window; else derive from logs.
+  const opsKpis = useMemo(() => {
+    const requested = opsWindowForRange(dateRange);
+    if (requested && data?.ops_kpis) {
+      return data.ops_kpis;
+    }
+    return buildOpsFromLogs(logs, dateRange);
+  }, [data, logs, dateRange]);
 
   const periodRequestCount = useMemo(
     () => filterLogs(logs, dateRange).length,
@@ -574,10 +597,13 @@ export function OverviewPage() {
   const rangeFromIso = dateRange.from.toISOString();
   const rangeToIso = dateRange.to.toISOString();
 
-  async function load(opts?: { soft?: boolean }) {
+  async function load(opts?: { soft?: boolean; seq?: number }) {
+    const seq = opts?.seq ?? ++loadSeqRef.current;
     if (!opts?.soft) setLoading(true);
     try {
-      const overview = await api.overview();
+      const opsWindow = opsWindowForRange(dateRange);
+      const overview = await api.overview(opsWindow);
+      if (seq !== loadSeqRef.current) return;
       setData(overview);
       setError(null);
 
@@ -587,12 +613,14 @@ export function OverviewPage() {
         api.logs({ limit: LOG_FETCH_LIMIT, from, to }),
         api.usage({ limit: USAGE_FETCH_LIMIT, from, to }),
       ]);
+      if (seq !== loadSeqRef.current) return;
       const logsRes = settled[0]?.status === "fulfilled" ? settled[0].value : null;
       const usageRes = settled[1]?.status === "fulfilled" ? settled[1].value : null;
       setLogs(logsRes?.logs ?? []);
       setUsage(usageRes?.records ?? []);
       setDataTruncated(Boolean(logsRes?.truncated || usageRes?.truncated));
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       if (err instanceof ApiError && err.status === 401) {
         setSessionHint(false);
         void navigate("/login");
@@ -600,13 +628,16 @@ export function OverviewPage() {
       }
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
+    const seq = ++loadSeqRef.current;
     // Soft re-fetch when range changes so the page does not flash full skeleton.
-    void load({ soft: data != null });
+    void load({ soft: data != null, seq });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load closes over latest range via deps
   }, [navigate, rangeFromIso, rangeToIso]);
 
