@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -35,7 +36,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 	if !writeStreamHeaders(writer) {
 		return
 	}
-	state := streamState{messageID: messageID, model: model, inputTokens: inputTokens, toolIdx: -1}
+	state := streamState{messageID: messageID, model: model, inputTokens: inputTokens}
 	if !state.emitMessageStart(writer) {
 		return
 	}
@@ -76,14 +77,27 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 	}
 }
 
+// streamState tracks open content blocks and allocates Anthropic content indexes.
+// thinking occupies an index when present; text/tool indexes follow via nextBlock.
 type streamState struct {
 	messageID    string
 	model        string
 	inputTokens  int
 	outputTokens int
-	contentIdx   int
-	toolIdx      int
 	finished     bool
+
+	thinkingOpen  bool
+	thinkingIndex int
+
+	textOpen  bool
+	textIndex int
+
+	nextBlock int
+
+	// openai tool call index -> anthropic content block index
+	toolBlocks map[int]int
+	// anthropic content block index still open (tool_use)
+	toolOpen map[int]bool
 }
 
 func (state *streamState) emitMessageStart(writer http.ResponseWriter) bool {
@@ -122,6 +136,9 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 		return true
 	}
 	choice := parsed.Choices[0]
+	if !state.emitReasoning(writer, choice.Delta.reasoningText()) {
+		return false
+	}
 	if !state.emitText(writer, choice.Delta.Content) {
 		return false
 	}
@@ -136,12 +153,23 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 
 type openAIStreamChunk struct {
 	Choices []struct {
-		Delta struct {
-			Content   string            `json:"content"`
-			ToolCalls []openAIStreamTool `json:"tool_calls"`
-		} `json:"delta"`
-		FinishReason string `json:"finish_reason"`
+		Delta        openAIStreamDelta `json:"delta"`
+		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
+}
+
+type openAIStreamDelta struct {
+	Content          string             `json:"content"`
+	ReasoningContent string             `json:"reasoning_content"`
+	Reasoning        string             `json:"reasoning"`
+	ToolCalls        []openAIStreamTool `json:"tool_calls"`
+}
+
+func (d openAIStreamDelta) reasoningText() string {
+	if d.ReasoningContent != "" {
+		return d.ReasoningContent
+	}
+	return d.Reasoning
 }
 
 type openAIStreamTool struct {
@@ -153,21 +181,59 @@ type openAIStreamTool struct {
 	} `json:"function"`
 }
 
+func (state *streamState) emitReasoning(writer http.ResponseWriter, text string) bool {
+	if text == "" {
+		return true
+	}
+	if !state.thinkingOpen {
+		// Prefer thinking before text/tool. If text already started, close it first
+		// (rare interleave); drop late reasoning once tools have started.
+		if len(state.toolBlocks) > 0 {
+			return true
+		}
+		if !state.closeText(writer) {
+			return false
+		}
+		state.thinkingIndex = state.nextBlock
+		state.nextBlock++
+		if !writeSSE(writer, "content_block_start", map[string]any{
+			"type": "content_block_start", "index": state.thinkingIndex,
+			"content_block": map[string]any{"type": "thinking", "thinking": ""},
+		}) {
+			return false
+		}
+		state.thinkingOpen = true
+	}
+	if !writeSSE(writer, "content_block_delta", map[string]any{
+		"type": "content_block_delta", "index": state.thinkingIndex,
+		"delta": map[string]any{"type": "thinking_delta", "thinking": text},
+	}) {
+		return false
+	}
+	state.outputTokens += (len(text) + 3) / 4
+	return true
+}
+
 func (state *streamState) emitText(writer http.ResponseWriter, content string) bool {
 	if content == "" {
 		return true
 	}
-	if state.contentIdx == 0 && state.toolIdx == -1 {
+	if !state.textOpen {
+		if !state.closeThinking(writer) {
+			return false
+		}
+		state.textIndex = state.nextBlock
+		state.nextBlock++
 		if !writeSSE(writer, "content_block_start", map[string]any{
-			"type": "content_block_start", "index": 0,
+			"type": "content_block_start", "index": state.textIndex,
 			"content_block": map[string]any{"type": "text", "text": ""},
 		}) {
 			return false
 		}
-		state.contentIdx = 1
+		state.textOpen = true
 	}
 	if !writeSSE(writer, "content_block_delta", map[string]any{
-		"type": "content_block_delta", "index": 0,
+		"type": "content_block_delta", "index": state.textIndex,
 		"delta": map[string]any{"type": "text_delta", "text": content},
 	}) {
 		return false
@@ -178,15 +244,25 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 
 func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []openAIStreamTool) bool {
 	for _, toolCall := range toolCalls {
-		idx := toolCall.Index
-		if idx > state.toolIdx {
-			if state.toolIdx == -1 && state.contentIdx > 0 {
-				if !writeSSE(writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": 0}) {
-					return false
-				}
+		blockIdx, exists := state.toolBlocks[toolCall.Index]
+		if !exists {
+			if !state.closeThinking(writer) {
+				return false
 			}
-			state.toolIdx = idx
-			blockIdx := state.toolBlockIndex(idx)
+			if !state.closeText(writer) {
+				return false
+			}
+			if state.toolBlocks == nil {
+				state.toolBlocks = make(map[int]int)
+			}
+			if state.toolOpen == nil {
+				state.toolOpen = make(map[int]bool)
+			}
+			blockIdx = state.nextBlock
+			state.nextBlock++
+			state.toolBlocks[toolCall.Index] = blockIdx
+			state.toolOpen[blockIdx] = true
+
 			toolID := toolCall.ID
 			if toolID == "" {
 				var err error
@@ -204,7 +280,7 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 		}
 		if toolCall.Function.Arguments != "" {
 			if !writeSSE(writer, "content_block_delta", map[string]any{
-				"type": "content_block_delta", "index": state.toolBlockIndex(toolCall.Index),
+				"type": "content_block_delta", "index": blockIdx,
 				"delta": map[string]any{"type": "input_json_delta", "partial_json": toolCall.Function.Arguments},
 			}) {
 				return false
@@ -215,11 +291,52 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 	return true
 }
 
-func (state *streamState) toolBlockIndex(idx int) int {
-	if state.contentIdx > 0 {
-		return idx + 1
+func (state *streamState) closeThinking(writer http.ResponseWriter) bool {
+	if !state.thinkingOpen {
+		return true
 	}
-	return idx
+	if !writeSSE(writer, "content_block_stop", map[string]any{
+		"type": "content_block_stop", "index": state.thinkingIndex,
+	}) {
+		return false
+	}
+	state.thinkingOpen = false
+	return true
+}
+
+func (state *streamState) closeText(writer http.ResponseWriter) bool {
+	if !state.textOpen {
+		return true
+	}
+	if !writeSSE(writer, "content_block_stop", map[string]any{
+		"type": "content_block_stop", "index": state.textIndex,
+	}) {
+		return false
+	}
+	state.textOpen = false
+	return true
+}
+
+func (state *streamState) closeOpenTools(writer http.ResponseWriter) bool {
+	if len(state.toolOpen) == 0 {
+		return true
+	}
+	indexes := make([]int, 0, len(state.toolOpen))
+	for idx, open := range state.toolOpen {
+		if open {
+			indexes = append(indexes, idx)
+		}
+	}
+	sort.Ints(indexes)
+	for _, idx := range indexes {
+		if !writeSSE(writer, "content_block_stop", map[string]any{
+			"type": "content_block_stop", "index": idx,
+		}) {
+			return false
+		}
+		delete(state.toolOpen, idx)
+	}
+	return true
 }
 
 func (state *streamState) finishIfNeeded(writer http.ResponseWriter) {
@@ -233,20 +350,17 @@ func (state *streamState) finish(writer http.ResponseWriter, finishReason string
 		return true
 	}
 	state.finished = true
-	totalBlocks := 0
-	if state.contentIdx > 0 {
-		totalBlocks++
+	if !state.closeThinking(writer) {
+		return false
 	}
-	if state.toolIdx >= 0 {
-		totalBlocks += state.toolIdx + 1
+	if !state.closeText(writer) {
+		return false
 	}
-	for index := 0; index < totalBlocks; index++ {
-		if !writeSSE(writer, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index}) {
-			return false
-		}
+	if !state.closeOpenTools(writer) {
+		return false
 	}
 	if !writeSSE(writer, "message_delta", map[string]any{
-		"type": "message_delta",
+		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": mapStopReason(finishReason)},
 		"usage": map[string]int{"output_tokens": state.outputTokens},
 	}) {

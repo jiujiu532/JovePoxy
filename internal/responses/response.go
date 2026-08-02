@@ -17,8 +17,9 @@ type chatChoice struct {
 }
 
 type chatRespMessage struct {
-	Content   string         `json:"content"`
-	ToolCalls []chatToolCall `json:"tool_calls"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content"`
+	ToolCalls        []chatToolCall `json:"tool_calls"`
 }
 
 type chatToolCall struct {
@@ -58,10 +59,23 @@ func FromOpenAI(body []byte, model string) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	output := make([]map[string]any, 0, 2)
+	output := make([]map[string]any, 0, 3)
 	outputText := ""
 	if len(parsed.Choices) > 0 && parsed.Choices[0].Message != nil {
 		message := parsed.Choices[0].Message
+		// reasoning 优先于 message / function_call，便于 Codex 展示思考过程
+		if message.ReasoningContent != "" {
+			reasoningID, idErr := NewReasoningID()
+			if idErr != nil {
+				return Response{}, idErr
+			}
+			output = append(output, map[string]any{
+				"id": reasoningID, "type": "reasoning", "status": "completed",
+				"summary": []map[string]any{{
+					"type": "summary_text", "text": message.ReasoningContent,
+				}},
+			})
+		}
 		if message.Content != "" {
 			messageID, idErr := NewMessageID()
 			if idErr != nil {

@@ -28,3 +28,6 @@ func NewFunctionCallID() (string, error) { return newID("fc_") }
 
 // NewCallID returns a tool call_id (call_...).
 func NewCallID() (string, error) { return newID("call_") }
+
+// NewReasoningID returns a reasoning output item id (rs_...).
+func NewReasoningID() (string, error) { return newID("rs_") }

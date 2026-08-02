@@ -11,13 +11,14 @@ type openAIResponse struct {
 }
 
 type openAIChoice struct {
-	FinishReason string        `json:"finish_reason"`
+	FinishReason string         `json:"finish_reason"`
 	Message      *openAIMessage `json:"message"`
 }
 
 type openAIMessage struct {
-	Content   string          `json:"content"`
-	ToolCalls []openAIToolCall `json:"tool_calls"`
+	Content          string           `json:"content"`
+	ReasoningContent string           `json:"reasoning_content"`
+	ToolCalls        []openAIToolCall `json:"tool_calls"`
 }
 
 type openAIToolCall struct {
@@ -59,12 +60,17 @@ func FromOpenAI(body []byte, model string, inputTokens int) (Message, error) {
 		return Message{
 			ID: messageID, Type: "message", Role: "assistant",
 			Content: []map[string]any{{"type": "text", "text": ""}},
-			Model: model, StopReason: "end_turn",
+			Model:   model, StopReason: "end_turn",
 			Usage: usageMap(inputTokens, 0, response.Usage),
 		}, nil
 	}
 	choice := response.Choices[0]
-	content := make([]map[string]any, 0, 1+len(choice.Message.ToolCalls))
+	content := make([]map[string]any, 0, 2+len(choice.Message.ToolCalls))
+	if choice.Message.ReasoningContent != "" {
+		content = append(content, map[string]any{
+			"type": "thinking", "thinking": choice.Message.ReasoningContent,
+		})
+	}
 	if choice.Message.Content != "" {
 		content = append(content, map[string]any{"type": "text", "text": choice.Message.Content})
 	}

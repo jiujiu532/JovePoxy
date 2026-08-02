@@ -85,21 +85,25 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 }
 
 type streamState struct {
-	responseID  string
-	model       string
-	createdAt   int64
-	sequence    int
-	outputIdx   int
-	messageID   string
-	messageOpen bool
-	textBuffer  strings.Builder
-	toolIdx     int
-	toolItemID  string
-	toolCallID  string
-	toolName    string
-	toolArgs    strings.Builder
-	outputItems []map[string]any
-	finished    bool
+	responseID     string
+	model          string
+	createdAt      int64
+	sequence       int
+	outputIdx      int
+	messageID      string
+	messageOpen    bool
+	textBuffer     strings.Builder
+	toolIdx        int
+	toolItemID     string
+	toolCallID     string
+	toolName       string
+	toolArgs       strings.Builder
+	reasoningOpen  bool
+	reasoningID    string
+	reasoningIndex int
+	reasoningBuf   strings.Builder
+	outputItems    []map[string]any
+	finished       bool
 }
 
 func (state *streamState) next() int {
@@ -143,8 +147,10 @@ func (state *streamState) consumeEvent(writer http.ResponseWriter, event []byte)
 type chatStreamChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content   string           `json:"content"`
-			ToolCalls []chatStreamTool `json:"tool_calls"`
+			Content          string           `json:"content"`
+			ReasoningContent string           `json:"reasoning_content"`
+			Reasoning        string           `json:"reasoning"`
+			ToolCalls        []chatStreamTool `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -172,6 +178,16 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 		return true
 	}
 	choice := parsed.Choices[0]
+	// reasoning 优先；切入 text/tool 前会 closeReasoning
+	reasoning := choice.Delta.ReasoningContent
+	if reasoning == "" {
+		reasoning = choice.Delta.Reasoning
+	}
+	if reasoning != "" {
+		if !state.emitReasoning(writer, reasoning) {
+			return false
+		}
+	}
 	if choice.Delta.Content != "" {
 		if !state.emitText(writer, choice.Delta.Content) {
 			return false
@@ -188,7 +204,93 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 	return true
 }
 
+func (state *streamState) emitReasoning(writer http.ResponseWriter, delta string) bool {
+	if delta == "" {
+		return true
+	}
+	if !state.reasoningOpen {
+		// Prefer reasoning before message/tool. Drop late reasoning once tools started
+		// so output_index stays exclusive (matches anthropic stream policy).
+		if state.toolIdx >= 0 || state.toolItemID != "" {
+			return true
+		}
+		// Rare interleave: text already streaming — close message first.
+		if !state.closeMessage(writer) {
+			return false
+		}
+		reasoningID, err := NewReasoningID()
+		if err != nil {
+			return false
+		}
+		state.reasoningID = reasoningID
+		state.reasoningIndex = state.outputIdx
+		state.reasoningOpen = true
+		if !writeSSE(writer, "response.output_item.added", map[string]any{
+			"type": "response.output_item.added", "sequence_number": state.next(),
+			"output_index": state.reasoningIndex,
+			"item": map[string]any{
+				"id": reasoningID, "type": "reasoning", "status": "in_progress", "summary": []any{},
+			},
+		}) {
+			return false
+		}
+		if !writeSSE(writer, "response.reasoning_summary_part.added", map[string]any{
+			"type": "response.reasoning_summary_part.added", "sequence_number": state.next(),
+			"item_id": reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
+			"part": map[string]any{"type": "summary_text", "text": ""},
+		}) {
+			return false
+		}
+	}
+	state.reasoningBuf.WriteString(delta)
+	return writeSSE(writer, "response.reasoning_summary_text.delta", map[string]any{
+		"type": "response.reasoning_summary_text.delta", "sequence_number": state.next(),
+		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
+		"delta": delta,
+	})
+}
+
+func (state *streamState) closeReasoning(writer http.ResponseWriter) bool {
+	if !state.reasoningOpen {
+		return true
+	}
+	text := state.reasoningBuf.String()
+	if !writeSSE(writer, "response.reasoning_summary_text.done", map[string]any{
+		"type": "response.reasoning_summary_text.done", "sequence_number": state.next(),
+		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
+		"text": text,
+	}) {
+		return false
+	}
+	if !writeSSE(writer, "response.reasoning_summary_part.done", map[string]any{
+		"type": "response.reasoning_summary_part.done", "sequence_number": state.next(),
+		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
+		"part": map[string]any{"type": "summary_text", "text": text},
+	}) {
+		return false
+	}
+	item := map[string]any{
+		"id": state.reasoningID, "type": "reasoning", "status": "completed",
+		"summary": []map[string]any{{"type": "summary_text", "text": text}},
+	}
+	if !writeSSE(writer, "response.output_item.done", map[string]any{
+		"type": "response.output_item.done", "sequence_number": state.next(),
+		"output_index": state.reasoningIndex, "item": item,
+	}) {
+		return false
+	}
+	state.outputItems = append(state.outputItems, item)
+	state.reasoningOpen = false
+	state.reasoningID = ""
+	state.reasoningBuf.Reset()
+	state.outputIdx++
+	return true
+}
+
 func (state *streamState) emitText(writer http.ResponseWriter, content string) bool {
+	if !state.closeReasoning(writer) {
+		return false
+	}
 	if !state.messageOpen {
 		messageID, err := NewMessageID()
 		if err != nil {
@@ -260,7 +362,10 @@ func (state *streamState) closeMessage(writer http.ResponseWriter) bool {
 func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []chatStreamTool) bool {
 	for _, toolCall := range toolCalls {
 		if toolCall.Index > state.toolIdx {
-			// 新的 function_call item：先收尾文本 message 与上一个工具
+			// 新的 function_call item：先收尾 reasoning / 文本 message 与上一个工具
+			if !state.closeReasoning(writer) {
+				return false
+			}
 			if !state.closeMessage(writer) {
 				return false
 			}
@@ -343,6 +448,9 @@ func (state *streamState) finishIfNeeded(writer http.ResponseWriter) {
 func (state *streamState) finish(writer http.ResponseWriter) bool {
 	if state.finished {
 		return true
+	}
+	if !state.closeReasoning(writer) {
+		return false
 	}
 	if !state.closeMessage(writer) {
 		return false
