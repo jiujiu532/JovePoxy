@@ -405,17 +405,16 @@ function ZenPoolStrip({
   readonly t: Translate;
   readonly onOpen: () => void;
 }) {
+  // Always render: empty pool still fills the right column so the health row stays balanced.
   const total = pool?.total ?? 0;
-  if (total === 0) return null;
-
   const healthy = pool?.healthy ?? 0;
   const cooled = pool?.cooled ?? 0;
   const disabled = pool?.disabled ?? 0;
   const benched = pool?.benched ?? 0;
   const abnormal = cooled + benched + disabled;
   const by = pool?.by_provider;
-  const oc = by?.["opencode"];
-  const ol = by?.["ollama"];
+  const oc = by?.["opencode"] ?? { total: 0, healthy: 0, enabled: 0, cooled: 0, disabled: 0 };
+  const ol = by?.["ollama"] ?? { total: 0, healthy: 0, enabled: 0, cooled: 0, disabled: 0 };
 
   return (
     <SectionPanel
@@ -430,11 +429,10 @@ function ZenPoolStrip({
       }
     >
       <div className="flex flex-col gap-3.5">
-        {/* Top Summary Rail */}
         <div className="grid grid-cols-3 gap-2">
           <div className="border-2 border-border bg-paper-2 p-2 shadow-[2px_2px_0_var(--border)]">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-              总密钥数
+              {t("overview.zenPool.totalKeys")}
             </p>
             <p className="mt-0.5 font-mono text-[1.3rem] font-extrabold tabular-nums leading-none text-ink">
               {total}
@@ -452,7 +450,7 @@ function ZenPoolStrip({
 
           <div className="border-2 border-border bg-paper-2 p-2 shadow-[2px_2px_0_var(--border)]">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-              受限/异状
+              {t("overview.zenPool.abnormal")}
             </p>
             <p
               className={cn(
@@ -465,9 +463,9 @@ function ZenPoolStrip({
           </div>
         </div>
 
-        {/* Status Stack Bar */}
         <StatusStackBar
           ariaLabel={t("overview.zenPool.title")}
+          emptyLabel={t("overview.zenPool.empty")}
           segments={[
             {
               label: t("overview.zenPool.healthy"),
@@ -492,40 +490,33 @@ function ZenPoolStrip({
           ]}
         />
 
-        {/* Channel Provider Badges */}
-        {oc || ol ? (
-          <div className="flex flex-wrap items-center gap-2 border-t-2 border-border/20 pt-2.5 font-mono text-[11px]">
-            <span className="font-bold text-ink-muted">渠道可用性:</span>
-            {oc ? (
-              <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    oc.healthy > 0 ? "bg-accent-teal" : "bg-accent-coral",
-                  )}
-                />
-                <span className="font-semibold">{t("overview.zenPool.opencode")}</span>
-                <span className="font-bold tabular-nums">
-                  {oc.healthy}/{oc.total}
-                </span>
-              </span>
-            ) : null}
-            {ol ? (
-              <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    ol.healthy > 0 ? "bg-accent-teal" : "bg-accent-coral",
-                  )}
-                />
-                <span className="font-semibold">{t("overview.zenPool.ollama")}</span>
-                <span className="font-bold tabular-nums">
-                  {ol.healthy}/{ol.total}
-                </span>
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2 border-t-2 border-border/20 pt-2.5 font-mono text-[11px]">
+          <span className="font-bold text-ink-muted">{t("overview.zenPool.channelAvailability")}</span>
+          <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full",
+                oc.healthy > 0 ? "bg-accent-teal" : "bg-ink-faint",
+              )}
+            />
+            <span className="font-semibold">{t("overview.zenPool.opencode")}</span>
+            <span className="font-bold tabular-nums">
+              {oc.healthy}/{oc.total}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 border-2 border-border bg-paper-2 px-2 py-0.5 shadow-[1px_1px_0_var(--border)]">
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full",
+                ol.healthy > 0 ? "bg-accent-teal" : "bg-ink-faint",
+              )}
+            />
+            <span className="font-semibold">{t("overview.zenPool.ollama")}</span>
+            <span className="font-bold tabular-nums">
+              {ol.healthy}/{ol.total}
+            </span>
+          </span>
+        </div>
       </div>
     </SectionPanel>
   );

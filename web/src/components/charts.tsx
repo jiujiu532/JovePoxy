@@ -236,15 +236,18 @@ export type StackSegment = {
   readonly color: string;
 };
 
-/** 横向分段条：状态分布（2xx / 429 / 4xx / 5xx）。 */
+/** 横向分段条：状态分布（2xx / 429 / 4xx / 5xx）或密钥池健康分段。 */
 export function StatusStackBar({
   segments,
   className,
   ariaLabel,
+  emptyLabel,
 }: {
   readonly segments: ReadonlyArray<StackSegment>;
   readonly className?: string;
   readonly ariaLabel: string;
+  /** total=0 时条内文案；默认 charts.noRequests */
+  readonly emptyLabel?: string;
 }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   const { t } = useI18n();
@@ -254,7 +257,7 @@ export function StatusStackBar({
       <div className="flex h-6 w-full overflow-hidden border-2 border-border bg-paper-2">
         {total === 0 ? (
           <div className="flex w-full items-center justify-center text-[11px] text-ink-faint">
-            {t("charts.noRequests")}
+            {emptyLabel ?? t("charts.noRequests")}
           </div>
         ) : (
           segments
