@@ -7,16 +7,21 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"jovepoxy/internal/effort"
 )
 
 // Request is a parsed OpenAI Responses API request.
 type Request struct {
-	Model           string
-	Stream          bool
-	MaxOutputTokens int
-	Instructions    string
-	Input           json.RawMessage
-	Tools           []json.RawMessage
+	Model             string
+	Stream            bool
+	MaxOutputTokens   int
+	Instructions      string
+	Input             json.RawMessage
+	Tools             []json.RawMessage
+	ReasoningEffort   string
+	ToolChoice        json.RawMessage
+	ParallelToolCalls *bool
 }
 
 // ParseRequest decodes and lightly validates a /v1/responses body.
@@ -28,6 +33,12 @@ func ParseRequest(body []byte) (Request, error) {
 		Instructions    string            `json:"instructions"`
 		Input           json.RawMessage   `json:"input"`
 		Tools           []json.RawMessage `json:"tools"`
+		Reasoning       *struct {
+			Effort string `json:"effort"`
+		} `json:"reasoning"`
+		ReasoningEffort   string          `json:"reasoning_effort"`
+		ToolChoice        json.RawMessage `json:"tool_choice"`
+		ParallelToolCalls *bool           `json:"parallel_tool_calls"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(&raw); err != nil {
@@ -45,25 +56,57 @@ func ParseRequest(body []byte) (Request, error) {
 	if len(bytes.TrimSpace(raw.Input)) == 0 && strings.TrimSpace(raw.Instructions) == "" {
 		return Request{}, fmt.Errorf("input is required")
 	}
+
+	// Prefer nested reasoning.effort; fall back to top-level reasoning_effort.
+	reasoningEffort := ""
+	if raw.Reasoning != nil {
+		reasoningEffort = raw.Reasoning.Effort
+	}
+	if strings.TrimSpace(reasoningEffort) == "" {
+		reasoningEffort = raw.ReasoningEffort
+	}
+
+	toolChoice := normalizeRawJSON(raw.ToolChoice)
+
 	return Request{
-		Model: raw.Model, Stream: raw.Stream, MaxOutputTokens: raw.MaxOutputTokens,
-		Instructions: raw.Instructions, Input: raw.Input, Tools: raw.Tools,
+		Model:             raw.Model,
+		Stream:            raw.Stream,
+		MaxOutputTokens:   raw.MaxOutputTokens,
+		Instructions:      raw.Instructions,
+		Input:             raw.Input,
+		Tools:             raw.Tools,
+		ReasoningEffort:   reasoningEffort,
+		ToolChoice:        toolChoice,
+		ParallelToolCalls: raw.ParallelToolCalls,
 	}, nil
 }
 
+// normalizeRawJSON returns nil for empty / null JSON so omitempty works.
+func normalizeRawJSON(raw json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	return trimmed
+}
+
 type chatMessage struct {
-	Role       string           `json:"role"`
-	Content    any              `json:"content"`
-	ToolCalls  []map[string]any `json:"tool_calls,omitempty"`
-	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          any              `json:"content"`
+	ToolCalls        []map[string]any `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
 }
 
 type chatRequest struct {
-	Model     string           `json:"model"`
-	Messages  []chatMessage    `json:"messages"`
-	Stream    bool             `json:"stream"`
-	MaxTokens int              `json:"max_tokens,omitempty"`
-	Tools     []map[string]any `json:"tools,omitempty"`
+	Model             string           `json:"model"`
+	Messages          []chatMessage    `json:"messages"`
+	Stream            bool             `json:"stream"`
+	MaxTokens         int              `json:"max_tokens,omitempty"`
+	Tools             []map[string]any `json:"tools,omitempty"`
+	ReasoningEffort   string           `json:"reasoning_effort,omitempty"`
+	ToolChoice        json.RawMessage  `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
 }
 
 // ToOpenAIChat converts a Responses request into a chat.completions body.
@@ -77,8 +120,14 @@ func ToOpenAIChat(request Request) ([]byte, error) {
 		return nil, err
 	}
 	payload := chatRequest{
-		Model: request.Model, Messages: messages, Stream: request.Stream,
-		MaxTokens: request.MaxOutputTokens, Tools: tools,
+		Model:             request.Model,
+		Messages:          messages,
+		Stream:            request.Stream,
+		MaxTokens:         request.MaxOutputTokens,
+		Tools:             tools,
+		ReasoningEffort:   effort.NormalizeLevel(request.ReasoningEffort),
+		ToolChoice:        request.ToolChoice,
+		ParallelToolCalls: request.ParallelToolCalls,
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -112,15 +161,151 @@ func convertInput(request Request) ([]chatMessage, error) {
 	if err := json.Unmarshal(input, &items); err != nil {
 		return nil, fmt.Errorf("invalid input")
 	}
-	for _, item := range items {
-		converted, err := convertItem(item)
-		if err != nil {
-			return nil, err
+
+	pendingReasoning := ""
+	awaitingToolOutputs := make(map[string]struct{})
+	deferred := make([]chatMessage, 0)
+	var pendingToolCalls []map[string]any
+	var pendingToolCallIDs []string
+
+	appendMessage := func(msg chatMessage) {
+		messages = append(messages, msg)
+	}
+	takePendingReasoning := func() string {
+		r := pendingReasoning
+		pendingReasoning = ""
+		return r
+	}
+	flushPendingToolCalls := func() {
+		if len(pendingToolCalls) == 0 {
+			return
 		}
-		if converted != nil {
-			messages = append(messages, *converted)
+		msg := chatMessage{
+			Role:      "assistant",
+			Content:   "",
+			ToolCalls: pendingToolCalls,
+		}
+		if r := takePendingReasoning(); r != "" {
+			msg.ReasoningContent = r
+		}
+		appendMessage(msg)
+		for _, id := range pendingToolCallIDs {
+			if strings.TrimSpace(id) == "" {
+				continue
+			}
+			awaitingToolOutputs[id] = struct{}{}
+		}
+		pendingToolCalls = nil
+		pendingToolCallIDs = nil
+	}
+	flushDeferred := func() {
+		for _, msg := range deferred {
+			appendMessage(msg)
+		}
+		deferred = deferred[:0]
+	}
+	// Keep tool-call adjacency: assistant(tool_calls) → tool messages with no
+	// other roles interleaved while outputs are still outstanding.
+	appendRegular := func(msg chatMessage) {
+		if len(awaitingToolOutputs) > 0 {
+			deferred = append(deferred, msg)
+			return
+		}
+		appendMessage(msg)
+	}
+	appendPendingReasoning := func(text string) {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return
+		}
+		if pendingReasoning == "" {
+			pendingReasoning = text
+			return
+		}
+		pendingReasoning += "\n" + text
+	}
+
+	for _, raw := range items {
+		var item inputItem
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return nil, fmt.Errorf("invalid input item")
+		}
+		// 缺省 type：带 role 视作 message
+		kind := item.Type
+		if kind == "" && item.Role != "" {
+			kind = "message"
+		}
+
+		// Buffer consecutive function_calls; flush before any other item type.
+		if kind != "function_call" {
+			flushPendingToolCalls()
+		}
+
+		switch kind {
+		case "message":
+			content, err := flattenContent(item.Content)
+			if err != nil {
+				return nil, err
+			}
+			role := item.Role
+			if role == "" {
+				role = "user"
+			}
+			if role == "developer" {
+				role = "system"
+			}
+			msg := chatMessage{Role: role, Content: content}
+			if role == "assistant" {
+				if r := takePendingReasoning(); r != "" {
+					msg.ReasoningContent = r
+				}
+			}
+			appendRegular(msg)
+
+		case "reasoning":
+			// Accumulate for the next assistant (message or merged function_call batch).
+			appendPendingReasoning(extractReasoningText(item))
+
+		case "function_call":
+			call := map[string]any{
+				"id":   item.CallID,
+				"type": "function",
+				"function": map[string]any{
+					"name":      item.Name,
+					"arguments": item.Arguments,
+				},
+			}
+			pendingToolCalls = append(pendingToolCalls, call)
+			pendingToolCallIDs = append(pendingToolCallIDs, item.CallID)
+
+		case "function_call_output":
+			output := strings.TrimSpace(string(item.Output))
+			if len(output) > 1 && output[0] == '"' {
+				var text string
+				if err := json.Unmarshal(item.Output, &text); err == nil {
+					output = text
+				}
+			}
+			appendMessage(chatMessage{Role: "tool", Content: output, ToolCallID: item.CallID})
+			if callID := strings.TrimSpace(item.CallID); callID != "" {
+				delete(awaitingToolOutputs, callID)
+			}
+			if len(awaitingToolOutputs) == 0 && len(deferred) > 0 {
+				flushDeferred()
+			}
+
+		default:
+			return nil, fmt.Errorf("unsupported input item type: %s", kind)
 		}
 	}
+
+	flushPendingToolCalls()
+	// Orphan reasoning with no following assistant: emit as empty-content assistant
+	// only when there is text (omit key entirely if empty — already handled).
+	if r := takePendingReasoning(); r != "" {
+		appendRegular(chatMessage{Role: "assistant", Content: "", ReasoningContent: r})
+	}
+	flushDeferred()
 	return messages, nil
 }
 
@@ -128,61 +313,50 @@ type inputItem struct {
 	Type      string          `json:"type"`
 	Role      string          `json:"role"`
 	Content   json.RawMessage `json:"content"`
+	Summary   json.RawMessage `json:"summary"`
 	CallID    string          `json:"call_id"`
 	Name      string          `json:"name"`
 	Arguments string          `json:"arguments"`
 	Output    json.RawMessage `json:"output"`
 }
 
-func convertItem(raw json.RawMessage) (*chatMessage, error) {
-	var item inputItem
-	if err := json.Unmarshal(raw, &item); err != nil {
-		return nil, fmt.Errorf("invalid input item")
-	}
-	// 缺省 type：带 role 视作 message
-	kind := item.Type
-	if kind == "" && item.Role != "" {
-		kind = "message"
-	}
-	switch kind {
-	case "message":
-		content, err := flattenContent(item.Content)
-		if err != nil {
-			return nil, err
+// extractReasoningText collects text from reasoning item summary/content parts.
+// Unknown part types are skipped (no error) so cold fields do not break conversion.
+// Empty result means the caller should omit reasoning_content.
+func extractReasoningText(item inputItem) string {
+	var builder strings.Builder
+	appendField := func(raw json.RawMessage) {
+		trimmed := bytes.TrimSpace(raw)
+		if len(trimmed) == 0 {
+			return
 		}
-		role := item.Role
-		if role == "" {
-			role = "user"
-		}
-		if role == "developer" {
-			role = "system"
-		}
-		return &chatMessage{Role: role, Content: content}, nil
-	case "function_call":
-		call := map[string]any{
-			"id":   item.CallID,
-			"type": "function",
-			"function": map[string]any{
-				"name":      item.Name,
-				"arguments": item.Arguments,
-			},
-		}
-		return &chatMessage{Role: "assistant", Content: "", ToolCalls: []map[string]any{call}}, nil
-	case "function_call_output":
-		output := strings.TrimSpace(string(item.Output))
-		if len(output) > 1 && output[0] == '"' {
+		if trimmed[0] == '"' {
 			var text string
-			if err := json.Unmarshal(item.Output, &text); err == nil {
-				output = text
+			if err := json.Unmarshal(trimmed, &text); err == nil {
+				builder.WriteString(text)
+			}
+			return
+		}
+		if trimmed[0] != '[' {
+			return
+		}
+		var parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(trimmed, &parts); err != nil {
+			return
+		}
+		for _, part := range parts {
+			switch part.Type {
+			case "input_text", "output_text", "text", "summary_text", "":
+				builder.WriteString(part.Text)
 			}
 		}
-		return &chatMessage{Role: "tool", Content: output, ToolCallID: item.CallID}, nil
-	case "reasoning":
-		// 推理 item 上游不需要，静默跳过
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("unsupported input item type: %s", kind)
 	}
+	appendField(item.Summary)
+	appendField(item.Content)
+	return builder.String()
 }
 
 // flattenContent 把 Responses 的 content（字符串或 parts 数组）拍平成纯文本。
