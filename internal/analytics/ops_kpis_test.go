@@ -78,7 +78,7 @@ func TestAggregateOpsKPIs_mixed_and_window_filter(t *testing.T) {
 	if kpis.Requests != 4 {
 		t.Fatalf("requests = %d want 4; kpis=%+v", kpis.Requests, kpis)
 	}
-	if kpis.Status2xx != 1 || kpis.Status429 != 1 || kpis.Status5xx != 1 {
+	if kpis.Status2xx != 1 || kpis.Status429 != 1 || kpis.Status4xx != 1 || kpis.Status5xx != 1 {
 		t.Fatalf("status buckets = %+v", kpis)
 	}
 	// success_rate = 1/4

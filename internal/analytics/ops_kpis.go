@@ -20,6 +20,7 @@ type OpsKPIs struct {
 	LatencyP95MS *int64   `json:"latency_p95_ms,omitempty"`
 	Status2xx    int64    `json:"status_2xx"`
 	Status429    int64    `json:"status_429"`
+	Status4xx    int64    `json:"status_4xx"` // 400–499 excluding 429
 	Status5xx    int64    `json:"status_5xx"`
 }
 
@@ -76,6 +77,8 @@ func AggregateOpsKPIs(entries []reqlog.Entry, window string, now time.Time) OpsK
 			out.Status429++
 		case entry.Status >= 500:
 			out.Status5xx++
+		case entry.Status >= 400 && entry.Status < 500:
+			out.Status4xx++
 		case entry.Status >= 200 && entry.Status < 300:
 			out.Status2xx++
 		}

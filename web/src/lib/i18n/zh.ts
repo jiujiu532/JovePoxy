@@ -332,6 +332,7 @@ export const zh = {
   "overview.opsKpis.latencyP95": "延迟 P95",
   "overview.opsKpis.status2xx": "2xx",
   "overview.opsKpis.status429": "429",
+  "overview.opsKpis.status4xx": "4xx",
   "overview.opsKpis.status5xx": "5xx",
   "overview.opsKpis.noData": "{range} 暂无请求样本",
   "overview.opsKpis.ms": "{n} ms",

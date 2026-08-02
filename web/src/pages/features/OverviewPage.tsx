@@ -107,11 +107,13 @@ function buildOpsFromLogs(logs: ReadonlyArray<LogDTO>, range: DateRangeValue): O
   const scoped = filterLogs(logs, range);
   let s2xx = 0;
   let s429 = 0;
+  let s4xx = 0;
   let s5xx = 0;
   const latencies: number[] = [];
   for (const log of scoped) {
     if (log.status === 429) s429 += 1;
     else if (log.status >= 500) s5xx += 1;
+    else if (log.status >= 400 && log.status < 500) s4xx += 1;
     else if (log.status >= 200 && log.status < 300) s2xx += 1;
     if (typeof log.latency_ms === "number" && Number.isFinite(log.latency_ms)) {
       latencies.push(log.latency_ms);
@@ -133,6 +135,7 @@ function buildOpsFromLogs(logs: ReadonlyArray<LogDTO>, range: DateRangeValue): O
     requests,
     status_2xx: s2xx,
     status_429: s429,
+    status_4xx: s4xx,
     status_5xx: s5xx,
   };
   if (requests > 0) {
@@ -267,6 +270,7 @@ function HealthBlock({
   const requests = kpis.requests ?? 0;
   const s2xx = kpis.status_2xx ?? 0;
   const s429 = kpis.status_429 ?? 0;
+  const s4xx = kpis.status_4xx ?? 0;
   const s5xx = kpis.status_5xx ?? 0;
   const rate = kpis.success_rate;
 
@@ -357,7 +361,7 @@ function HealthBlock({
                 HTTP 状态码分布
               </span>
               <span className="text-[10px] text-ink-faint tabular-nums">
-                2xx: {s2xx} · 429: {s429} · 5xx: {s5xx}
+                2xx: {s2xx} · 429: {s429} · 4xx: {s4xx} · 5xx: {s5xx}
               </span>
             </div>
             <StatusStackBar
@@ -372,6 +376,11 @@ function HealthBlock({
                   label: t("overview.opsKpis.status429"),
                   value: s429,
                   color: "var(--accent-yellow)",
+                },
+                {
+                  label: t("overview.opsKpis.status4xx"),
+                  value: s4xx,
+                  color: "var(--accent-coral)",
                 },
                 {
                   label: t("overview.opsKpis.status5xx"),

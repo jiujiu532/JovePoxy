@@ -236,7 +236,7 @@ export type StackSegment = {
   readonly color: string;
 };
 
-/** 横向分段条：状态分布（2xx / 429 / 5xx）。 */
+/** 横向分段条：状态分布（2xx / 429 / 4xx / 5xx）。 */
 export function StatusStackBar({
   segments,
   className,

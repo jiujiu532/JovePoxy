@@ -189,6 +189,8 @@ export type OpsKPIsDTO = {
   readonly latency_p95_ms?: number | null;
   readonly status_2xx: number;
   readonly status_429: number;
+  /** 400–499 excluding 429 */
+  readonly status_4xx: number;
   readonly status_5xx: number;
 };
 
@@ -223,6 +225,8 @@ export type OverviewDTO = {
 export type MetricsDTO = {
   readonly total_requests: number;
   readonly status_429: number;
+  /** 400–499 excluding 429 */
+  readonly status_4xx: number;
   readonly status_5xx: number;
   readonly status_2xx: number;
   readonly stream_requests: number;

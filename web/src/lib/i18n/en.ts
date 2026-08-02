@@ -333,6 +333,7 @@ export const en: Record<MessageKey, string> = {
   "overview.opsKpis.latencyP95": "Latency P95",
   "overview.opsKpis.status2xx": "2xx",
   "overview.opsKpis.status429": "429",
+  "overview.opsKpis.status4xx": "4xx",
   "overview.opsKpis.status5xx": "5xx",
   "overview.opsKpis.noData": "No request samples in {range}",
   "overview.opsKpis.ms": "{n} ms",

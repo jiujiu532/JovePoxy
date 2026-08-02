@@ -26,10 +26,11 @@ type Entry struct {
 
 // Snapshot is the in-memory counter view for dashboards.
 type Snapshot struct {
-	TotalRequests uint64 `json:"total_requests"`
-	Status429     uint64 `json:"status_429"`
-	Status5xx     uint64 `json:"status_5xx"`
-	Status2xx     uint64 `json:"status_2xx"`
+	TotalRequests  uint64 `json:"total_requests"`
+	Status429      uint64 `json:"status_429"`
+	Status4xx      uint64 `json:"status_4xx"` // 400–499 excluding 429
+	Status5xx      uint64 `json:"status_5xx"`
+	Status2xx      uint64 `json:"status_2xx"`
 	StreamRequests uint64 `json:"stream_requests"`
 }
 
@@ -44,6 +45,7 @@ type Service struct {
 
 	total   atomic.Uint64
 	s429    atomic.Uint64
+	s4xx    atomic.Uint64
 	s5xx    atomic.Uint64
 	s2xx    atomic.Uint64
 	streams atomic.Uint64
@@ -92,6 +94,8 @@ func (service *Service) Record(ctx context.Context, entry Entry) {
 		service.s429.Add(1)
 	case entry.Status >= 500:
 		service.s5xx.Add(1)
+	case entry.Status >= 400 && entry.Status < 500:
+		service.s4xx.Add(1)
 	case entry.Status >= 200 && entry.Status < 300:
 		service.s2xx.Add(1)
 	}
@@ -104,6 +108,7 @@ func (service *Service) Snapshot() Snapshot {
 	return Snapshot{
 		TotalRequests:  service.total.Load(),
 		Status429:      service.s429.Load(),
+		Status4xx:      service.s4xx.Load(),
 		Status5xx:      service.s5xx.Load(),
 		Status2xx:      service.s2xx.Load(),
 		StreamRequests: service.streams.Load(),
