@@ -226,3 +226,87 @@ func TestWriteStreamNoReasoningHasNoReasoningEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteStreamInterleavedDualToolCalls(t *testing.T) {
+	// OpenAI 可在两个 tool 都 opened 后交错推送 arguments；args 不得串台。
+	upstream := strings.Join([]string{
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"lookup","arguments":"{\"q\""}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","function":{"name":"search","arguments":"{\"k\""}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"alpha\"}"}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":":\"beta\"}"}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	WriteStream(recorder, strings.NewReader(upstream), "demo")
+	body := recorder.Body.String()
+
+	for _, expected := range []string{
+		`"call_id":"call_a"`,
+		`"name":"lookup"`,
+		`"arguments":"{\"q\":\"alpha\"}"`,
+		`"call_id":"call_b"`,
+		`"name":"search"`,
+		`"arguments":"{\"k\":\"beta\"}"`,
+		"event: response.completed",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %q in interleaved dual-tool stream:\n%s", expected, body)
+		}
+	}
+	// 两个 function_call_arguments.done 都在，且 arguments 不得交叉拼接
+	if strings.Contains(body, `"arguments":"{\"q\":\"alpha\"}{\"k\":\"beta\"}"`) ||
+		strings.Contains(body, `"arguments":"{\"k\":\"beta\"}{\"q\":\"alpha\"}"`) ||
+		strings.Contains(body, `"arguments":"{\"q\":\"alpha\",\"k\":\"beta\"}"`) {
+		t.Fatalf("tool arguments appear concatenated/cross-contaminated:\n%s", body)
+	}
+	if strings.Count(body, "event: response.function_call_arguments.done") != 2 {
+		t.Fatalf("expected 2 function_call_arguments.done events:\n%s", body)
+	}
+}
+
+func TestWriteStreamTextReasoningTextResetsMessageBuffer(t *testing.T) {
+	// text → late reasoning → text：第二段 message 不得拼接第一段。
+	upstream := strings.Join([]string{
+		`data: {"choices":[{"delta":{"content":"first"}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"reasoning_content":"think"}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"content":"second"}}]}`,
+		"",
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	WriteStream(recorder, strings.NewReader(upstream), "demo")
+	body := recorder.Body.String()
+
+	for _, expected := range []string{
+		`"delta":"first"`,
+		`"text":"first"`,
+		`"delta":"think"`,
+		`"text":"think"`,
+		`"delta":"second"`,
+		`"text":"second"`,
+		"event: response.completed",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %q in text/reasoning/text stream:\n%s", expected, body)
+		}
+	}
+	if strings.Contains(body, `"text":"firstsecond"`) || strings.Contains(body, `"text":"firstsecond`) {
+		t.Fatalf("second message text contaminated by first segment:\n%s", body)
+	}
+	// 两段 message 各有一次 output_text.done
+	if strings.Count(body, "event: response.output_text.done") != 2 {
+		t.Fatalf("expected 2 output_text.done events:\n%s", body)
+	}
+}

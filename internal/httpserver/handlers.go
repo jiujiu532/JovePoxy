@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -197,20 +196,22 @@ func ownedBy(provider models.Provider) string {
 }
 
 func (server server) copyJSON(writer http.ResponseWriter, response *http.Response) {
-	reader := bufio.NewReader(response.Body)
-	firstByte, err := reader.ReadByte()
-	if errors.Is(err, io.EOF) {
-		writeOpenAIError(writer, http.StatusBadGateway, "upstream returned an empty response", "api_error", "", "upstream_error")
-		return
-	}
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		writeOpenAIError(writer, http.StatusBadGateway, "upstream response failed", "api_error", "", "upstream_error")
 		return
 	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		writeOpenAIError(writer, http.StatusBadGateway, "upstream returned an empty response", "api_error", "", "upstream_error")
+		return
+	}
+	if isOpenAIStyleRateLimit(body) {
+		writeOpenAIError(writer, http.StatusTooManyRequests, "upstream rate limit exceeded", "rate_limit_error", "", "rate_limit_exceeded")
+		return
+	}
 	writer.Header().Set("Content-Type", contentType(response.Header.Get("Content-Type"), "application/json"))
 	writer.WriteHeader(response.StatusCode)
-	_, _ = writer.Write([]byte{firstByte})
-	_, _ = io.Copy(writer, reader)
+	_, _ = writer.Write(body)
 }
 
 func writeCatalogError(writer http.ResponseWriter, err error) {

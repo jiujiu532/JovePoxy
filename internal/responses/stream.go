@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,7 +43,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		responseID: responseID,
 		model:      model,
 		createdAt:  time.Now().Unix(),
-		toolIdx:    -1,
+		tools:      make(map[int]*toolStreamState),
 	}
 	if !state.emitCreated(writer) {
 		return
@@ -84,6 +85,15 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 	}
 }
 
+// toolStreamState tracks one OpenAI tool_calls index through interleaved deltas.
+type toolStreamState struct {
+	itemID      string
+	callID      string
+	name        string
+	args        strings.Builder
+	outputIndex int
+}
+
 type streamState struct {
 	responseID     string
 	model          string
@@ -93,11 +103,8 @@ type streamState struct {
 	messageID      string
 	messageOpen    bool
 	textBuffer     strings.Builder
-	toolIdx        int
-	toolItemID     string
-	toolCallID     string
-	toolName       string
-	toolArgs       strings.Builder
+	tools          map[int]*toolStreamState // OpenAI tool index → open function_call
+	toolsStarted   bool                     // once true, late reasoning is dropped
 	reasoningOpen  bool
 	reasoningID    string
 	reasoningIndex int
@@ -211,7 +218,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, delta string
 	if !state.reasoningOpen {
 		// Prefer reasoning before message/tool. Drop late reasoning once tools started
 		// so output_index stays exclusive (matches anthropic stream policy).
-		if state.toolIdx >= 0 || state.toolItemID != "" {
+		if state.toolsStarted {
 			return true
 		}
 		// Rare interleave: text already streaming — close message first.
@@ -291,6 +298,10 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 	if !state.closeReasoning(writer) {
 		return false
 	}
+	// Prefer closing open tools before message so output_index stays exclusive.
+	if !state.closeAllTools(writer) {
+		return false
+	}
 	if !state.messageOpen {
 		messageID, err := NewMessageID()
 		if err != nil {
@@ -355,24 +366,23 @@ func (state *streamState) closeMessage(writer http.ResponseWriter) bool {
 	}
 	state.outputItems = append(state.outputItems, item)
 	state.messageOpen = false
+	state.messageID = ""
+	state.textBuffer.Reset()
 	state.outputIdx++
 	return true
 }
 
 func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []chatStreamTool) bool {
 	for _, toolCall := range toolCalls {
-		if toolCall.Index > state.toolIdx {
-			// 新的 function_call item：先收尾 reasoning / 文本 message 与上一个工具
+		tool, known := state.tools[toolCall.Index]
+		if !known {
+			// 新的 function_call item：收尾 reasoning / message；已打开的其它 tool 保持 open 以支持交错
 			if !state.closeReasoning(writer) {
 				return false
 			}
 			if !state.closeMessage(writer) {
 				return false
 			}
-			if !state.closeTool(writer) {
-				return false
-			}
-			state.toolIdx = toolCall.Index
 			itemID, err := NewFunctionCallID()
 			if err != nil {
 				return false
@@ -383,26 +393,39 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 					return false
 				}
 			}
-			state.toolItemID = itemID
-			state.toolCallID = callID
-			state.toolName = toolCall.Function.Name
-			state.toolArgs.Reset()
+			tool = &toolStreamState{
+				itemID:      itemID,
+				callID:      callID,
+				name:        toolCall.Function.Name,
+				outputIndex: state.outputIdx,
+			}
+			state.outputIdx++
+			state.tools[toolCall.Index] = tool
+			state.toolsStarted = true
 			if !writeSSE(writer, "response.output_item.added", map[string]any{
 				"type": "response.output_item.added", "sequence_number": state.next(),
-				"output_index": state.outputIdx,
+				"output_index": tool.outputIndex,
 				"item": map[string]any{
 					"type": "function_call", "id": itemID, "status": "in_progress",
-					"call_id": callID, "name": state.toolName, "arguments": "",
+					"call_id": callID, "name": tool.name, "arguments": "",
 				},
 			}) {
 				return false
 			}
+		} else {
+			// 已知 index：可补全迟到的 id / name
+			if toolCall.ID != "" && tool.callID == "" {
+				tool.callID = toolCall.ID
+			}
+			if toolCall.Function.Name != "" && tool.name == "" {
+				tool.name = toolCall.Function.Name
+			}
 		}
 		if toolCall.Function.Arguments != "" {
-			state.toolArgs.WriteString(toolCall.Function.Arguments)
+			tool.args.WriteString(toolCall.Function.Arguments)
 			if !writeSSE(writer, "response.function_call_arguments.delta", map[string]any{
 				"type": "response.function_call_arguments.delta", "sequence_number": state.next(),
-				"item_id": state.toolItemID, "output_index": state.outputIdx,
+				"item_id": tool.itemID, "output_index": tool.outputIndex,
 				"delta": toolCall.Function.Arguments,
 			}) {
 				return false
@@ -412,30 +435,50 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 	return true
 }
 
-func (state *streamState) closeTool(writer http.ResponseWriter) bool {
-	if state.toolItemID == "" {
+func (state *streamState) closeTool(writer http.ResponseWriter, tool *toolStreamState) bool {
+	if tool == nil || tool.itemID == "" {
 		return true
 	}
-	args := state.toolArgs.String()
+	args := tool.args.String()
 	if !writeSSE(writer, "response.function_call_arguments.done", map[string]any{
 		"type": "response.function_call_arguments.done", "sequence_number": state.next(),
-		"item_id": state.toolItemID, "output_index": state.outputIdx, "arguments": args,
+		"item_id": tool.itemID, "output_index": tool.outputIndex, "arguments": args,
 	}) {
 		return false
 	}
 	item := map[string]any{
-		"type": "function_call", "id": state.toolItemID, "status": "completed",
-		"call_id": state.toolCallID, "name": state.toolName, "arguments": args,
+		"type": "function_call", "id": tool.itemID, "status": "completed",
+		"call_id": tool.callID, "name": tool.name, "arguments": args,
 	}
 	if !writeSSE(writer, "response.output_item.done", map[string]any{
 		"type": "response.output_item.done", "sequence_number": state.next(),
-		"output_index": state.outputIdx, "item": item,
+		"output_index": tool.outputIndex, "item": item,
 	}) {
 		return false
 	}
 	state.outputItems = append(state.outputItems, item)
-	state.toolItemID = ""
-	state.outputIdx++
+	tool.itemID = ""
+	return true
+}
+
+func (state *streamState) closeAllTools(writer http.ResponseWriter) bool {
+	if len(state.tools) == 0 {
+		return true
+	}
+	// Close by ascending output_index so completed output order is stable.
+	indices := make([]int, 0, len(state.tools))
+	for idx := range state.tools {
+		indices = append(indices, idx)
+	}
+	sort.Slice(indices, func(i, j int) bool {
+		return state.tools[indices[i]].outputIndex < state.tools[indices[j]].outputIndex
+	})
+	for _, idx := range indices {
+		if !state.closeTool(writer, state.tools[idx]) {
+			return false
+		}
+		delete(state.tools, idx)
+	}
 	return true
 }
 
@@ -455,7 +498,7 @@ func (state *streamState) finish(writer http.ResponseWriter) bool {
 	if !state.closeMessage(writer) {
 		return false
 	}
-	if !state.closeTool(writer) {
+	if !state.closeAllTools(writer) {
 		return false
 	}
 	state.finished = true

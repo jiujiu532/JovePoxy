@@ -11,15 +11,20 @@ import (
 )
 
 // ShouldFailover reports whether an upstream error should trigger another key attempt.
+// Status 401/429/5xx, timeouts, and temporary network failures retry; client cancel does not.
 func ShouldFailover(err error) bool {
-	var status *zen.StatusError
-	if !errors.As(err, &status) {
+	if err == nil || errors.Is(err, context.Canceled) {
 		return false
 	}
-	code := status.StatusCode
-	return code == http.StatusUnauthorized ||
-		code == http.StatusTooManyRequests ||
-		code >= http.StatusInternalServerError
+	var status *zen.StatusError
+	if errors.As(err, &status) {
+		code := status.StatusCode
+		return code == http.StatusUnauthorized ||
+			code == http.StatusTooManyRequests ||
+			code >= http.StatusInternalServerError
+	}
+	// Network / dial / TLS / timeout failures (same spirit as free-path proxypool).
+	return true
 }
 
 // CooldownFor returns the SQLite cooldown duration for a failed upstream status.

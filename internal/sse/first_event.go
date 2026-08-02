@@ -30,7 +30,7 @@ func ReadFirstEvent(reader *bufio.Reader) ([]byte, error) {
 }
 
 // IsRateLimitEvent reports whether the first SSE event is an upstream free-usage
-// or error envelope that should map to HTTP 429 before streaming begins.
+// or explicit rate-limit envelope that should map to HTTP 429 before streaming begins.
 func IsRateLimitEvent(event []byte) bool {
 	for _, line := range bytes.Split(event, []byte("\n")) {
 		line = bytes.TrimSpace(bytes.TrimSuffix(line, []byte("\r")))
@@ -38,20 +38,18 @@ func IsRateLimitEvent(event []byte) bool {
 			continue
 		}
 		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-		if isRateLimitPayload(payload) {
+		if IsRateLimitPayload(payload) {
 			return true
 		}
 	}
-	return isRateLimitPayload(bytes.TrimSpace(event))
+	return IsRateLimitPayload(bytes.TrimSpace(event))
 }
 
-func isEventBoundary(line []byte) bool {
-	trimmed := bytes.TrimRight(line, "\r\n")
-	return len(line) > 0 && len(trimmed) == 0
-}
-
-func isRateLimitPayload(payload []byte) bool {
-	if len(payload) == 0 {
+// IsRateLimitPayload reports whether a JSON body (or SSE data payload) is a free-usage
+// or explicit rate-limit error. Generic server/invalid-request errors are not treated as 429.
+func IsRateLimitPayload(payload []byte) bool {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || bytes.Equal(payload, []byte("null")) {
 		return false
 	}
 	var envelope struct {
@@ -61,5 +59,36 @@ func isRateLimitPayload(payload []byte) bool {
 	if err := json.Unmarshal(payload, &envelope); err != nil {
 		return false
 	}
-	return strings.EqualFold(envelope.Type, "FreeUsageLimitError") || len(envelope.Error) > 0
+	if strings.EqualFold(strings.TrimSpace(envelope.Type), "FreeUsageLimitError") {
+		return true
+	}
+	errorPayload := bytes.TrimSpace(envelope.Error)
+	if len(errorPayload) == 0 || bytes.Equal(errorPayload, []byte("null")) {
+		return false
+	}
+	var detail struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(errorPayload, &detail); err != nil {
+		// Non-object error values are not treated as rate limits.
+		return false
+	}
+	return isRateLimitToken(detail.Type) || isRateLimitToken(detail.Code)
+}
+
+func isEventBoundary(line []byte) bool {
+	trimmed := bytes.TrimRight(line, "\r\n")
+	return len(line) > 0 && len(trimmed) == 0
+}
+
+func isRateLimitToken(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return false
+	}
+	if value == "freeusagelimiterror" || value == "insufficient_quota" {
+		return true
+	}
+	return strings.Contains(value, "rate_limit")
 }

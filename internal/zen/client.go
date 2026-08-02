@@ -25,9 +25,12 @@ var (
 )
 
 // Client reuses one tuned HTTP transport for Zen upstream requests.
+// Non-stream calls use httpClient.Timeout = upstreamTimeout.
+// Stream calls use Timeout = 0 so long SSE bodies are not cut off; ResponseHeaderTimeout still applies.
 type Client struct {
 	baseURL         *url.URL
 	httpClient      *http.Client
+	upstreamTimeout time.Duration
 	openCodeVersion string
 	// plainHeaders skips OpenCode compatibility headers (for Ollama Cloud).
 	plainHeaders bool
@@ -78,9 +81,22 @@ func newClientFromBase(cfg config.Config, base string, plainHeaders bool) (*Clie
 	return &Client{
 		baseURL:         parsed,
 		httpClient:      &http.Client{Transport: newTransport(cfg), Timeout: cfg.UpstreamTimeout},
+		upstreamTimeout: cfg.UpstreamTimeout,
 		openCodeVersion: cfg.OCVersion,
 		plainHeaders:    plainHeaders,
 	}, nil
+}
+
+// httpClientFor returns the HTTP client for a chat call.
+// Stream paths must not use Client.Timeout over the whole body read.
+func (client *Client) httpClientFor(stream bool) *http.Client {
+	if !stream {
+		return client.httpClient
+	}
+	return &http.Client{
+		Transport: client.httpClient.Transport,
+		Timeout:   0,
+	}
 }
 
 func newTransport(cfg config.Config) *http.Transport {
@@ -115,16 +131,20 @@ func configuredProxy(httpProxy, httpsProxy *url.URL) func(*http.Request) (*url.U
 // ChatCompletions sends the raw JSON body unchanged. On success, the caller
 // owns response.Body and must close it after streaming or reading completes.
 func (client *Client) ChatCompletions(ctx context.Context, auth Auth, body json.RawMessage, stream bool) (*http.Response, error) {
-	return client.doChatCompletions(ctx, auth, body, stream, client.httpClient)
+	return client.doChatCompletions(ctx, auth, body, stream, client.httpClientFor(stream))
 }
 
 // ChatCompletionsWithProxy is like ChatCompletions but forces a single egress proxy.
+// Stream uses no overall Client.Timeout; non-stream uses upstreamTimeout.
 func (client *Client) ChatCompletionsWithProxy(ctx context.Context, auth Auth, body json.RawMessage, stream bool, proxyURL *url.URL) (*http.Response, error) {
 	if proxyURL == nil {
 		return client.ChatCompletions(ctx, auth, body, stream)
 	}
-	timeout := client.httpClient.Timeout
-	if timeout <= 0 {
+	timeout := client.upstreamTimeout
+	if stream {
+		// 0 = no overall body deadline; ResponseHeaderTimeout remains on the transport.
+		timeout = 0
+	} else if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
 	httpClient, err := newClientForProxy(proxyURL, timeout)

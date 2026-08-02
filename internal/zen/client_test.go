@@ -162,6 +162,85 @@ func TestClient_ChatCompletions_returns_typed_timeout_error_when_upstream_hangs(
 	}
 }
 
+func TestClient_httpClientFor_stream_disables_overall_timeout(t *testing.T) {
+	// Given
+	const upstream = 120 * time.Millisecond
+	client := newTestClient(t, "http://example.invalid", upstream)
+
+	// When / Then
+	if client.httpClient.Timeout != upstream {
+		t.Fatalf("non-stream client Timeout = %v, want %v", client.httpClient.Timeout, upstream)
+	}
+	streamClient := client.httpClientFor(true)
+	if streamClient.Timeout != 0 {
+		t.Fatalf("stream client Timeout = %v, want 0 (no overall body deadline)", streamClient.Timeout)
+	}
+	if streamClient.Transport != client.httpClient.Transport {
+		t.Fatal("stream client must reuse the same Transport (ResponseHeaderTimeout)")
+	}
+	if client.httpClientFor(false) != client.httpClient {
+		t.Fatal("non-stream path must use the primary httpClient")
+	}
+	if client.upstreamTimeout != upstream {
+		t.Fatalf("upstreamTimeout = %v, want %v", client.upstreamTimeout, upstream)
+	}
+}
+
+func TestClient_ChatCompletions_stream_allows_body_after_overall_timeout_budget(t *testing.T) {
+	// Given: headers flush immediately; body arrives after UpstreamTimeout would have fired.
+	const upstream = 40 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(3 * upstream)
+		_, _ = w.Write([]byte("data: late-chunk\n\n"))
+	}))
+	defer server.Close()
+	client := newTestClient(t, server.URL, upstream)
+
+	// When
+	response, err := client.ChatCompletions(context.Background(), PublicAuth(), json.RawMessage(`{"stream":true}`), true)
+
+	// Then
+	if err != nil {
+		t.Fatalf("stream ChatCompletions() error = %v", err)
+	}
+	defer response.Body.Close()
+	got, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read stream body: %v", err)
+	}
+	if string(got) != "data: late-chunk\n\n" {
+		t.Fatalf("stream body = %q, want late chunk after timeout budget", got)
+	}
+}
+
+func TestClient_ChatCompletions_stream_still_times_out_waiting_for_headers(t *testing.T) {
+	// Given: no response headers within ResponseHeaderTimeout (capped by UpstreamTimeout).
+	const upstream = 30 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		time.Sleep(time.Second)
+	}))
+	defer server.Close()
+	client := newTestClient(t, server.URL, upstream)
+
+	// When
+	response, err := client.ChatCompletions(context.Background(), PublicAuth(), json.RawMessage(`{"stream":true}`), true)
+
+	// Then
+	if response != nil {
+		_ = response.Body.Close()
+		t.Fatal("response must be nil when headers never arrive")
+	}
+	var timeoutError *TimeoutError
+	if !errors.As(err, &timeoutError) {
+		t.Fatalf("error = %v, want TimeoutError for header wait", err)
+	}
+}
+
 func TestClient_ChatCompletions_returns_status_error_without_secret_when_upstream_rejects(t *testing.T) {
 	// Given
 	const secret = "paid-secret"

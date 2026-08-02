@@ -9,6 +9,7 @@ import (
 
 	"jovepoxy/internal/anthropic"
 	"jovepoxy/internal/keys"
+	"jovepoxy/internal/sse"
 	"jovepoxy/internal/zen"
 )
 
@@ -150,15 +151,14 @@ func writeAnthropicUpstreamError(writer http.ResponseWriter, err error) {
 
 func isOpenAIStyleRateLimit(body []byte) bool {
 	var envelope struct {
-		Type    string          `json:"type"`
-		Error   json.RawMessage `json:"error"`
 		Choices json.RawMessage `json:"choices"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return false
 	}
+	// Successful chat-style payloads must not be treated as rate-limit errors.
 	if len(bytes.TrimSpace(envelope.Choices)) > 0 {
 		return false
 	}
-	return envelope.Type == "FreeUsageLimitError" || len(envelope.Error) > 0
+	return sse.IsRateLimitPayload(body)
 }

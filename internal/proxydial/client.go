@@ -18,18 +18,26 @@ import (
 var ErrInvalidURL = errors.New("proxydial: URL must be http, https, socks5, or socks5h")
 
 // NewHTTPClient builds a client that egresses through proxyURL.
+//
+// timeout is the overall http.Client.Timeout:
+//   - positive: non-stream requests that must finish within the budget
+//   - zero: no overall body deadline (streaming SSE); ResponseHeaderTimeout still applies
+//   - negative: treated as the default 120s overall timeout
 func NewHTTPClient(proxyURL *url.URL, timeout time.Duration) (*http.Client, error) {
 	if proxyURL == nil {
 		return nil, ErrInvalidURL
 	}
-	if timeout <= 0 {
-		timeout = 120 * time.Second
+	clientTimeout := timeout
+	headerBudget := timeout
+	if timeout < 0 {
+		clientTimeout = 120 * time.Second
+		headerBudget = clientTimeout
 	}
-	transport, err := newTransport(proxyURL, timeout)
+	transport, err := newTransport(proxyURL, headerBudget)
 	if err != nil {
 		return nil, err
 	}
-	return &http.Client{Transport: transport, Timeout: timeout}, nil
+	return &http.Client{Transport: transport, Timeout: clientTimeout}, nil
 }
 
 func newTransport(proxyURL *url.URL, timeout time.Duration) (*http.Transport, error) {

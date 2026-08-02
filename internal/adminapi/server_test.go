@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +265,54 @@ func TestAdminAPI_usage_time_window_and_truncated(t *testing.T) {
 	}
 	if len(payload.Records) != 2 || !payload.Truncated || payload.Limit != 2 {
 		t.Fatalf("truncated payload = %+v body=%s", payload, truncRec.Body.String())
+	}
+}
+
+func TestAdminAPI_login_rate_limits_same_ip_across_ports(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	handler := adminapi.New(adminapi.Dependencies{
+		Auth:   authService,
+		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false},
+	})
+
+	// When: fail DefaultLoginAttemptLimit times from same IP, different ports
+	for i := 0; i < auth.DefaultLoginAttemptLimit; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"password":"wrong"}`))
+		req.RemoteAddr = "1.2.3.4:" + strconv.Itoa(10000+i)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d body=%s, want 401", i, rec.Code, rec.Body.String())
+		}
+	}
+	// Another port on the same IP should be rate-limited (429)
+	limitedReq := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"password":"wrong"}`))
+	limitedReq.RemoteAddr = "1.2.3.4:19999"
+	limitedRec := httptest.NewRecorder()
+	handler.ServeHTTP(limitedRec, limitedReq)
+
+	// Different IP still gets ordinary 401
+	otherReq := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"password":"wrong"}`))
+	otherReq.RemoteAddr = "5.6.7.8:10000"
+	otherRec := httptest.NewRecorder()
+	handler.ServeHTTP(otherRec, otherReq)
+
+	// Then
+	if limitedRec.Code != http.StatusTooManyRequests {
+		t.Fatalf("same-IP different-port status = %d body=%s, want 429", limitedRec.Code, limitedRec.Body.String())
+	}
+	if otherRec.Code != http.StatusUnauthorized {
+		t.Fatalf("different IP status = %d body=%s, want 401", otherRec.Code, otherRec.Body.String())
 	}
 }
 

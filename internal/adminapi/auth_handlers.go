@@ -3,6 +3,7 @@ package adminapi
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -46,7 +47,7 @@ func (server server) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	session, err := server.auth.Login(request.Context(), auth.LoginInput{
-		Password: body.Password, Source: request.RemoteAddr,
+		Password: body.Password, Source: loginSource(request),
 	})
 	if errors.Is(err, auth.ErrRateLimited) {
 		writeError(writer, http.StatusTooManyRequests, "too many login attempts")
@@ -71,6 +72,26 @@ func (server server) logout(writer http.ResponseWriter, request *http.Request) {
 
 func (server server) me(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, meResponse{OK: true, Role: "admin"})
+}
+
+// loginSource returns the rate-limit key for an admin login attempt.
+// Only request.RemoteAddr is used (host/IP, port stripped). X-Forwarded-For is not trusted.
+func loginSource(request *http.Request) string {
+	return clientHost(request.RemoteAddr)
+}
+
+// clientHost extracts host/IP from an address that may include a port.
+// Bare IPs and unbracketed IPv6 without a port are returned as-is after trim.
+func clientHost(remoteAddr string) string {
+	trimmed := strings.TrimSpace(remoteAddr)
+	if trimmed == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(trimmed)
+	if err != nil {
+		return trimmed
+	}
+	return strings.TrimSpace(host)
 }
 
 func (server server) changePassword(writer http.ResponseWriter, request *http.Request) {

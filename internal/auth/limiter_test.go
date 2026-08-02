@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -37,6 +38,83 @@ func TestService_Login_rate_limits_failed_attempts_and_success_resets_source(t *
 	}
 	if !errors.Is(laterFailureErr, auth.ErrUnauthorized) {
 		t.Fatalf("Login() after successful reset error = %v, want ErrUnauthorized", laterFailureErr)
+	}
+}
+
+func TestService_Login_rate_limits_same_ip_across_different_ports(t *testing.T) {
+	// Given: each TCP connection presents RemoteAddr as ip:ephemeral-port
+	clock := newFakeClock(time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC))
+	service, database := newService(t, clock)
+	defer database.Close()
+	sources := []string{
+		"1.2.3.4:10000",
+		"1.2.3.4:10001",
+		"1.2.3.4:10002",
+		"1.2.3.4:10003",
+		"1.2.3.4:10004",
+	}
+
+	// When: fail once per distinct port (same IP)
+	for _, source := range sources {
+		if _, err := service.Login(context.Background(), auth.LoginInput{
+			Password: "wrong-password",
+			Source:   source,
+		}); !errors.Is(err, auth.ErrUnauthorized) {
+			t.Fatalf("Login(%q) error = %v, want ErrUnauthorized", source, err)
+		}
+	}
+	// Same IP, yet another port — should already be rate limited
+	_, limitedErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "wrong-password",
+		Source:   "1.2.3.4:10005",
+	})
+	// Bare IP without port must share the same bucket
+	_, bareLimitedErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "wrong-password",
+		Source:   "1.2.3.4",
+	})
+	// A different IP must still be allowed ordinary failures
+	_, otherIPErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "wrong-password",
+		Source:   "1.2.3.5:20000",
+	})
+
+	// Then
+	if !errors.Is(limitedErr, auth.ErrRateLimited) {
+		t.Fatalf("Login after same-IP port rotation error = %v, want ErrRateLimited", limitedErr)
+	}
+	if !errors.Is(bareLimitedErr, auth.ErrRateLimited) {
+		t.Fatalf("Login with bare IP error = %v, want ErrRateLimited", bareLimitedErr)
+	}
+	if !errors.Is(otherIPErr, auth.ErrUnauthorized) {
+		t.Fatalf("Login for different IP error = %v, want ErrUnauthorized", otherIPErr)
+	}
+}
+
+func TestService_Login_rate_limits_same_ipv6_across_different_ports(t *testing.T) {
+	// Given
+	clock := newFakeClock(time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC))
+	service, database := newService(t, clock)
+	defer database.Close()
+
+	// When
+	for i := range auth.DefaultLoginAttemptLimit {
+		source := "[2001:db8::1]:" + strconv.Itoa(10000+i)
+		if _, err := service.Login(context.Background(), auth.LoginInput{
+			Password: "wrong-password",
+			Source:   source,
+		}); !errors.Is(err, auth.ErrUnauthorized) {
+			t.Fatalf("Login(%q) error = %v, want ErrUnauthorized", source, err)
+		}
+	}
+	_, limitedErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "wrong-password",
+		Source:   "[2001:db8::1]:65535",
+	})
+
+	// Then
+	if !errors.Is(limitedErr, auth.ErrRateLimited) {
+		t.Fatalf("IPv6 same-host port rotation error = %v, want ErrRateLimited", limitedErr)
 	}
 }
 

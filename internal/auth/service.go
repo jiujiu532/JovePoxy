@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -225,11 +226,23 @@ func isSessionToken(token string) bool {
 	return err == nil && len(decoded) == sessionTokenBytes
 }
 
+// normalizedSource turns a login source (typically request.RemoteAddr) into a
+// stable rate-limit key: host/IP only, without the ephemeral client port.
+// Bare IPs, hostnames, and IPv6 forms are accepted; X-Forwarded-For is never read here.
 func normalizedSource(source string) string {
 	const unknownSource = "unknown"
 	trimmed := strings.TrimSpace(source)
 	if trimmed == "" || len(trimmed) > 256 {
 		return unknownSource
+	}
+	// RemoteAddr is usually "ip:port" or "[ipv6]:port"; strip port so concurrent
+	// connections from the same client share one attempt bucket.
+	if host, _, err := net.SplitHostPort(trimmed); err == nil {
+		host = strings.TrimSpace(host)
+		if host == "" || len(host) > 256 {
+			return unknownSource
+		}
+		return host
 	}
 	return trimmed
 }
