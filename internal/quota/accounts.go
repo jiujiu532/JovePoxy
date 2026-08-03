@@ -2,13 +2,12 @@ package quota
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
 	secretcrypto "jovepoxy/internal/crypto"
+	"jovepoxy/internal/idgen"
 )
 
 var (
@@ -192,9 +191,9 @@ func (service *AccountService) loadStored(ctx context.Context, id AccountID) (st
 }
 
 func newAccountID() (AccountID, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
+	id, err := idgen.Prefixed("acct_", 16)
+	if err != nil {
 		return "", err
 	}
-	return AccountID("acct_" + hex.EncodeToString(bytes)), nil
+	return AccountID(id), nil
 }

@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"jovepoxy/internal/sse"
 )
 
 // WriteStream converts an OpenAI chat.completion SSE body into Anthropic Messages SSE events.
 func WriteStream(writer http.ResponseWriter, body io.Reader, model string, inputTokens int) {
 	reader := bufio.NewReader(body)
-	firstEvent, err := readFirstSSEEvent(reader)
+	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
 		writeError(writer, http.StatusBadGateway, "upstream_error", "Empty response")
 		return
@@ -23,7 +25,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 		writeError(writer, http.StatusBadGateway, "upstream_error", "upstream response failed")
 		return
 	}
-	if isRateLimitEvent(firstEvent) {
+	if sse.IsRateLimitEvent(firstEvent) {
 		writeError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded (free model rate limit)")
 		return
 	}
@@ -33,7 +35,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 		writeError(writer, http.StatusInternalServerError, "api_error", "failed to allocate message id")
 		return
 	}
-	if !writeStreamHeaders(writer) {
+	if !sse.WriteHeaders(writer) {
 		return
 	}
 	state := streamState{messageID: messageID, model: model, inputTokens: inputTokens}
@@ -55,7 +57,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 		if count > 0 {
 			buffer.Write(chunk[:count])
 			for {
-				line, ok := readLine(&buffer)
+				line, ok := sse.ReadLine(&buffer)
 				if !ok {
 					break
 				}
@@ -101,7 +103,7 @@ type streamState struct {
 }
 
 func (state *streamState) emitMessageStart(writer http.ResponseWriter) bool {
-	return writeSSE(writer, "message_start", map[string]any{
+	return sse.WriteEvent(writer, "message_start", map[string]any{
 		"type": "message_start",
 		"message": map[string]any{
 			"id": state.messageID, "type": "message", "role": "assistant", "content": []any{},
@@ -196,7 +198,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, text string)
 		}
 		state.thinkingIndex = state.nextBlock
 		state.nextBlock++
-		if !writeSSE(writer, "content_block_start", map[string]any{
+		if !sse.WriteEvent(writer, "content_block_start", map[string]any{
 			"type": "content_block_start", "index": state.thinkingIndex,
 			"content_block": map[string]any{"type": "thinking", "thinking": ""},
 		}) {
@@ -204,7 +206,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, text string)
 		}
 		state.thinkingOpen = true
 	}
-	if !writeSSE(writer, "content_block_delta", map[string]any{
+	if !sse.WriteEvent(writer, "content_block_delta", map[string]any{
 		"type": "content_block_delta", "index": state.thinkingIndex,
 		"delta": map[string]any{"type": "thinking_delta", "thinking": text},
 	}) {
@@ -228,7 +230,7 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		}
 		state.textIndex = state.nextBlock
 		state.nextBlock++
-		if !writeSSE(writer, "content_block_start", map[string]any{
+		if !sse.WriteEvent(writer, "content_block_start", map[string]any{
 			"type": "content_block_start", "index": state.textIndex,
 			"content_block": map[string]any{"type": "text", "text": ""},
 		}) {
@@ -236,7 +238,7 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		}
 		state.textOpen = true
 	}
-	if !writeSSE(writer, "content_block_delta", map[string]any{
+	if !sse.WriteEvent(writer, "content_block_delta", map[string]any{
 		"type": "content_block_delta", "index": state.textIndex,
 		"delta": map[string]any{"type": "text_delta", "text": content},
 	}) {
@@ -275,7 +277,7 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 					return false
 				}
 			}
-			if !writeSSE(writer, "content_block_start", map[string]any{
+			if !sse.WriteEvent(writer, "content_block_start", map[string]any{
 				"type": "content_block_start", "index": blockIdx,
 				"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolCall.Function.Name},
 			}) {
@@ -283,7 +285,7 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 			}
 		}
 		if toolCall.Function.Arguments != "" {
-			if !writeSSE(writer, "content_block_delta", map[string]any{
+			if !sse.WriteEvent(writer, "content_block_delta", map[string]any{
 				"type": "content_block_delta", "index": blockIdx,
 				"delta": map[string]any{"type": "input_json_delta", "partial_json": toolCall.Function.Arguments},
 			}) {
@@ -299,7 +301,7 @@ func (state *streamState) closeThinking(writer http.ResponseWriter) bool {
 	if !state.thinkingOpen {
 		return true
 	}
-	if !writeSSE(writer, "content_block_stop", map[string]any{
+	if !sse.WriteEvent(writer, "content_block_stop", map[string]any{
 		"type": "content_block_stop", "index": state.thinkingIndex,
 	}) {
 		return false
@@ -312,7 +314,7 @@ func (state *streamState) closeText(writer http.ResponseWriter) bool {
 	if !state.textOpen {
 		return true
 	}
-	if !writeSSE(writer, "content_block_stop", map[string]any{
+	if !sse.WriteEvent(writer, "content_block_stop", map[string]any{
 		"type": "content_block_stop", "index": state.textIndex,
 	}) {
 		return false
@@ -333,7 +335,7 @@ func (state *streamState) closeOpenTools(writer http.ResponseWriter) bool {
 	}
 	sort.Ints(indexes)
 	for _, idx := range indexes {
-		if !writeSSE(writer, "content_block_stop", map[string]any{
+		if !sse.WriteEvent(writer, "content_block_stop", map[string]any{
 			"type": "content_block_stop", "index": idx,
 		}) {
 			return false
@@ -363,12 +365,12 @@ func (state *streamState) finish(writer http.ResponseWriter, finishReason string
 	if !state.closeOpenTools(writer) {
 		return false
 	}
-	if !writeSSE(writer, "message_delta", map[string]any{
+	if !sse.WriteEvent(writer, "message_delta", map[string]any{
 		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": mapStopReason(finishReason)},
 		"usage": map[string]int{"output_tokens": state.outputTokens},
 	}) {
 		return false
 	}
-	return writeSSE(writer, "message_stop", map[string]any{"type": "message_stop"})
+	return sse.WriteEvent(writer, "message_stop", map[string]any{"type": "message_stop"})
 }

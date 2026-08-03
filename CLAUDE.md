@@ -117,7 +117,7 @@ React 19 + Vite 7 + Tailwind 4 + react-router. Alias `@` → `src/`.
 
 - Pages under `pages/features/*` map to `lib/routes.ts` nav (overview, models, key-pool, accounts, quotas, local-keys, proxies, logs, settings)
 - API client: `lib/api.ts` (credentials/cookies to `/api/admin`)
-- Design system source of truth: `web/DESIGN.md` (kraft paper + terracotta; warm neutrals only)
+- Design system source of truth: `web/DESIGN.md` (Neo-Brutalist Playful: hard black/white geometry, five-color accents, offset shadows; no kraft paper)
 - Embed path: `web/dist` → copied to `internal/webui/dist` → `//go:embed` in `webui/embed.go`
 
 ### Reference tree

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"jovepoxy/internal/idgen"
 )
 
 type Clock interface {
@@ -142,9 +144,9 @@ func randomSecret() (string, error) {
 }
 
 func randomID() (KeyID, error) {
-	bytes := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, bytes); err != nil {
+	id, err := idgen.Prefixed("key_", 16)
+	if err != nil {
 		return "", err
 	}
-	return KeyID("key_" + hex.EncodeToString(bytes)), nil
+	return KeyID(id), nil
 }

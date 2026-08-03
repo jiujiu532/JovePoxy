@@ -2,9 +2,7 @@ package zenpool
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"jovepoxy/internal/crypto"
+	"jovepoxy/internal/idgen"
 )
 
 // Clock provides the service clock for cooldown decisions.
@@ -453,9 +452,9 @@ func maskPrefix(secret string) string {
 }
 
 func newKeyID() (KeyID, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
+	id, err := idgen.Prefixed("zk_", 16)
+	if err != nil {
 		return "", fmt.Errorf("generate zen key id: %w", err)
 	}
-	return KeyID("zk_" + hex.EncodeToString(raw)), nil
+	return KeyID(id), nil
 }

@@ -2,13 +2,13 @@ package reqlog
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"jovepoxy/internal/idgen"
 )
 
 // Entry is one observed data-plane request without prompt/response bodies.
@@ -160,9 +160,12 @@ func (service *Service) pushRing(entry Entry) {
 }
 
 func newID() string {
-	raw := make([]byte, 12)
-	_, _ = rand.Read(raw)
-	return "rl_" + hex.EncodeToString(raw)
+	id, err := idgen.Prefixed("rl_", 12)
+	if err != nil {
+		// best-effort log ids must not fail the request path
+		return "rl_000000000000000000000000"
+	}
+	return id
 }
 
 // Store is the persistence boundary for request logs.

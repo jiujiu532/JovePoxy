@@ -2,9 +2,7 @@ package proxypool
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"strings"
@@ -12,6 +10,7 @@ import (
 	"time"
 
 	"jovepoxy/internal/crypto"
+	"jovepoxy/internal/idgen"
 )
 
 // Clock supplies time for cooldown decisions.
@@ -282,11 +281,11 @@ func requireOne(result sql.Result) error {
 }
 
 func newProxyID() (ProxyID, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
+	id, err := idgen.Prefixed("px_", 16)
+	if err != nil {
 		return "", err
 	}
-	return ProxyID("px_" + hex.EncodeToString(raw)), nil
+	return ProxyID(id), nil
 }
 
 // RedactURL returns scheme://host without credentials for logs/UI host field.

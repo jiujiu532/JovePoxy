@@ -3,7 +3,7 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Button,
   EmptyState,
@@ -18,10 +18,11 @@ import {
   slicePage,
   type QuotaAccountView,
 } from "@/components";
+import { useProviderTab } from "@/hooks/useProviderTab";
 import { api, ApiError, type AccountQuotaDTO } from "@/lib/api";
 import { setSessionHint } from "@/lib/auth-session";
 import { useI18n, type Translate } from "@/lib/i18n";
-import { isProviderTab, type ProviderTab } from "@/lib/routes";
+import type { ProviderTab } from "@/lib/routes";
 import { useViewMode } from "@/lib/view-mode";
 
 type OllamaQuotaItem = {
@@ -205,20 +206,6 @@ function toOllamaViews(
       ...(models.length > 0 ? { models } : {}),
     };
   });
-}
-
-function useProviderTab(
-  defaultTab: ProviderTab = "opencode",
-): readonly [ProviderTab, (tab: ProviderTab) => void] {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get("tab");
-  const tab: ProviderTab = isProviderTab(raw) ? raw : defaultTab;
-
-  function setTab(next: ProviderTab) {
-    setParams(next === defaultTab ? {} : { tab: next }, { replace: true });
-  }
-
-  return [tab, setTab] as const;
 }
 
 export function QuotasPage() {

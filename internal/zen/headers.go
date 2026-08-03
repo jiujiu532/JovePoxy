@@ -1,11 +1,10 @@
 package zen
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"net/http"
-	"time"
+
+	"jovepoxy/internal/idgen"
 )
 
 const userAgentSuffix = "ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13"
@@ -40,9 +39,5 @@ func plainAuthHeaders(auth Auth) http.Header {
 }
 
 func newOpenCodeID(prefix string) (string, error) {
-	randomBytes := make([]byte, 12)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return "", fmt.Errorf("read cryptographic randomness: %w", err)
-	}
-	return fmt.Sprintf("%s_%x%s", prefix, time.Now().UnixMilli(), base64.RawURLEncoding.EncodeToString(randomBytes)), nil
+	return idgen.OpenCode(prefix)
 }

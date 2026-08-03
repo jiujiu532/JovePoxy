@@ -1,11 +1,10 @@
 package keys
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"sync"
 	"time"
+
+	"jovepoxy/internal/idgen"
 )
 
 // SessionStore rotates outbound Zen-compatible session IDs per local API key.
@@ -49,9 +48,5 @@ func (store *SessionStore) SessionFor(id KeyID) (string, error) {
 }
 
 func newSessionID() (string, error) {
-	raw := make([]byte, 12)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("generate session id: %w", err)
-	}
-	return "ses_" + hex.EncodeToString(raw), nil
+	return idgen.Prefixed("ses_", 12)
 }

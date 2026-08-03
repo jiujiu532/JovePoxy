@@ -28,7 +28,6 @@ type Store interface {
 	// Update patches label/weight; when ciphertext is non-nil also replaces secret and key_prefix.
 	Update(context.Context, KeyID, string, int, *string, *string) error
 	Delete(context.Context, KeyID) error
-	GetCiphertext(context.Context, KeyID) (string, error)
 }
 
 type sqliteStore struct {
@@ -149,15 +148,6 @@ func (store *sqliteStore) Delete(ctx context.Context, id KeyID) error {
 		return fmt.Errorf("delete zen key: %w", err)
 	}
 	return requireRows(result)
-}
-
-func (store *sqliteStore) GetCiphertext(ctx context.Context, id KeyID) (string, error) {
-	var ciphertext string
-	err := store.db.QueryRowContext(ctx, `SELECT key_ciphertext FROM zen_keys WHERE id = ?`, string(id)).Scan(&ciphertext)
-	if err != nil {
-		return "", fmt.Errorf("get zen key ciphertext: %w", err)
-	}
-	return ciphertext, nil
 }
 
 func requireRows(result sql.Result) error {

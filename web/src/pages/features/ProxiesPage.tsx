@@ -33,9 +33,10 @@ import {
   useToast,
 } from "@/components";
 import { api, ApiError } from "@/lib/api";
+import { bindFriendlyError } from "@/lib/api-error";
 import { setSessionHint } from "@/lib/auth-session";
 import { cn } from "@/lib/cn";
-import { useI18n, type Translate } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import {
   compareBySort,
   matchWeight,
@@ -56,20 +57,10 @@ type ProxyRow = {
   cooldown_until?: string;
 };
 
-function friendlyError(err: unknown, fallback: string, t: Translate): string {
-  if (err instanceof ApiError) {
-    if (err.status === 401) return t("proxies.sessionExpired");
-    return err.message || fallback;
-  }
-  if (err instanceof TypeError) return t("proxies.connectFailed");
-  if (err instanceof Error) {
-    if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return t("proxies.connectFailed");
-    }
-    return err.message || fallback;
-  }
-  return fallback;
-}
+const friendlyError = bindFriendlyError({
+  sessionExpired: "proxies.sessionExpired",
+  connectFailed: "proxies.connectFailed",
+});
 
 /** Parse multi-line proxy batch: `url` or `label|url` or `label|url|weight` */
 function parseProxyLines(text: string): Array<{ label: string; url: string; weight: number }> {

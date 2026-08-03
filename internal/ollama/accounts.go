@@ -2,14 +2,13 @@ package ollama
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 
 	secretcrypto "jovepoxy/internal/crypto"
+	"jovepoxy/internal/idgen"
 )
 
 var (
@@ -283,9 +282,9 @@ func boolInt(value bool) int {
 }
 
 func newAccountID() (AccountID, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
+	id, err := idgen.Prefixed("ollama_", 16)
+	if err != nil {
 		return "", err
 	}
-	return AccountID("ollama_" + hex.EncodeToString(raw)), nil
+	return AccountID(id), nil
 }

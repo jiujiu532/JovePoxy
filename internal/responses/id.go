@@ -3,18 +3,10 @@
 // 响应：chat.completion(.chunk) → Responses 对象 / Responses SSE 事件流。
 package responses
 
-import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
-)
+import "jovepoxy/internal/idgen"
 
 func newID(prefix string) (string, error) {
-	buf := make([]byte, 12)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("allocate id: %w", err)
-	}
-	return prefix + hex.EncodeToString(buf), nil
+	return idgen.Prefixed(prefix, 12)
 }
 
 // NewResponseID returns a Responses API response id (resp_...).

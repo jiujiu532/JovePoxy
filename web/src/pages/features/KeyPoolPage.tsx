@@ -5,7 +5,7 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -34,15 +34,17 @@ import {
   slicePage,
   useToast,
 } from "@/components";
+import { useProviderTab } from "@/hooks/useProviderTab";
 import { api, ApiError, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
+import { bindFriendlyError } from "@/lib/api-error";
 import { setSessionHint } from "@/lib/auth-session";
 import {
   formatCooldownRemaining,
   formatTrafficPct,
   zenKeyStatus,
 } from "@/lib/format";
-import { useI18n, type Translate } from "@/lib/i18n";
-import { isProviderTab, type ProviderTab } from "@/lib/routes";
+import { useI18n } from "@/lib/i18n";
+import type { ProviderTab } from "@/lib/routes";
 import {
   compareBySort,
   matchWeight,
@@ -53,36 +55,16 @@ import {
 } from "@/lib/selection";
 import { tableRowClass } from "@/lib/table-row";
 
-function friendlyError(err: unknown, fallback: string, t: Translate): string {
-  if (err instanceof ApiError) {
-    if (err.status === 401) return t("keypool.sessionExpired");
-    return err.message || fallback;
-  }
-  if (err instanceof TypeError) return t("keypool.connectFailed");
-  if (err instanceof Error) {
-    if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return t("keypool.connectFailed");
-    }
-    return err.message || fallback;
-  }
-  return fallback;
-}
-
-function useKeyProviderTab(): readonly [ProviderTab, (tab: ProviderTab) => void] {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get("tab");
-  const tab: ProviderTab = isProviderTab(raw) ? raw : "opencode";
-  function setTab(next: ProviderTab) {
-    setParams(next === "opencode" ? {} : { tab: next }, { replace: true });
-  }
-  return [tab, setTab] as const;
-}
+const friendlyError = bindFriendlyError({
+  sessionExpired: "keypool.sessionExpired",
+  connectFailed: "keypool.connectFailed",
+});
 
 export function KeyPoolPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { push } = useToast();
-  const [provider, setProvider] = useKeyProviderTab();
+  const [provider, setProvider] = useProviderTab("opencode");
   const [ocKeys, setOcKeys] = useState<ZenKeyDTO[]>([]);
   const [olKeys, setOlKeys] = useState<ZenKeyDTO[]>([]);
   const [query, setQuery] = useState("");

@@ -6,7 +6,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -28,6 +28,7 @@ import {
   slicePage,
   useToast,
 } from "@/components";
+import { useProviderTab } from "@/hooks/useProviderTab";
 import {
   downloadJSON,
   parseOllamaBatchLines,
@@ -40,39 +41,18 @@ import {
   type OpenCodeImportItem,
 } from "@/lib/account-io";
 import { api, ApiError, type AccountDTO, type OllamaAccountDTO } from "@/lib/api";
+import { bindFriendlyError } from "@/lib/api-error";
 import { setSessionHint } from "@/lib/auth-session";
-import { useI18n, type Translate } from "@/lib/i18n";
-import { isProviderTab, type ProviderTab } from "@/lib/routes";
+import { useI18n } from "@/lib/i18n";
+import type { ProviderTab } from "@/lib/routes";
 
 type StatusFilter = "all" | "enabled" | "disabled";
 type DialogMode = "closed" | "add" | "batch" | "import";
 
-function friendlyError(err: unknown, fallback: string, t: Translate): string {
-  if (err instanceof ApiError) {
-    if (err.status === 401) return t("accounts.sessionExpired");
-    return err.message || fallback;
-  }
-  if (err instanceof TypeError) return t("accounts.connectFailed");
-  if (err instanceof Error) {
-    if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return t("accounts.connectFailed");
-    }
-    return err.message || fallback;
-  }
-  return fallback;
-}
-
-function useProviderTab(
-  defaultTab: ProviderTab = "opencode",
-): readonly [ProviderTab, (tab: ProviderTab) => void] {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get("tab");
-  const tab: ProviderTab = isProviderTab(raw) ? raw : defaultTab;
-  function setTab(next: ProviderTab) {
-    setParams(next === defaultTab ? {} : { tab: next }, { replace: true });
-  }
-  return [tab, setTab] as const;
-}
+const friendlyError = bindFriendlyError({
+  sessionExpired: "accounts.sessionExpired",
+  connectFailed: "accounts.connectFailed",
+});
 
 export function AccountsPage() {
   const navigate = useNavigate();

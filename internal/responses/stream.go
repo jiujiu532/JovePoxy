@@ -36,7 +36,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		writeError(writer, http.StatusInternalServerError, "api_error", "failed to allocate response id")
 		return
 	}
-	if !writeStreamHeaders(writer) {
+	if !sse.WriteHeaders(writer) {
 		return
 	}
 	state := streamState{
@@ -63,7 +63,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		if count > 0 {
 			buffer.Write(chunk[:count])
 			for {
-				line, ok := readLine(&buffer)
+				line, ok := sse.ReadLine(&buffer)
 				if !ok {
 					break
 				}
@@ -130,13 +130,13 @@ func (state *streamState) responseSnapshot(status string) map[string]any {
 }
 
 func (state *streamState) emitCreated(writer http.ResponseWriter) bool {
-	if !writeSSE(writer, "response.created", map[string]any{
+	if !sse.WriteEvent(writer, "response.created", map[string]any{
 		"type": "response.created", "sequence_number": state.next(),
 		"response": state.responseSnapshot("in_progress"),
 	}) {
 		return false
 	}
-	return writeSSE(writer, "response.in_progress", map[string]any{
+	return sse.WriteEvent(writer, "response.in_progress", map[string]any{
 		"type": "response.in_progress", "sequence_number": state.next(),
 		"response": state.responseSnapshot("in_progress"),
 	})
@@ -232,7 +232,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, delta string
 		state.reasoningID = reasoningID
 		state.reasoningIndex = state.outputIdx
 		state.reasoningOpen = true
-		if !writeSSE(writer, "response.output_item.added", map[string]any{
+		if !sse.WriteEvent(writer, "response.output_item.added", map[string]any{
 			"type": "response.output_item.added", "sequence_number": state.next(),
 			"output_index": state.reasoningIndex,
 			"item": map[string]any{
@@ -241,7 +241,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, delta string
 		}) {
 			return false
 		}
-		if !writeSSE(writer, "response.reasoning_summary_part.added", map[string]any{
+		if !sse.WriteEvent(writer, "response.reasoning_summary_part.added", map[string]any{
 			"type": "response.reasoning_summary_part.added", "sequence_number": state.next(),
 			"item_id": reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
 			"part": map[string]any{"type": "summary_text", "text": ""},
@@ -250,7 +250,7 @@ func (state *streamState) emitReasoning(writer http.ResponseWriter, delta string
 		}
 	}
 	state.reasoningBuf.WriteString(delta)
-	return writeSSE(writer, "response.reasoning_summary_text.delta", map[string]any{
+	return sse.WriteEvent(writer, "response.reasoning_summary_text.delta", map[string]any{
 		"type": "response.reasoning_summary_text.delta", "sequence_number": state.next(),
 		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
 		"delta": delta,
@@ -262,14 +262,14 @@ func (state *streamState) closeReasoning(writer http.ResponseWriter) bool {
 		return true
 	}
 	text := state.reasoningBuf.String()
-	if !writeSSE(writer, "response.reasoning_summary_text.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.reasoning_summary_text.done", map[string]any{
 		"type": "response.reasoning_summary_text.done", "sequence_number": state.next(),
 		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
 		"text": text,
 	}) {
 		return false
 	}
-	if !writeSSE(writer, "response.reasoning_summary_part.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.reasoning_summary_part.done", map[string]any{
 		"type": "response.reasoning_summary_part.done", "sequence_number": state.next(),
 		"item_id": state.reasoningID, "output_index": state.reasoningIndex, "summary_index": 0,
 		"part": map[string]any{"type": "summary_text", "text": text},
@@ -280,7 +280,7 @@ func (state *streamState) closeReasoning(writer http.ResponseWriter) bool {
 		"id": state.reasoningID, "type": "reasoning", "status": "completed",
 		"summary": []map[string]any{{"type": "summary_text", "text": text}},
 	}
-	if !writeSSE(writer, "response.output_item.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.output_item.done", map[string]any{
 		"type": "response.output_item.done", "sequence_number": state.next(),
 		"output_index": state.reasoningIndex, "item": item,
 	}) {
@@ -309,7 +309,7 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		}
 		state.messageID = messageID
 		state.messageOpen = true
-		if !writeSSE(writer, "response.output_item.added", map[string]any{
+		if !sse.WriteEvent(writer, "response.output_item.added", map[string]any{
 			"type": "response.output_item.added", "sequence_number": state.next(),
 			"output_index": state.outputIdx,
 			"item": map[string]any{
@@ -319,7 +319,7 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		}) {
 			return false
 		}
-		if !writeSSE(writer, "response.content_part.added", map[string]any{
+		if !sse.WriteEvent(writer, "response.content_part.added", map[string]any{
 			"type": "response.content_part.added", "sequence_number": state.next(),
 			"item_id": messageID, "output_index": state.outputIdx, "content_index": 0,
 			"part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}},
@@ -328,7 +328,7 @@ func (state *streamState) emitText(writer http.ResponseWriter, content string) b
 		}
 	}
 	state.textBuffer.WriteString(content)
-	return writeSSE(writer, "response.output_text.delta", map[string]any{
+	return sse.WriteEvent(writer, "response.output_text.delta", map[string]any{
 		"type": "response.output_text.delta", "sequence_number": state.next(),
 		"item_id": state.messageID, "output_index": state.outputIdx, "content_index": 0,
 		"delta": content,
@@ -340,14 +340,14 @@ func (state *streamState) closeMessage(writer http.ResponseWriter) bool {
 		return true
 	}
 	text := state.textBuffer.String()
-	if !writeSSE(writer, "response.output_text.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.output_text.done", map[string]any{
 		"type": "response.output_text.done", "sequence_number": state.next(),
 		"item_id": state.messageID, "output_index": state.outputIdx, "content_index": 0,
 		"text": text,
 	}) {
 		return false
 	}
-	if !writeSSE(writer, "response.content_part.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.content_part.done", map[string]any{
 		"type": "response.content_part.done", "sequence_number": state.next(),
 		"item_id": state.messageID, "output_index": state.outputIdx, "content_index": 0,
 		"part": map[string]any{"type": "output_text", "text": text, "annotations": []any{}},
@@ -358,7 +358,7 @@ func (state *streamState) closeMessage(writer http.ResponseWriter) bool {
 		"type": "message", "id": state.messageID, "status": "completed", "role": "assistant",
 		"content": []map[string]any{{"type": "output_text", "text": text, "annotations": []any{}}},
 	}
-	if !writeSSE(writer, "response.output_item.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.output_item.done", map[string]any{
 		"type": "response.output_item.done", "sequence_number": state.next(),
 		"output_index": state.outputIdx, "item": item,
 	}) {
@@ -402,7 +402,7 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 			state.outputIdx++
 			state.tools[toolCall.Index] = tool
 			state.toolsStarted = true
-			if !writeSSE(writer, "response.output_item.added", map[string]any{
+			if !sse.WriteEvent(writer, "response.output_item.added", map[string]any{
 				"type": "response.output_item.added", "sequence_number": state.next(),
 				"output_index": tool.outputIndex,
 				"item": map[string]any{
@@ -423,7 +423,7 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 		}
 		if toolCall.Function.Arguments != "" {
 			tool.args.WriteString(toolCall.Function.Arguments)
-			if !writeSSE(writer, "response.function_call_arguments.delta", map[string]any{
+			if !sse.WriteEvent(writer, "response.function_call_arguments.delta", map[string]any{
 				"type": "response.function_call_arguments.delta", "sequence_number": state.next(),
 				"item_id": tool.itemID, "output_index": tool.outputIndex,
 				"delta": toolCall.Function.Arguments,
@@ -440,7 +440,7 @@ func (state *streamState) closeTool(writer http.ResponseWriter, tool *toolStream
 		return true
 	}
 	args := tool.args.String()
-	if !writeSSE(writer, "response.function_call_arguments.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.function_call_arguments.done", map[string]any{
 		"type": "response.function_call_arguments.done", "sequence_number": state.next(),
 		"item_id": tool.itemID, "output_index": tool.outputIndex, "arguments": args,
 	}) {
@@ -450,7 +450,7 @@ func (state *streamState) closeTool(writer http.ResponseWriter, tool *toolStream
 		"type": "function_call", "id": tool.itemID, "status": "completed",
 		"call_id": tool.callID, "name": tool.name, "arguments": args,
 	}
-	if !writeSSE(writer, "response.output_item.done", map[string]any{
+	if !sse.WriteEvent(writer, "response.output_item.done", map[string]any{
 		"type": "response.output_item.done", "sequence_number": state.next(),
 		"output_index": tool.outputIndex, "item": item,
 	}) {
@@ -502,36 +502,10 @@ func (state *streamState) finish(writer http.ResponseWriter) bool {
 		return false
 	}
 	state.finished = true
-	return writeSSE(writer, "response.completed", map[string]any{
+	return sse.WriteEvent(writer, "response.completed", map[string]any{
 		"type": "response.completed", "sequence_number": state.next(),
 		"response": state.responseSnapshot("completed"),
 	})
-}
-
-func writeStreamHeaders(writer http.ResponseWriter) bool {
-	writer.Header().Set("Content-Type", "text/event-stream")
-	writer.Header().Set("Cache-Control", "no-cache, no-transform")
-	writer.Header().Set("Connection", "keep-alive")
-	writer.Header().Set("X-Accel-Buffering", "no")
-	writer.WriteHeader(http.StatusOK)
-	return http.NewResponseController(writer).Flush() == nil
-}
-
-func writeSSE(writer http.ResponseWriter, event string, data any) bool {
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return false
-	}
-	if _, err := writer.Write([]byte("event: " + event + "\ndata: ")); err != nil {
-		return false
-	}
-	if _, err := writer.Write(payload); err != nil {
-		return false
-	}
-	if _, err := writer.Write([]byte("\n\n")); err != nil {
-		return false
-	}
-	return http.NewResponseController(writer).Flush() == nil
 }
 
 func writeError(writer http.ResponseWriter, status int, code, message string) {
@@ -540,15 +514,4 @@ func writeError(writer http.ResponseWriter, status int, code, message string) {
 	_ = json.NewEncoder(writer).Encode(map[string]any{
 		"error": map[string]string{"type": code, "message": message},
 	})
-}
-
-func readLine(buffer *bytes.Buffer) (string, bool) {
-	data := buffer.Bytes()
-	index := bytes.IndexByte(data, '\n')
-	if index < 0 {
-		return "", false
-	}
-	line := string(data[:index])
-	buffer.Next(index + 1)
-	return strings.TrimRight(line, "\r"), true
 }

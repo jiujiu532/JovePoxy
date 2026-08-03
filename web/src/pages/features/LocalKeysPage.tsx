@@ -33,6 +33,7 @@ import {
   useToast,
 } from "@/components";
 import { api, ApiError, type LocalKeyDTO } from "@/lib/api";
+import { bindFriendlyError } from "@/lib/api-error";
 import { setSessionHint } from "@/lib/auth-session";
 import { useI18n, type Translate } from "@/lib/i18n";
 import {
@@ -44,20 +45,10 @@ import {
 } from "@/lib/selection";
 import { tableRowClass } from "@/lib/table-row";
 
-function friendlyError(err: unknown, fallback: string, t: Translate): string {
-  if (err instanceof ApiError) {
-    if (err.status === 401) return t("localkeys.sessionExpired");
-    return err.message || fallback;
-  }
-  if (err instanceof TypeError) return t("localkeys.connectFailed");
-  if (err instanceof Error) {
-    if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
-      return t("localkeys.connectFailed");
-    }
-    return err.message || fallback;
-  }
-  return fallback;
-}
+const friendlyError = bindFriendlyError({
+  sessionExpired: "localkeys.sessionExpired",
+  connectFailed: "localkeys.connectFailed",
+});
 
 function formatLimit(value: number, t: Translate): string {
   return value > 0 ? String(value) : t("localkeys.unlimited");

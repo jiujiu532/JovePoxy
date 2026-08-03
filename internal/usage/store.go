@@ -2,13 +2,13 @@ package usage
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"jovepoxy/internal/idgen"
 )
 
 // ModelAggregate is one model row for overview dashboards.
@@ -240,9 +240,9 @@ func (store *sqliteStore) AggregateByModel(ctx context.Context, limit int) ([]Mo
 }
 
 func newRowID() (string, error) {
-	raw := make([]byte, 12)
-	if _, err := rand.Read(raw); err != nil {
+	id, err := idgen.Prefixed("ur_", 12)
+	if err != nil {
 		return "", fmt.Errorf("generate usage row id: %w", err)
 	}
-	return "ur_" + hex.EncodeToString(raw), nil
+	return id, nil
 }
