@@ -163,3 +163,11 @@ ALTER TABLE request_logs ADD COLUMN reasoning_effort TEXT NOT NULL DEFAULT '';
 ALTER TABLE request_logs ADD COLUMN thinking_type TEXT NOT NULL DEFAULT '';
 ALTER TABLE request_logs ADD COLUMN budget_tokens INTEGER NOT NULL DEFAULT 0;
 `
+
+// request_logs response-side usage/cache counters (no prompt/response bodies).
+const requestLogUsageSchema = `
+ALTER TABLE request_logs ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_logs ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_logs ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0;
+`

@@ -11,6 +11,7 @@ import (
 
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/models"
+	"jovepoxy/internal/usageparse"
 	"jovepoxy/internal/zen"
 )
 
@@ -128,10 +129,11 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	}
 	defer response.Body.Close()
 	if parsed.Stream {
-		server.copyStream(writer, response.Body)
+		snap := server.copyStream(writer, response.Body)
+		storeUsage(request, snap)
 		return
 	}
-	server.copyJSON(writer, response)
+	server.copyJSON(writer, response, request)
 }
 
 func (server server) authorize(writer http.ResponseWriter, request *http.Request) bool {
@@ -199,7 +201,7 @@ func ownedBy(provider models.Provider) string {
 	return "zen"
 }
 
-func (server server) copyJSON(writer http.ResponseWriter, response *http.Response) {
+func (server server) copyJSON(writer http.ResponseWriter, response *http.Response, request *http.Request) {
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		writeOpenAIError(writer, http.StatusBadGateway, "upstream response failed", "api_error", "", "upstream_error")
@@ -212,6 +214,9 @@ func (server server) copyJSON(writer http.ResponseWriter, response *http.Respons
 	if isOpenAIStyleRateLimit(body) {
 		writeOpenAIError(writer, http.StatusTooManyRequests, "upstream rate limit exceeded", "rate_limit_error", "", "rate_limit_exceeded")
 		return
+	}
+	if request != nil {
+		storeUsage(request, usageparse.ParseOpenAIUsage(body))
 	}
 	writer.Header().Set("Content-Type", contentType(response.Header.Get("Content-Type"), "application/json"))
 	writer.WriteHeader(response.StatusCode)

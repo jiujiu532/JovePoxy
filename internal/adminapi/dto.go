@@ -215,19 +215,23 @@ type usageResponse struct {
 }
 
 type logDTO struct {
-	ID              string    `json:"id"`
-	KeyID           string    `json:"key_id,omitempty"`
-	Model           string    `json:"model"`
-	Route           string    `json:"route"`
-	Status          int       `json:"status"`
-	LatencyMS       int64     `json:"latency_ms"`
-	Stream          bool      `json:"stream"`
-	ErrorClass      string    `json:"error_class,omitempty"`
-	MaxTokens       int       `json:"max_tokens,omitempty"`
-	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
-	ThinkingType    string    `json:"thinking_type,omitempty"`
-	BudgetTokens    int       `json:"budget_tokens,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID                  string    `json:"id"`
+	KeyID               string    `json:"key_id,omitempty"`
+	Model               string    `json:"model"`
+	Route               string    `json:"route"`
+	Status              int       `json:"status"`
+	LatencyMS           int64     `json:"latency_ms"`
+	Stream              bool      `json:"stream"`
+	ErrorClass          string    `json:"error_class,omitempty"`
+	MaxTokens           int       `json:"max_tokens,omitempty"`
+	ReasoningEffort     string    `json:"reasoning_effort,omitempty"`
+	ThinkingType        string    `json:"thinking_type,omitempty"`
+	BudgetTokens        int       `json:"budget_tokens,omitempty"`
+	InputTokens         int       `json:"input_tokens"`
+	OutputTokens        int       `json:"output_tokens"`
+	CacheReadTokens     int       `json:"cache_read_tokens"`
+	CacheCreationTokens int       `json:"cache_creation_tokens"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 type logsResponse struct {
@@ -428,7 +432,10 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 			Status: entry.Status, LatencyMS: entry.LatencyMS, Stream: entry.Stream,
 			ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,
-			BudgetTokens: entry.BudgetTokens, CreatedAt: entry.CreatedAt,
+			BudgetTokens: entry.BudgetTokens,
+			InputTokens:  entry.InputTokens, OutputTokens: entry.OutputTokens,
+			CacheReadTokens: entry.CacheReadTokens, CacheCreationTokens: entry.CacheCreationTokens,
+			CreatedAt: entry.CreatedAt,
 		})
 	}
 	return logsResponse{Logs: out}

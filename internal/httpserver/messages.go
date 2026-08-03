@@ -10,6 +10,7 @@ import (
 	"jovepoxy/internal/anthropic"
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/sse"
+	"jovepoxy/internal/usageparse"
 	"jovepoxy/internal/zen"
 )
 
@@ -65,10 +66,11 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 	}
 	defer response.Body.Close()
 	if parsed.Stream {
-		anthropic.WriteStream(writer, response.Body, parsed.Model, inputTokens)
+		snap := anthropic.WriteStream(writer, response.Body, parsed.Model, inputTokens)
+		storeUsage(request, snap)
 		return
 	}
-	server.writeAnthropicJSON(writer, response, parsed.Model, inputTokens)
+	server.writeAnthropicJSON(writer, response, request, parsed.Model, inputTokens)
 }
 
 func (server server) authorizeAnthropic(writer http.ResponseWriter, request *http.Request) bool {
@@ -91,7 +93,7 @@ func (server server) authorizeAnthropic(writer http.ResponseWriter, request *htt
 	return true
 }
 
-func (server server) writeAnthropicJSON(writer http.ResponseWriter, response *http.Response, model string, inputTokens int) {
+func (server server) writeAnthropicJSON(writer http.ResponseWriter, response *http.Response, request *http.Request, model string, inputTokens int) {
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		writeAnthropicError(writer, http.StatusBadGateway, "upstream_error", "upstream response failed")
@@ -104,6 +106,11 @@ func (server server) writeAnthropicJSON(writer http.ResponseWriter, response *ht
 	if isOpenAIStyleRateLimit(body) {
 		writeAnthropicError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded (free model rate limit)")
 		return
+	}
+	// Parse usage from upstream OpenAI body before convert (single source for logs + client).
+	snap := usageparse.ParseOpenAIUsage(body)
+	if request != nil {
+		storeUsage(request, snap)
 	}
 	message, err := anthropic.FromOpenAI(body, model, inputTokens)
 	if err != nil {

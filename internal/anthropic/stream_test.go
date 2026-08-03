@@ -292,3 +292,39 @@ func TestWriteStream_late_tool_name_backfill(t *testing.T) {
 		t.Fatalf("expected tool_use stop:\n%s", body)
 	}
 }
+
+func TestWriteStream_trailing_usage_frame_maps_cache(t *testing.T) {
+	// finish_reason first, then a separate usage frame (common OpenAI/Zen pattern).
+	// message_delta must wait for EOF so cache fields are real, not hardcoded 0.
+	upstream := strings.NewReader(
+		"data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n" +
+			"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+			"data: {\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":3,\"prompt_tokens_details\":{\"cached_tokens\":7,\"cache_write_tokens\":2}}}\n\n" +
+			"data: [DONE]\n\n",
+	)
+	recorder := httptest.NewRecorder()
+	snap := anthropic.WriteStream(recorder, upstream, "demo-free", 4)
+	if snap.PromptTokens != 12 || snap.CompletionTokens != 3 || snap.CacheReadTokens != 7 || snap.CacheCreationTokens != 2 {
+		t.Fatalf("snap = %+v", snap)
+	}
+	body := recorder.Body.String()
+	// Final message_delta should carry real cache counters for the client.
+	if !strings.Contains(body, `"cache_read_input_tokens":7`) {
+		t.Fatalf("expected cache_read in message_delta:\n%s", body)
+	}
+	if !strings.Contains(body, `"cache_creation_input_tokens":2`) {
+		t.Fatalf("expected cache_creation in message_delta:\n%s", body)
+	}
+	if !strings.Contains(body, `"input_tokens":12`) || !strings.Contains(body, `"output_tokens":3`) {
+		t.Fatalf("expected input/output in message_delta:\n%s", body)
+	}
+	// Usage frame must not appear before message_delta with zeros only for cache.
+	deltaIdx := strings.Index(body, "event: message_delta")
+	if deltaIdx < 0 {
+		t.Fatalf("missing message_delta:\n%s", body)
+	}
+	deltaBody := body[deltaIdx:]
+	if strings.Contains(deltaBody, `"cache_read_input_tokens":0`) {
+		t.Fatalf("message_delta still has zero cache_read:\n%s", deltaBody)
+	}
+}

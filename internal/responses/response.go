@@ -44,9 +44,18 @@ type chatToolCall struct {
 }
 
 type chatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens             int `json:"prompt_tokens"`
+	CompletionTokens         int `json:"completion_tokens"`
+	TotalTokens              int `json:"total_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	PromptTokensDetails      *struct {
+		CachedTokens     int `json:"cached_tokens"`
+		CacheWriteTokens int `json:"cache_write_tokens"`
+	} `json:"prompt_tokens_details"`
+	InputTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
 }
 
 // Response is the Responses API non-stream response shape (subset).
@@ -137,14 +146,21 @@ func FromOpenAI(body []byte, model string) (Response, error) {
 }
 
 func usagePayload(usage *chatUsage) map[string]any {
-	input, output := 0, 0
+	input, output, cached := 0, 0, 0
 	if usage != nil {
 		input = usage.PromptTokens
 		output = usage.CompletionTokens
+		cached = usage.CacheReadInputTokens
+		if cached == 0 && usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+			cached = usage.PromptTokensDetails.CachedTokens
+		}
+		if cached == 0 && usage.InputTokensDetails != nil && usage.InputTokensDetails.CachedTokens > 0 {
+			cached = usage.InputTokensDetails.CachedTokens
+		}
 	}
 	return map[string]any{
 		"input_tokens": input, "output_tokens": output, "total_tokens": input + output,
-		"input_tokens_details":  map[string]int{"cached_tokens": 0},
+		"input_tokens_details":  map[string]int{"cached_tokens": cached},
 		"output_tokens_details": map[string]int{"reasoning_tokens": 0},
 	}
 }

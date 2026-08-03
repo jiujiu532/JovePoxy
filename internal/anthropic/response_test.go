@@ -162,7 +162,6 @@ func TestFromOpenAI_empty_reasoning_content_skipped(t *testing.T) {
 	}
 }
 
-
 func TestFromOpenAI_reasoning_field_alias(t *testing.T) {
 	// Non-stream should accept message.reasoning like stream does.
 	body := []byte(`{
@@ -225,5 +224,29 @@ func TestFromOpenAI_empty_tool_id_generated(t *testing.T) {
 	id, _ := message.Content[0]["id"].(string)
 	if id == "" {
 		t.Fatalf("expected generated tool id, content=%+v", message.Content)
+	}
+}
+
+func TestFromOpenAI_maps_cache_tokens(t *testing.T) {
+	body := []byte(`{
+		"choices":[{"finish_reason":"stop","message":{"content":"ok"}}],
+		"usage":{
+			"prompt_tokens":100,
+			"completion_tokens":8,
+			"prompt_tokens_details":{"cached_tokens":40,"cache_write_tokens":5}
+		}
+	}`)
+	message, err := anthropic.FromOpenAI(body, "demo", 1)
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if message.Usage["input_tokens"] != 100 || message.Usage["output_tokens"] != 8 {
+		t.Fatalf("tokens = %+v", message.Usage)
+	}
+	if message.Usage["cache_read_input_tokens"] != 40 {
+		t.Fatalf("cache_read = %+v", message.Usage)
+	}
+	if message.Usage["cache_creation_input_tokens"] != 5 {
+		t.Fatalf("cache_creation = %+v", message.Usage)
 	}
 }

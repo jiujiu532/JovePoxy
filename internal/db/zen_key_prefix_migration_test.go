@@ -49,7 +49,7 @@ func TestMigrate_adds_zen_key_prefix_column_idempotently(t *testing.T) {
 	if err := database.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if migrations != 9 {
-		t.Fatalf("migration count = %d, want 9", migrations)
+	if migrations != 10 {
+		t.Fatalf("migration count = %d, want 10", migrations)
 	}
 }

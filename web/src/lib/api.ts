@@ -142,6 +142,10 @@ export type LogDTO = {
   readonly reasoning_effort?: string;
   readonly thinking_type?: string;
   readonly budget_tokens?: number;
+  readonly input_tokens?: number;
+  readonly output_tokens?: number;
+  readonly cache_read_tokens?: number;
+  readonly cache_creation_tokens?: number;
   readonly created_at: string;
 };
 export type VersionInfoDTO = {

@@ -44,8 +44,17 @@ type openAIToolCall struct {
 }
 
 type openAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
+	PromptTokens             int `json:"prompt_tokens"`
+	CompletionTokens         int `json:"completion_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	PromptTokensDetails      *struct {
+		CachedTokens     int `json:"cached_tokens"`
+		CacheWriteTokens int `json:"cache_write_tokens"`
+	} `json:"prompt_tokens_details"`
+	InputTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
 }
 
 // Message is the Anthropic Messages API non-stream response shape.
@@ -145,11 +154,28 @@ func mapStopReason(finishReason string) string {
 }
 
 func usageMap(inputTokens, outputTokens int, usage *openAIUsage) map[string]int {
-	if usage != nil && usage.PromptTokens > 0 {
-		inputTokens = usage.PromptTokens
+	cacheRead, cacheCreation := 0, 0
+	if usage != nil {
+		if usage.PromptTokens > 0 {
+			inputTokens = usage.PromptTokens
+		}
+		if usage.CompletionTokens > 0 {
+			outputTokens = usage.CompletionTokens
+		}
+		cacheRead = usage.CacheReadInputTokens
+		cacheCreation = usage.CacheCreationInputTokens
+		if cacheRead == 0 && usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CachedTokens > 0 {
+			cacheRead = usage.PromptTokensDetails.CachedTokens
+		}
+		if cacheRead == 0 && usage.InputTokensDetails != nil && usage.InputTokensDetails.CachedTokens > 0 {
+			cacheRead = usage.InputTokensDetails.CachedTokens
+		}
+		if cacheCreation == 0 && usage.PromptTokensDetails != nil && usage.PromptTokensDetails.CacheWriteTokens > 0 {
+			cacheCreation = usage.PromptTokensDetails.CacheWriteTokens
+		}
 	}
 	return map[string]int{
 		"input_tokens": inputTokens, "output_tokens": outputTokens,
-		"cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+		"cache_creation_input_tokens": cacheCreation, "cache_read_input_tokens": cacheRead,
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"jovepoxy/internal/responses"
+	"jovepoxy/internal/usageparse"
 )
 
 // responsesHandler 实现 OpenAI Responses API（POST /v1/responses）。
@@ -62,13 +63,14 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 	}
 	defer response.Body.Close()
 	if parsed.Stream {
-		responses.WriteStream(writer, response.Body, parsed.Model)
+		snap := responses.WriteStream(writer, response.Body, parsed.Model)
+		storeUsage(request, snap)
 		return
 	}
-	server.writeResponsesJSON(writer, response, parsed.Model)
+	server.writeResponsesJSON(writer, response, request, parsed.Model)
 }
 
-func (server server) writeResponsesJSON(writer http.ResponseWriter, response *http.Response, model string) {
+func (server server) writeResponsesJSON(writer http.ResponseWriter, response *http.Response, request *http.Request, model string) {
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		writeOpenAIError(writer, http.StatusBadGateway, "upstream response failed", "api_error", "", "upstream_error")
@@ -81,6 +83,10 @@ func (server server) writeResponsesJSON(writer http.ResponseWriter, response *ht
 	if isOpenAIStyleRateLimit(body) {
 		writeOpenAIError(writer, http.StatusTooManyRequests, "upstream rate limit exceeded", "rate_limit_error", "", "rate_limit_exceeded")
 		return
+	}
+	snap := usageparse.ParseOpenAIUsage(body)
+	if request != nil {
+		storeUsage(request, snap)
 	}
 	converted, err := responses.FromOpenAI(body, model)
 	if err != nil {

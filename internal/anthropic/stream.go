@@ -11,54 +11,67 @@ import (
 	"strings"
 
 	"jovepoxy/internal/sse"
+	"jovepoxy/internal/usageparse"
 )
 
 // WriteStream converts an OpenAI chat.completion SSE body into Anthropic Messages SSE events.
-func WriteStream(writer http.ResponseWriter, body io.Reader, model string, inputTokens int) {
+// It returns the last observed upstream usage (zero if absent); scan failures never break the stream.
+func WriteStream(writer http.ResponseWriter, body io.Reader, model string, inputTokens int) usageparse.UsageSnapshot {
+	var snap usageparse.UsageSnapshot
 	// First-event probe without idle wrapper so early JSON errors do not leave a
 	// background reader holding the upstream body.
 	reader := bufio.NewReader(body)
 	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
 		writeError(writer, http.StatusBadGateway, "upstream_error", "Empty response")
-		return
+		return snap
 	}
 	if err != nil && !errors.Is(err, io.EOF) && len(firstEvent) == 0 {
 		writeError(writer, http.StatusBadGateway, "upstream_error", "upstream response failed")
-		return
+		return snap
 	}
 	if sse.IsRateLimitEvent(firstEvent) {
 		writeError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded (free model rate limit)")
-		return
+		return snap
 	}
 	if msg, isErr := sse.ErrorEventMessage(firstEvent); isErr {
 		if msg == "" {
 			msg = "upstream error"
 		}
 		writeError(writer, http.StatusBadGateway, "upstream_error", msg)
-		return
+		return snap
 	}
 
 	messageID, idErr := NewMessageID()
 	if idErr != nil {
 		writeError(writer, http.StatusInternalServerError, "api_error", "failed to allocate message id")
-		return
+		return snap
 	}
 	if !sse.WriteHeaders(writer) {
-		return
+		return snap
 	}
 	state := streamState{messageID: messageID, model: model, inputTokens: inputTokens}
+	usageparse.ScanSSEEvent(firstEvent, &snap)
+	if !snap.IsZero() {
+		state.applyUsage(snap)
+	}
 	if !state.emitMessageStart(writer) {
-		return
+		return snap
 	}
 	if !state.consumeEvent(writer, firstEvent) {
 		// Headers already sent: best-effort terminal frame.
+		if !snap.IsZero() {
+			state.applyUsage(snap)
+		}
 		state.finishIfNeeded(writer)
-		return
+		return snap
 	}
 	if errors.Is(err, io.EOF) {
+		if !snap.IsZero() {
+			state.applyUsage(snap)
+		}
 		state.finishIfNeeded(writer)
-		return
+		return snap
 	}
 
 	// Idle timeout only for the remainder of the upstream body.
@@ -74,23 +87,38 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 				if !ok {
 					break
 				}
+				usageparse.ScanSSEDataLine([]byte(line), &snap)
+				if !snap.IsZero() {
+					state.applyUsage(snap)
+				}
 				if !state.consumeLine(writer, line) {
+					if !snap.IsZero() {
+						state.applyUsage(snap)
+					}
 					state.finishIfNeeded(writer)
-					return
+					return snap
 				}
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
 			if remainder := bytes.TrimSpace(buffer.Bytes()); len(remainder) > 0 {
+				usageparse.ScanSSEDataLine(remainder, &snap)
 				_ = state.consumeLine(writer, string(remainder))
 			}
+			// Prefer real upstream usage when present for client-visible final usage.
+			if !snap.IsZero() {
+				state.applyUsage(snap)
+			}
 			state.finishIfNeeded(writer)
-			return
+			return snap
 		}
 		if readErr != nil {
 			// Mid-stream read failure: best-effort message_stop if not finished.
+			if !snap.IsZero() {
+				state.applyUsage(snap)
+			}
 			state.finishIfNeeded(writer)
-			return
+			return snap
 		}
 	}
 }
@@ -98,11 +126,17 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 // streamState tracks open content blocks and allocates Anthropic content indexes.
 // thinking occupies an index when present; text/tool indexes follow via nextBlock.
 type streamState struct {
-	messageID    string
-	model        string
-	inputTokens  int
-	outputTokens int
-	finished     bool
+	messageID           string
+	model               string
+	inputTokens         int
+	outputTokens        int
+	cacheReadTokens     int
+	cacheCreationTokens int
+	finished            bool
+	// lastFinishReason is set when the upstream finish_reason arrives; terminal
+	// message_delta is deferred until stream EOF so a trailing usage frame can
+	// still update cache/token counters before the client-visible final usage.
+	lastFinishReason string
 
 	thinkingOpen  bool
 	thinkingIndex int
@@ -173,7 +207,9 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 		return false
 	}
 	if choice.FinishReason != "" {
-		return state.finish(writer, choice.FinishReason)
+		// Defer terminal frames until EOF so a later usage-only chunk can still
+		// populate cache_read / cache_creation before message_delta is emitted.
+		state.lastFinishReason = choice.FinishReason
 	}
 	return true
 }
@@ -409,9 +445,25 @@ func (state *streamState) closeOpenTools(writer http.ResponseWriter) bool {
 }
 
 func (state *streamState) finishIfNeeded(writer http.ResponseWriter) {
-	if !state.finished {
-		_ = state.finish(writer, "stop")
+	if state.finished {
+		return
 	}
+	reason := state.lastFinishReason
+	if reason == "" {
+		reason = "stop"
+	}
+	_ = state.finish(writer, reason)
+}
+
+func (state *streamState) applyUsage(snap usageparse.UsageSnapshot) {
+	if snap.PromptTokens > 0 {
+		state.inputTokens = snap.PromptTokens
+	}
+	if snap.CompletionTokens > 0 {
+		state.outputTokens = snap.CompletionTokens
+	}
+	state.cacheReadTokens = snap.CacheReadTokens
+	state.cacheCreationTokens = snap.CacheCreationTokens
 }
 
 func (state *streamState) emitErrorAndStop(writer http.ResponseWriter, message string) bool {
@@ -454,7 +506,12 @@ func (state *streamState) finish(writer http.ResponseWriter, finishReason string
 	if !sse.WriteEvent(writer, "message_delta", map[string]any{
 		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": mapStopReason(finishReason)},
-		"usage": map[string]int{"output_tokens": state.outputTokens},
+		"usage": map[string]int{
+			"output_tokens":               state.outputTokens,
+			"input_tokens":                state.inputTokens,
+			"cache_read_input_tokens":     state.cacheReadTokens,
+			"cache_creation_input_tokens": state.cacheCreationTokens,
+		},
 	}) {
 		return false
 	}

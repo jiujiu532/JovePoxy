@@ -42,6 +42,8 @@ func (server server) observe(route string, handler http.HandlerFunc) http.Handle
 			LatencyMS: time.Since(started).Milliseconds(), Stream: meta.stream, ErrorClass: errorClass,
 			MaxTokens: meta.maxTokens, ReasoningEffort: meta.reasoningEffort,
 			ThinkingType: meta.thinkingType, BudgetTokens: meta.budgetTokens,
+			InputTokens: meta.inputTokens, OutputTokens: meta.outputTokens,
+			CacheReadTokens: meta.cacheReadTokens, CacheCreationTokens: meta.cacheCreationTokens,
 		})
 	}
 }

@@ -12,41 +12,44 @@ import (
 	"time"
 
 	"jovepoxy/internal/sse"
+	"jovepoxy/internal/usageparse"
 )
 
 // WriteStream converts a chat.completion SSE body into Responses API SSE events.
-func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
+// Returns last observed upstream usage (zero if absent); scan failures never break the stream.
+func WriteStream(writer http.ResponseWriter, body io.Reader, model string) usageparse.UsageSnapshot {
+	var snap usageparse.UsageSnapshot
 	// First-event probe without idle wrapper so early JSON errors do not leave a
 	// background reader holding the upstream body.
 	reader := bufio.NewReader(body)
 	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
 		writeError(writer, http.StatusBadGateway, "upstream_error", "upstream returned an empty response")
-		return
+		return snap
 	}
 	if err != nil && !errors.Is(err, io.EOF) && len(firstEvent) == 0 {
 		writeError(writer, http.StatusBadGateway, "upstream_error", "upstream response failed")
-		return
+		return snap
 	}
 	if sse.IsRateLimitEvent(firstEvent) {
 		writeError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded")
-		return
+		return snap
 	}
 	if msg, isErr := sse.ErrorEventMessage(firstEvent); isErr {
 		if msg == "" {
 			msg = "upstream error"
 		}
 		writeError(writer, http.StatusBadGateway, "upstream_error", msg)
-		return
+		return snap
 	}
 
 	responseID, idErr := NewResponseID()
 	if idErr != nil {
 		writeError(writer, http.StatusInternalServerError, "api_error", "failed to allocate response id")
-		return
+		return snap
 	}
 	if !sse.WriteHeaders(writer) {
-		return
+		return snap
 	}
 	state := streamState{
 		responseID: responseID,
@@ -54,16 +57,17 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		createdAt:  time.Now().Unix(),
 		tools:      make(map[int]*toolStreamState),
 	}
+	usageparse.ScanSSEEvent(firstEvent, &snap)
 	if !state.emitCreated(writer) {
-		return
+		return snap
 	}
 	if !state.consumeEvent(writer, firstEvent) {
 		state.failIfNeeded(writer, "stream processing failed")
-		return
+		return snap
 	}
 	if errors.Is(err, io.EOF) {
 		state.finishIfNeeded(writer)
-		return
+		return snap
 	}
 
 	// Idle timeout only for the remainder of the upstream body.
@@ -79,23 +83,25 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 				if !ok {
 					break
 				}
+				usageparse.ScanSSEDataLine([]byte(line), &snap)
 				if !state.consumeLine(writer, line) {
 					state.failIfNeeded(writer, "stream processing failed")
-					return
+					return snap
 				}
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
 			if remainder := bytes.TrimSpace(buffer.Bytes()); len(remainder) > 0 {
+				usageparse.ScanSSEDataLine(remainder, &snap)
 				_ = state.consumeLine(writer, string(remainder))
 			}
 			state.finishIfNeeded(writer)
-			return
+			return snap
 		}
 		if readErr != nil {
 			// Mid-stream read failure: best-effort failed terminal if headers sent.
 			state.failIfNeeded(writer, "upstream stream interrupted")
-			return
+			return snap
 		}
 	}
 }
