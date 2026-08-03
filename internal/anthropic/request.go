@@ -242,35 +242,38 @@ func ToOpenAIChat(request Request) ([]byte, int, error) {
 }
 
 // mapReasoningEffort maps Anthropic thinking / output_config to OpenAI reasoning_effort.
-// Returns empty string when the field should be omitted.
+// Returns empty string when the field should be omitted. Levels are clamped per model.
 func mapReasoningEffort(request Request) string {
 	if request.Thinking == nil {
 		return ""
 	}
+	raw := ""
 	switch request.Thinking.Type {
 	case "disabled":
-		return "none"
+		raw = "none"
 	case "enabled":
 		// 有正 budget 时按阈值映射（经典 Anthropic / 非 DeepSeek 客户端）。
 		if request.Thinking.HasBudget && request.Thinking.BudgetTokens > 0 {
-			return effort.BudgetToLevel(request.Thinking.BudgetTokens)
+			raw = effort.BudgetToLevel(request.Thinking.BudgetTokens)
+		} else if level := effort.NormalizeLevel(request.OutputConfigEffort); level != "" {
+			// Kelivo DeepSeek 等：enabled 不带 budget，档位在 output_config.effort。
+			raw = level
+		} else {
+			// 仅 enabled、无 effort：上游拒 auto，默认 high。
+			raw = "high"
 		}
-		// Kelivo DeepSeek 等：enabled 不带 budget，档位在 output_config.effort。
-		if level := effort.MapForZen(request.OutputConfigEffort); level != "" {
-			return level
-		}
-		// 仅 enabled、无 effort：上游拒 auto，默认 high。
-		return "high"
 	case "adaptive", "auto":
-		if level := effort.MapForZen(request.OutputConfigEffort); level != "" {
-			return level
+		if level := effort.NormalizeLevel(request.OutputConfigEffort); level != "" {
+			raw = level
+		} else {
+			// 裸 adaptive/auto 无 effort：上游拒 auto，默认 high。
+			raw = "high"
 		}
-		// 裸 adaptive/auto 无 effort：上游拒 auto，默认 high。
-		return "high"
 	default:
 		// Unknown type: ignore thinking config, do not 400.
 		return ""
 	}
+	return effort.MapForModel(request.Model, raw)
 }
 
 // mapStopSequences maps Anthropic stop_sequences to OpenAI stop.

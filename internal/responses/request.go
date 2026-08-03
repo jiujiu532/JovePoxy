@@ -31,10 +31,11 @@ type ObservabilityMeta struct {
 }
 
 // Observability returns request-side generation metadata (no prompt/response bodies).
+// Effort is the value that will be forwarded after per-model mapping.
 func (request Request) Observability() ObservabilityMeta {
 	return ObservabilityMeta{
 		MaxTokens:       request.MaxOutputTokens,
-		ReasoningEffort: effort.NormalizeLevel(request.ReasoningEffort),
+		ReasoningEffort: effort.MapForModel(request.Model, request.ReasoningEffort),
 	}
 }
 
@@ -144,7 +145,7 @@ func ToOpenAIChat(request Request) ([]byte, error) {
 		Stream:            request.Stream,
 		MaxTokens:         request.MaxOutputTokens,
 		Tools:             tools,
-		ReasoningEffort:   effort.NormalizeLevel(request.ReasoningEffort),
+		ReasoningEffort:   effort.MapForModel(request.Model, request.ReasoningEffort),
 		ToolChoice:        request.ToolChoice,
 		ParallelToolCalls: request.ParallelToolCalls,
 	}

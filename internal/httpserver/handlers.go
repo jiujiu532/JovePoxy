@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"jovepoxy/internal/effort"
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/models"
 	"jovepoxy/internal/usageparse"
@@ -113,11 +114,13 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 		writeOpenAIError(writer, http.StatusBadRequest, "model is not available", "invalid_request_error", "model", "model_not_available")
 		return
 	}
+	// Clamp reasoning_effort to labels the target model accepts (no random xhigh/max).
+	body, mappedEffort := applyReasoningEffort(body, parsed.Model)
 	meta := requestMetaFrom(request.Context())
 	meta.model = parsed.Model
 	meta.stream = parsed.Stream
 	meta.maxTokens = parsed.MaxTokens
-	meta.reasoningEffort = strings.ToLower(strings.TrimSpace(parsed.ReasoningEffort))
+	meta.reasoningEffort = mappedEffort
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	// Stream usage is often omitted unless the client opts in; inject for logging.
 	body = ensureStreamIncludeUsage(body, parsed.Stream)
@@ -156,6 +159,79 @@ func (server server) authorize(writer http.ResponseWriter, request *http.Request
 	}
 	*request = *request.WithContext(withRequestMeta(request.Context(), requestMeta{keyID: string(verified.ID)}))
 	return true
+}
+
+// applyReasoningEffort rewrites top-level reasoning_effort (and nested reasoning.effort)
+// to a model-safe label. Returns the possibly-modified body and the effort that will be sent
+// (empty when the field is omitted). Bodies without effort fields are returned unchanged.
+func applyReasoningEffort(body []byte, model string) ([]byte, string) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return body, ""
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(body, &object); err != nil {
+		return body, ""
+	}
+	_, hasTop := object["reasoning_effort"]
+	_, hasNested := object["reasoning"]
+	if !hasTop && !hasNested {
+		return body, ""
+	}
+	rawEffort := ""
+	if nested, ok := object["reasoning"]; ok {
+		var reasoning struct {
+			Effort string `json:"effort"`
+		}
+		if err := json.Unmarshal(nested, &reasoning); err == nil {
+			rawEffort = reasoning.Effort
+		}
+	}
+	if top, ok := object["reasoning_effort"]; ok {
+		var s string
+		if err := json.Unmarshal(top, &s); err == nil && strings.TrimSpace(s) != "" {
+			rawEffort = s
+		}
+	}
+	if strings.TrimSpace(rawEffort) == "" {
+		// Nested reasoning without effort — leave body alone.
+		return body, ""
+	}
+	mapped := effort.MapForModel(model, rawEffort)
+	if mapped == "" {
+		delete(object, "reasoning_effort")
+		// Strip effort from nested reasoning object if present; keep other keys.
+		if nested, ok := object["reasoning"]; ok {
+			var reasoning map[string]json.RawMessage
+			if err := json.Unmarshal(nested, &reasoning); err == nil {
+				delete(reasoning, "effort")
+				if len(reasoning) == 0 {
+					delete(object, "reasoning")
+				} else if encoded, err := json.Marshal(reasoning); err == nil {
+					object["reasoning"] = encoded
+				}
+			}
+		}
+	} else {
+		if encoded, err := json.Marshal(mapped); err == nil {
+			object["reasoning_effort"] = encoded
+		}
+		if nested, ok := object["reasoning"]; ok {
+			var reasoning map[string]json.RawMessage
+			if err := json.Unmarshal(nested, &reasoning); err == nil {
+				if encoded, err := json.Marshal(mapped); err == nil {
+					reasoning["effort"] = encoded
+					if out, err := json.Marshal(reasoning); err == nil {
+						object["reasoning"] = out
+					}
+				}
+			}
+		}
+	}
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return body, mapped
+	}
+	return encoded, mapped
 }
 
 // ensureStreamIncludeUsage injects stream_options.include_usage when streaming and absent.

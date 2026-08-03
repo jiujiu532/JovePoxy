@@ -552,7 +552,8 @@ func TestToOpenAIChat_enabled_with_output_config_effort_high(t *testing.T) {
 }
 
 func TestToOpenAIChat_enabled_with_output_config_effort_max_is_xhigh(t *testing.T) {
-	// Kelivo 极限/全力 → output_config.effort=max；Zen 无 max，落成 xhigh
+	// Kelivo 极限/全力 → output_config.effort=max。
+	// DeepSeek 家族支持 max，按模型保留 max（不再一律压成 xhigh）。
 	request, err := anthropic.ParseRequest([]byte(`{
 		"model":"deepseek-v4-flash-free","max_tokens":64000,
 		"thinking":{"type":"enabled"},
@@ -570,11 +571,35 @@ func TestToOpenAIChat_enabled_with_output_config_effort_max_is_xhigh(t *testing.
 	if err := json.Unmarshal(openAIBody, &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got, _ := payload["reasoning_effort"].(string); got != "xhigh" {
-		t.Fatalf("reasoning_effort = %v, want xhigh; body=%s", payload["reasoning_effort"], openAIBody)
+	if got, _ := payload["reasoning_effort"].(string); got != "max" {
+		t.Fatalf("reasoning_effort = %v, want max; body=%s", payload["reasoning_effort"], openAIBody)
 	}
-	if request.Observability().ReasoningEffort != "xhigh" {
-		t.Fatalf("Observability.ReasoningEffort = %q, want xhigh", request.Observability().ReasoningEffort)
+	if request.Observability().ReasoningEffort != "max" {
+		t.Fatalf("Observability.ReasoningEffort = %q, want max", request.Observability().ReasoningEffort)
+	}
+}
+
+func TestToOpenAIChat_enabled_with_output_config_effort_max_clamps_for_default(t *testing.T) {
+	// 未知家族默认档不含 max：max → high。
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"demo-free","max_tokens":64,
+		"thinking":{"type":"enabled"},
+		"output_config":{"effort":"max"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, _ := payload["reasoning_effort"].(string); got != "high" {
+		t.Fatalf("reasoning_effort = %v, want high; body=%s", payload["reasoning_effort"], openAIBody)
 	}
 }
 
