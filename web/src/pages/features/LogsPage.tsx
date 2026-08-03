@@ -41,6 +41,15 @@ function formatLatency(ms: number): string {
   return `${ms} ms`;
 }
 
+/** Display mapped Zen reasoning_effort; empty means client did not enable thinking. */
+function formatEffort(row: LogDTO): string {
+  const effort = (row.reasoning_effort ?? "").trim();
+  if (effort) return effort;
+  const thinking = (row.thinking_type ?? "").trim();
+  if (thinking === "disabled") return "none";
+  return "";
+}
+
 function matchStatusBucket(status: number, bucket: StatusFilter): boolean {
   if (bucket === "all") return true;
   if (bucket === "2xx") return status >= 200 && status < 300;
@@ -117,7 +126,9 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
         row.model.toLowerCase().includes(q) ||
         String(row.status).includes(q) ||
         (row.error_class ?? "").toLowerCase().includes(q) ||
-        (row.key_id ?? "").toLowerCase().includes(q)
+        (row.key_id ?? "").toLowerCase().includes(q) ||
+        (row.reasoning_effort ?? "").toLowerCase().includes(q) ||
+        (row.thinking_type ?? "").toLowerCase().includes(q)
       );
     });
 
@@ -243,20 +254,25 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[28rem] md:min-w-[52rem] text-left text-sm">
+                <table className="w-full min-w-[28rem] md:min-w-[60rem] text-left text-sm">
                   <thead>
                     <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.routeLabel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colModel")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.statusAria")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colEffort")}</th>
+                      <th className="px-4 py-2.5 font-medium">{t("logs.colMaxTokens")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.colLatency")}</th>
                       <th className="px-4 py-2.5 font-medium">{t("logs.streamAria")}</th>
                       <th className="px-4 py-2.5 font-medium">Key</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paged.map((row) => (
+                    {paged.map((row) => {
+                      const effort = formatEffort(row);
+                      const budget = row.budget_tokens ?? 0;
+                      return (
                       <tr
                         key={row.id}
                         className="border-b-2 border-border last:border-b-0 hover:bg-accent-soft"
@@ -276,6 +292,27 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                         <td className="px-4 py-3">
                           <Badge kind={statusKind(row.status)}>{row.status}</Badge>
                         </td>
+                        <td className="px-4 py-3">
+                          {effort ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span className="font-mono text-[12px] font-medium text-ink">
+                                {effort}
+                              </span>
+                              {budget > 0 ? (
+                                <span className="font-mono text-[10px] text-ink-faint">
+                                  budget {budget}
+                                </span>
+                              ) : null}
+                            </span>
+                          ) : (
+                            <span className="text-ink-faint">{t("common.none")}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[12px] tabular-nums text-ink-muted">
+                          {row.max_tokens && row.max_tokens > 0
+                            ? row.max_tokens.toLocaleString()
+                            : t("common.none")}
+                        </td>
                         <td className="px-4 py-3 tabular-nums text-ink">
                           {formatLatency(row.latency_ms)}
                         </td>
@@ -286,7 +323,8 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                           {row.key_id ?? t("common.none")}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -558,6 +558,8 @@ export const zh = {
   "logs.noMatchDescription": "放宽筛选条件试试。",
   "logs.colTime": "时间",
   "logs.colModel": "模型",
+  "logs.colEffort": "思考强度",
+  "logs.colMaxTokens": "max_tokens",
   "logs.colLatency": "延迟",
   "logs.yes": "是",
   "logs.no": "否",
@@ -584,7 +586,7 @@ export const zh = {
     "额度抓取成功后，会在此汇总各账号窗口下的模型请求数。可先到账号统计添加 Ollama 账号。",
   "logs.colWindow": "窗口",
   "logs.colRequests": "请求数",
-  "logs.gatewaySearchPlaceholder": "模型 / 路由 / key",
+  "logs.gatewaySearchPlaceholder": "模型 / 路由 / key / 思考强度",
   "logs.usageOcSearchPlaceholder": "模型 / usg_id / 时间",
   "logs.usageOlSearchPlaceholder": "模型 / 账号 / 窗口",
 

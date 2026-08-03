@@ -559,6 +559,8 @@ export const en: Record<MessageKey, string> = {
   "logs.noMatchDescription": "Try loosening the filters.",
   "logs.colTime": "Time",
   "logs.colModel": "Model",
+  "logs.colEffort": "Thinking effort",
+  "logs.colMaxTokens": "max_tokens",
   "logs.colLatency": "Latency",
   "logs.yes": "Yes",
   "logs.no": "No",
@@ -585,7 +587,7 @@ export const en: Record<MessageKey, string> = {
     "Once quota scraping succeeds, per-account per-window model request counts will appear here. Add an Ollama account under Accounts first.",
   "logs.colWindow": "Window",
   "logs.colRequests": "Requests",
-  "logs.gatewaySearchPlaceholder": "Model / route / key",
+  "logs.gatewaySearchPlaceholder": "Model / route / key / effort",
   "logs.usageOcSearchPlaceholder": "Model / usg_id / time",
   "logs.usageOlSearchPlaceholder": "Model / account / window",
 
