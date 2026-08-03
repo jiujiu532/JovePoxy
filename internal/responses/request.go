@@ -24,6 +24,20 @@ type Request struct {
 	ParallelToolCalls *bool
 }
 
+// ObservabilityMeta is secret-free generation params for request logging.
+type ObservabilityMeta struct {
+	MaxTokens       int
+	ReasoningEffort string
+}
+
+// Observability returns request-side generation metadata (no prompt/response bodies).
+func (request Request) Observability() ObservabilityMeta {
+	return ObservabilityMeta{
+		MaxTokens:       request.MaxOutputTokens,
+		ReasoningEffort: effort.NormalizeLevel(request.ReasoningEffort),
+	}
+}
+
 // ParseRequest decodes and lightly validates a /v1/responses body.
 func ParseRequest(body []byte) (Request, error) {
 	var raw struct {

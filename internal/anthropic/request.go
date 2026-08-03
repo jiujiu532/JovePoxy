@@ -174,6 +174,29 @@ func parseOutputConfigEffort(raw json.RawMessage) string {
 	return cfg.Effort
 }
 
+// ObservabilityMeta is secret-free generation params for request logging.
+type ObservabilityMeta struct {
+	MaxTokens       int
+	ReasoningEffort string
+	ThinkingType    string
+	BudgetTokens    int
+}
+
+// Observability returns request-side generation metadata (no prompt/response bodies).
+func (request Request) Observability() ObservabilityMeta {
+	meta := ObservabilityMeta{
+		MaxTokens:       request.MaxTokens,
+		ReasoningEffort: mapReasoningEffort(request),
+	}
+	if request.Thinking != nil {
+		meta.ThinkingType = request.Thinking.Type
+		if request.Thinking.HasBudget {
+			meta.BudgetTokens = request.Thinking.BudgetTokens
+		}
+	}
+	return meta
+}
+
 // ToOpenAIChat converts an Anthropic request into an OpenAI chat.completions body.
 // The second return value is a rough input-token estimate matching the reference proxy.
 func ToOpenAIChat(request Request) ([]byte, int, error) {

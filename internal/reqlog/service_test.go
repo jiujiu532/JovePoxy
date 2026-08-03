@@ -189,3 +189,29 @@ func (failingStore) Insert(context.Context, reqlog.Entry) error { return context
 func (failingStore) List(context.Context, reqlog.ListFilter) ([]reqlog.Entry, error) {
 	return nil, context.Canceled
 }
+
+func TestService_record_persists_generation_meta(t *testing.T) {
+	database, err := db.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	service := reqlog.NewService(database, nil)
+
+	service.Record(context.Background(), reqlog.Entry{
+		Model: "deepseek-v4-flash-free", Route: "/v1/messages", Status: 200, LatencyMS: 100,
+		Stream: true, MaxTokens: 128000, ReasoningEffort: "xhigh", ThinkingType: "enabled", BudgetTokens: 32000,
+	})
+	list, err := service.List(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("len=%d", len(list))
+	}
+	entry := list[0]
+	if entry.MaxTokens != 128000 || entry.ReasoningEffort != "xhigh" || entry.ThinkingType != "enabled" || entry.BudgetTokens != 32000 {
+		t.Fatalf("meta = %+v", entry)
+	}
+}
+

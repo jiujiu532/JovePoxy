@@ -44,6 +44,11 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 	meta := requestMetaFrom(request.Context())
 	meta.model = parsed.Model
 	meta.stream = parsed.Stream
+	observability := parsed.Observability()
+	meta.maxTokens = observability.MaxTokens
+	meta.reasoningEffort = observability.ReasoningEffort
+	meta.thinkingType = observability.ThinkingType
+	meta.budgetTokens = observability.BudgetTokens
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	openAIBody, inputTokens, err := anthropic.ToOpenAIChat(parsed)
 	if err != nil {

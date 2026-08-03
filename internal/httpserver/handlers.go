@@ -17,11 +17,13 @@ import (
 const maxChatRequestBytes = 4 << 20
 
 type chatRequest struct {
-	Model      string          `json:"model"`
-	Messages   json.RawMessage `json:"messages"`
-	Stream     bool            `json:"stream"`
-	Tools      json.RawMessage `json:"tools"`
-	ToolChoice json.RawMessage `json:"tool_choice"`
+	Model           string          `json:"model"`
+	Messages        json.RawMessage `json:"messages"`
+	Stream          bool            `json:"stream"`
+	MaxTokens       int             `json:"max_tokens"`
+	ReasoningEffort string          `json:"reasoning_effort"`
+	Tools           json.RawMessage `json:"tools"`
+	ToolChoice      json.RawMessage `json:"tool_choice"`
 }
 
 type modelsResponse struct {
@@ -113,6 +115,8 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta := requestMetaFrom(request.Context())
 	meta.model = parsed.Model
 	meta.stream = parsed.Stream
+	meta.maxTokens = parsed.MaxTokens
+	meta.reasoningEffort = strings.ToLower(strings.TrimSpace(parsed.ReasoningEffort))
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, provider)
 	if err != nil {

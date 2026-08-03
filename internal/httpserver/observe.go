@@ -40,6 +40,8 @@ func (server server) observe(route string, handler http.HandlerFunc) http.Handle
 		server.logs.Record(request.Context(), reqlog.Entry{
 			KeyID: meta.keyID, Model: meta.model, Route: route, Status: recorder.status,
 			LatencyMS: time.Since(started).Milliseconds(), Stream: meta.stream, ErrorClass: errorClass,
+			MaxTokens: meta.maxTokens, ReasoningEffort: meta.reasoningEffort,
+			ThinkingType: meta.thinkingType, BudgetTokens: meta.budgetTokens,
 		})
 	}
 }

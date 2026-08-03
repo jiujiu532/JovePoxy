@@ -138,6 +138,10 @@ export type LogDTO = {
   readonly latency_ms: number;
   readonly stream: boolean;
   readonly error_class?: string;
+  readonly max_tokens?: number;
+  readonly reasoning_effort?: string;
+  readonly thinking_type?: string;
+  readonly budget_tokens?: number;
   readonly created_at: string;
 };
 export type VersionInfoDTO = {

@@ -5,10 +5,14 @@ import "context"
 type metaKey struct{}
 
 type requestMeta struct {
-	model      string
-	keyID      string
-	stream     bool
-	errorClass string
+	model           string
+	keyID           string
+	stream          bool
+	errorClass      string
+	maxTokens       int
+	reasoningEffort string
+	thinkingType    string
+	budgetTokens    int
 }
 
 func withRequestMeta(ctx context.Context, meta requestMeta) context.Context {

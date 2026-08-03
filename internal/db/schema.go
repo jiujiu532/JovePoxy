@@ -155,3 +155,11 @@ ALTER TABLE zen_keys ADD COLUMN provider TEXT NOT NULL DEFAULT 'opencode';
 const zenKeyPrefixSchema = `
 ALTER TABLE zen_keys ADD COLUMN key_prefix TEXT NOT NULL DEFAULT '';
 `
+
+// request_logs request-side generation metadata (no prompt/response bodies).
+const requestLogMetaSchema = `
+ALTER TABLE request_logs ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_logs ADD COLUMN reasoning_effort TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_logs ADD COLUMN thinking_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_logs ADD COLUMN budget_tokens INTEGER NOT NULL DEFAULT 0;
+`

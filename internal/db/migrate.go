@@ -23,6 +23,7 @@ var migrations = []migration{
 	{version: 6, sql: egressProxiesSchema},
 	{version: 7, sql: zenKeyProviderSchema},
 	{version: 8, sql: zenKeyPrefixSchema},
+	{version: 9, sql: requestLogMetaSchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -100,6 +101,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		return validateZenKeyProviderColumn(ctx, tx)
 	case 8:
 		return validateZenKeyPrefixColumn(ctx, tx)
+	case 9:
+		return validateRequestLogMetaColumns(ctx, tx)
 	default:
 		return nil
 	}
@@ -142,6 +145,19 @@ func validateZenKeyPrefixColumn(ctx context.Context, tx *sql.Tx) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("migration 8 missing key_prefix column: %w", ErrMigrationState)
+	}
+	return nil
+}
+
+func validateRequestLogMetaColumns(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []string{"max_tokens", "reasoning_effort", "thinking_type", "budget_tokens"} {
+		var count int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name = ?", column).Scan(&count); err != nil {
+			return fmt.Errorf("validate migration 9 column %s: %w", column, err)
+		}
+		if count != 1 {
+			return fmt.Errorf("migration 9 missing column %s: %w", column, ErrMigrationState)
+		}
 	}
 	return nil
 }
