@@ -244,13 +244,15 @@ func mapReasoningEffort(request Request) string {
 		if request.Thinking.HasBudget && request.Thinking.BudgetTokens > 0 {
 			return effort.BudgetToLevel(request.Thinking.BudgetTokens)
 		}
-		// enabled without budget (or budget 0) → auto
-		return "auto"
+		// enabled 无正 budget：部分客户端只开思考开关。
+		// Zen free 上游拒收 reasoning_effort=auto → 502，故落成 high。
+		return "high"
 	case "adaptive", "auto":
 		if level := effort.NormalizeLevel(request.OutputConfigEffort); level != "" {
 			return level
 		}
-		return "auto"
+		// 裸 auto / adaptive 无 output_config.effort 时上游易 502，落成 high。
+		return "high"
 	default:
 		// Unknown type: ignore thinking config, do not 400.
 		return ""

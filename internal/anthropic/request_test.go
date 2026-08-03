@@ -432,7 +432,7 @@ func TestToOpenAIChat_user_thinking_not_injected(t *testing.T) {
 	}
 }
 
-func TestToOpenAIChat_thinking_adaptive_without_effort_is_auto(t *testing.T) {
+func TestToOpenAIChat_thinking_adaptive_without_effort_is_high(t *testing.T) {
 	request, err := anthropic.ParseRequest([]byte(`{
 		"model":"demo-free","max_tokens":64,
 		"thinking":{"type":"adaptive"},
@@ -449,8 +449,8 @@ func TestToOpenAIChat_thinking_adaptive_without_effort_is_auto(t *testing.T) {
 	if err := json.Unmarshal(openAIBody, &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got, _ := payload["reasoning_effort"].(string); got != "auto" {
-		t.Fatalf("reasoning_effort = %v, want auto", payload["reasoning_effort"])
+	if got, _ := payload["reasoning_effort"].(string); got != "high" {
+		t.Fatalf("reasoning_effort = %v, want high", payload["reasoning_effort"])
 	}
 }
 
@@ -473,7 +473,7 @@ func TestParseRequest_invalid_stop_sequences_ignored(t *testing.T) {
 	}
 }
 
-func TestToOpenAIChat_thinking_enabled_without_budget_is_auto(t *testing.T) {
+func TestToOpenAIChat_thinking_enabled_without_budget_is_high(t *testing.T) {
 	request, err := anthropic.ParseRequest([]byte(`{
 		"model":"demo-free","max_tokens":64,
 		"thinking":{"type":"enabled"},
@@ -490,8 +490,35 @@ func TestToOpenAIChat_thinking_enabled_without_budget_is_auto(t *testing.T) {
 	if err := json.Unmarshal(openAIBody, &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got, _ := payload["reasoning_effort"].(string); got != "auto" {
-		t.Fatalf("reasoning_effort = %v, want auto", payload["reasoning_effort"])
+	if got, _ := payload["reasoning_effort"].(string); got != "high" {
+		t.Fatalf("reasoning_effort = %v, want high", payload["reasoning_effort"])
+	}
+	meta := request.Observability()
+	if meta.ReasoningEffort != "high" || meta.ThinkingType != "enabled" || meta.BudgetTokens != 0 {
+		t.Fatalf("Observability = %+v, want high/enabled/0", meta)
+	}
+}
+
+func TestToOpenAIChat_thinking_enabled_budget_zero_is_high(t *testing.T) {
+	// budget_tokens=0 与缺省同等：不发 auto
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"demo-free","max_tokens":64,
+		"thinking":{"type":"enabled","budget_tokens":0},
+		"messages":[{"role":"user","content":"hi"}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, _ := payload["reasoning_effort"].(string); got != "high" {
+		t.Fatalf("reasoning_effort = %v, want high", payload["reasoning_effort"])
 	}
 }
 
