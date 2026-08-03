@@ -32,9 +32,8 @@ import {
   slicePage,
   useToast,
 } from "@/components";
-import { api, ApiError, type LocalKeyDTO } from "@/lib/api";
-import { bindFriendlyError } from "@/lib/api-error";
-import { setSessionHint } from "@/lib/auth-session";
+import { api, type LocalKeyDTO } from "@/lib/api";
+import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import { useI18n, type Translate } from "@/lib/i18n";
 import {
   compareBySort,
@@ -88,11 +87,7 @@ export function LocalKeysPage() {
       setKeys(res.keys);
       setListError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setListError(friendlyError(err, t("localkeys.loadListFailed"), t));
     } finally {
       setLoading(false);
@@ -121,6 +116,7 @@ export function LocalKeysPage() {
       push(t("localkeys.secretCreated"), "success");
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("common.createFailed"), t), "error");
     } finally {
       setSaving(false);
@@ -134,6 +130,7 @@ export function LocalKeysPage() {
       push(t("localkeys.deleted"), "success");
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("localkeys.revokeFailed"), t), "error");
     }
   }
@@ -164,6 +161,7 @@ export function LocalKeysPage() {
       push(t("localkeys.saved"), "success");
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("localkeys.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
@@ -236,7 +234,8 @@ export function LocalKeysPage() {
         try {
           await api.setLocalKeyEnabled(id, next);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -263,7 +262,8 @@ export function LocalKeysPage() {
         try {
           await api.revokeLocalKey(id);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -618,9 +618,10 @@ export function LocalKeysPage() {
                                   void api
                                     .setLocalKeyEnabled(key.id, !key.enabled)
                                     .then(load)
-                                    .catch((err) =>
-                                      push(friendlyError(err, t("common.actionFailed"), t), "error"),
-                                    )
+                                    .catch((err) => {
+                                      if (handleUnauthorized(err, (to) => void navigate(to))) return;
+                                      push(friendlyError(err, t("common.actionFailed"), t), "error");
+                                    })
                                 }
                               >
                                 {key.enabled ? t("common.disable") : t("common.enable")}
@@ -731,12 +732,13 @@ export function LocalKeysPage() {
                                         void api
                                           .setLocalKeyEnabled(key.id, !key.enabled)
                                           .then(load)
-                                          .catch((err) =>
+                                          .catch((err) => {
+                                            if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                             push(
                                               friendlyError(err, t("common.actionFailed"), t),
                                               "error",
-                                            ),
-                                          )
+                                            );
+                                          })
                                       }
                                     >
                                       {key.enabled ? t("common.disable") : t("common.enable")}

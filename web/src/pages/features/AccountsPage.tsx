@@ -40,9 +40,8 @@ import {
   type OpenCodeExportBundle,
   type OpenCodeImportItem,
 } from "@/lib/account-io";
-import { api, ApiError, type AccountDTO, type OllamaAccountDTO } from "@/lib/api";
-import { bindFriendlyError } from "@/lib/api-error";
-import { setSessionHint } from "@/lib/auth-session";
+import { api, type AccountDTO, type OllamaAccountDTO } from "@/lib/api";
+import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import { useI18n } from "@/lib/i18n";
 import type { ProviderTab } from "@/lib/routes";
 
@@ -90,11 +89,7 @@ export function AccountsPage() {
       setOlAccounts([...ol.accounts]);
       setError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
@@ -181,6 +176,10 @@ export function AccountsPage() {
         await api.createAccount(item);
         ok += 1;
       } catch (err) {
+        if (handleUnauthorized(err, (to) => void navigate(to))) {
+          fails.push(`${item.name}: unauthorized`);
+          break;
+        }
         fails.push(`${item.name}: ${err instanceof Error ? err.message : t("accounts.itemFailed")}`);
       }
     }
@@ -195,6 +194,10 @@ export function AccountsPage() {
         await api.createOllamaAccount(item);
         ok += 1;
       } catch (err) {
+        if (handleUnauthorized(err, (to) => void navigate(to))) {
+          fails.push(`${item.name}: unauthorized`);
+          break;
+        }
         fails.push(`${item.name}: ${err instanceof Error ? err.message : t("accounts.itemFailed")}`);
       }
     }
@@ -232,6 +235,7 @@ export function AccountsPage() {
       setNotice(t("accounts.accountAdded"));
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("common.createFailed"));
     } finally {
       setBusy(false);
@@ -382,6 +386,7 @@ export function AccountsPage() {
       }
       setNotice(exportSecrets ? t("accounts.exportedWithSecrets") : t("accounts.exportedManifest"));
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("accounts.exportFailed"));
     } finally {
       setBusy(false);
@@ -400,6 +405,7 @@ export function AccountsPage() {
       setNotice(enabled ? t("accounts.bulkEnabled") : t("accounts.bulkDisabled"));
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("accounts.bulkUpdateFailed"));
     } finally {
       setBusy(false);
@@ -419,6 +425,7 @@ export function AccountsPage() {
       setNotice(t("accounts.bulkDeleted"));
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("accounts.bulkDeleteFailed"));
     } finally {
       setBusy(false);
@@ -752,11 +759,7 @@ export function AccountsPage() {
                                     .setAccountEnabled(account.id, !account.enabled)
                                     .then(load)
                                     .catch((err) => {
-                                      if (err instanceof ApiError && err.status === 401) {
-                                        setSessionHint(false);
-                                        void navigate("/login");
-                                        return;
-                                      }
+                                      if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                       push(
                                         friendlyError(err, t("common.actionFailed"), t),
                                         "error",
@@ -773,11 +776,7 @@ export function AccountsPage() {
                                       .deleteAccount(account.id)
                                       .then(load)
                                       .catch((err) => {
-                                        if (err instanceof ApiError && err.status === 401) {
-                                          setSessionHint(false);
-                                          void navigate("/login");
-                                          return;
-                                        }
+                                        if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                         push(
                                           friendlyError(err, t("accounts.deleteFailed"), t),
                                           "error",
@@ -829,11 +828,7 @@ export function AccountsPage() {
                                     .setOllamaAccountEnabled(account.id, !account.enabled)
                                     .then(load)
                                     .catch((err) => {
-                                      if (err instanceof ApiError && err.status === 401) {
-                                        setSessionHint(false);
-                                        void navigate("/login");
-                                        return;
-                                      }
+                                      if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                       push(
                                         friendlyError(err, t("common.actionFailed"), t),
                                         "error",
@@ -850,11 +845,7 @@ export function AccountsPage() {
                                       .deleteOllamaAccount(account.id)
                                       .then(load)
                                       .catch((err) => {
-                                        if (err instanceof ApiError && err.status === 401) {
-                                          setSessionHint(false);
-                                          void navigate("/login");
-                                          return;
-                                        }
+                                        if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                         push(
                                           friendlyError(err, t("accounts.deleteFailed"), t),
                                           "error",

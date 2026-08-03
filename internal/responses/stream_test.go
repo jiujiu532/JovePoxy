@@ -310,3 +310,69 @@ func TestWriteStreamTextReasoningTextResetsMessageBuffer(t *testing.T) {
 		t.Fatalf("expected 2 output_text.done events:\n%s", body)
 	}
 }
+
+
+func TestWriteStreamFirstEventError(t *testing.T) {
+	// Error envelope first event → JSON 502, never empty completed stream.
+	upstream := "data: {\"error\":{\"type\":\"server_error\",\"message\":\"boom\"}}\n\n"
+	recorder := httptest.NewRecorder()
+	WriteStream(recorder, strings.NewReader(upstream), "demo")
+	if recorder.Code != 502 {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "response.created") || strings.Contains(body, "response.completed") {
+		t.Fatalf("must not start success SSE on error first event:\n%s", body)
+	}
+	if !strings.Contains(body, "boom") {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestWriteStreamLengthFinishIncomplete(t *testing.T) {
+	upstream := strings.Join([]string{
+		`data: {"choices":[{"delta":{"content":"cut"}}]}`,
+		"",
+		`data: {"choices":[{"delta":{},"finish_reason":"length"}]}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	WriteStream(recorder, strings.NewReader(upstream), "demo")
+	body := recorder.Body.String()
+	if strings.Contains(body, "event: response.completed") {
+		t.Fatalf("length finish must not emit completed:\n%s", body)
+	}
+	if !strings.Contains(body, "event: response.incomplete") {
+		t.Fatalf("expected response.incomplete:\n%s", body)
+	}
+	if !strings.Contains(body, `"status":"incomplete"`) {
+		t.Fatalf("expected incomplete status:\n%s", body)
+	}
+	if !strings.Contains(body, "max_output_tokens") {
+		t.Fatalf("expected incomplete_details reason:\n%s", body)
+	}
+}
+
+func TestWriteStreamLateToolName(t *testing.T) {
+	upstream := strings.Join([]string{
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_x","function":{"arguments":"{\"a\""}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"lookup","arguments":":1}"}}]}}]}`,
+		"",
+		`data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	WriteStream(recorder, strings.NewReader(upstream), "demo")
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"name":"lookup"`) {
+		t.Fatalf("late name should appear in done item:\n%s", body)
+	}
+	if !strings.Contains(body, `"arguments":"{\"a\":1}"`) {
+		t.Fatalf("arguments should concatenate:\n%s", body)
+	}
+}

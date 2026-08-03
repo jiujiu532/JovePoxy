@@ -94,11 +94,11 @@ func (service *Service) List(ctx context.Context) ([]Metadata, error) {
 		}
 		meta.Enabled = enabled == 1
 		if cooldown.Valid && cooldown.String != "" {
-			if until, err := time.Parse(time.RFC3339Nano, cooldown.String); err == nil {
+			if until, parseErr := parseCooldownUntil(cooldown.String); parseErr == nil {
 				meta.CooldownUntil = &until
 			}
 		}
-		if ts, err := time.Parse(time.RFC3339Nano, created); err == nil {
+		if ts, parseErr := parseCooldownUntil(created); parseErr == nil {
 			meta.CreatedAt = ts
 		}
 		out = append(out, meta)
@@ -201,6 +201,8 @@ func (service *Service) Acquire(ctx context.Context) (Selected, error) {
 }
 
 // AcquireExcluding picks a healthy proxy other than excluded.
+// Dirty cooldown_until (unparseable) is treated as cooling and skipped, matching zenpool.
+// Decrypt / URL parse failures exclude that row and re-pick; one bad row never fails the whole pool.
 func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) (Selected, error) {
 	rows, err := service.db.QueryContext(ctx, `
 		SELECT id, url_ciphertext, weight, enabled, cooldown_until
@@ -217,7 +219,6 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 	}
 	now := service.clock.Now().UTC()
 	candidates := make([]candidate, 0)
-	totalWeight := 0
 	for rows.Next() {
 		var id ProxyID
 		var ciphertext string
@@ -230,36 +231,67 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 			continue
 		}
 		if cooldown.Valid && cooldown.String != "" {
-			until, err := time.Parse(time.RFC3339Nano, cooldown.String)
-			if err == nil && now.Before(until) {
+			until, parseErr := parseCooldownUntil(cooldown.String)
+			if parseErr != nil {
+				// Dirty cooldown_until: skip this proxy rather than failing the whole pool.
+				continue
+			}
+			if now.Before(until) {
 				continue
 			}
 		}
 		candidates = append(candidates, candidate{id: id, ciphertext: ciphertext, weight: weight})
-		totalWeight += weight
 	}
-	if totalWeight == 0 {
+	if len(candidates) == 0 {
 		return Selected{}, ErrNoHealthyProxy
 	}
-	slot := int(service.rr.Add(1) % uint64(totalWeight))
-	cumulative := 0
-	var chosen candidate
-	for _, item := range candidates {
-		cumulative += item.weight
-		if slot < cumulative {
-			chosen = item
-			break
+
+	// Decrypt / URL parse failure excludes the row and re-picks among remaining candidates.
+	skipped := make(map[ProxyID]struct{})
+	for len(skipped) < len(candidates) {
+		usable := make([]candidate, 0, len(candidates)-len(skipped))
+		totalWeight := 0
+		for _, item := range candidates {
+			if _, skip := skipped[item.id]; skip {
+				continue
+			}
+			usable = append(usable, item)
+			totalWeight += item.weight
 		}
+		if totalWeight == 0 || len(usable) == 0 {
+			return Selected{}, ErrNoHealthyProxy
+		}
+		slot := int(service.rr.Add(1) % uint64(totalWeight))
+		cumulative := 0
+		var chosen candidate
+		for _, item := range usable {
+			cumulative += item.weight
+			if slot < cumulative {
+				chosen = item
+				break
+			}
+		}
+		raw, openErr := service.box.Open(chosen.ciphertext)
+		if openErr != nil {
+			skipped[chosen.id] = struct{}{}
+			continue
+		}
+		parsed, parseErr := parseProxyURL(raw)
+		if parseErr != nil {
+			skipped[chosen.id] = struct{}{}
+			continue
+		}
+		return Selected{ID: chosen.id, URL: parsed}, nil
 	}
-	raw, err := service.box.Open(chosen.ciphertext)
-	if err != nil {
-		return Selected{}, fmt.Errorf("decrypt proxy url: %w", err)
+	return Selected{}, ErrNoHealthyProxy
+}
+
+// parseCooldownUntil accepts RFC3339Nano and plain RFC3339 (legacy / admin writes).
+func parseCooldownUntil(value string) (time.Time, error) {
+	if until, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return until, nil
 	}
-	parsed, err := parseProxyURL(raw)
-	if err != nil {
-		return Selected{}, err
-	}
-	return Selected{ID: chosen.id, URL: parsed}, nil
+	return time.Parse(time.RFC3339, value)
 }
 
 // CountEnabled returns how many proxies exist and are enabled (ignores cooldown).

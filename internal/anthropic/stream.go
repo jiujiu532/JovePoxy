@@ -15,6 +15,8 @@ import (
 
 // WriteStream converts an OpenAI chat.completion SSE body into Anthropic Messages SSE events.
 func WriteStream(writer http.ResponseWriter, body io.Reader, model string, inputTokens int) {
+	// First-event probe without idle wrapper so early JSON errors do not leave a
+	// background reader holding the upstream body.
 	reader := bufio.NewReader(body)
 	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
@@ -27,6 +29,13 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 	}
 	if sse.IsRateLimitEvent(firstEvent) {
 		writeError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded (free model rate limit)")
+		return
+	}
+	if msg, isErr := sse.ErrorEventMessage(firstEvent); isErr {
+		if msg == "" {
+			msg = "upstream error"
+		}
+		writeError(writer, http.StatusBadGateway, "upstream_error", msg)
 		return
 	}
 
@@ -43,6 +52,8 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 		return
 	}
 	if !state.consumeEvent(writer, firstEvent) {
+		// Headers already sent: best-effort terminal frame.
+		state.finishIfNeeded(writer)
 		return
 	}
 	if errors.Is(err, io.EOF) {
@@ -50,6 +61,8 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 		return
 	}
 
+	// Idle timeout only for the remainder of the upstream body.
+	reader = bufio.NewReader(sse.IdleReader(reader, sse.DefaultIdleTimeout))
 	var buffer bytes.Buffer
 	chunk := make([]byte, 32*1024)
 	for {
@@ -62,6 +75,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 					break
 				}
 				if !state.consumeLine(writer, line) {
+					state.finishIfNeeded(writer)
 					return
 				}
 			}
@@ -74,6 +88,8 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string, input
 			return
 		}
 		if readErr != nil {
+			// Mid-stream read failure: best-effort message_stop if not finished.
+			state.finishIfNeeded(writer)
 			return
 		}
 	}
@@ -100,6 +116,10 @@ type streamState struct {
 	toolBlocks map[int]int
 	// anthropic content block index still open (tool_use)
 	toolOpen map[int]bool
+	// anthropic block index -> emitted name (for late name backfill tracking)
+	toolNames map[int]string
+	// anthropic block index -> emitted id
+	toolIDs map[int]string
 }
 
 func (state *streamState) emitMessageStart(writer http.ResponseWriter) bool {
@@ -132,6 +152,11 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 	if payload == "" || payload == "[DONE]" {
 		return true
+	}
+	// Mid-stream OpenAI error object: stop without fake success (headers already sent).
+	if msg, isErr := sse.ErrorEventMessage([]byte("data: " + payload + "\n\n")); isErr {
+		_ = state.emitErrorAndStop(writer, msg)
+		return false
 	}
 	var parsed openAIStreamChunk
 	if err := json.Unmarshal([]byte(payload), &parsed); err != nil || len(parsed.Choices) == 0 {
@@ -264,6 +289,12 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 			if state.toolOpen == nil {
 				state.toolOpen = make(map[int]bool)
 			}
+			if state.toolNames == nil {
+				state.toolNames = make(map[int]string)
+			}
+			if state.toolIDs == nil {
+				state.toolIDs = make(map[int]string)
+			}
 			blockIdx = state.nextBlock
 			state.nextBlock++
 			state.toolBlocks[toolCall.Index] = blockIdx
@@ -277,11 +308,43 @@ func (state *streamState) emitToolCalls(writer http.ResponseWriter, toolCalls []
 					return false
 				}
 			}
+			name := toolCall.Function.Name
+			state.toolIDs[blockIdx] = toolID
+			state.toolNames[blockIdx] = name
 			if !sse.WriteEvent(writer, "content_block_start", map[string]any{
 				"type": "content_block_start", "index": blockIdx,
-				"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolCall.Function.Name},
+				"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": name},
 			}) {
 				return false
+			}
+		} else {
+			// Late name/id backfill on an already-open tool block.
+			if toolCall.ID != "" && state.toolIDs != nil {
+				if cur := state.toolIDs[blockIdx]; cur == "" {
+					state.toolIDs[blockIdx] = toolCall.ID
+				}
+			}
+			if toolCall.Function.Name != "" && state.toolNames != nil {
+				if cur := state.toolNames[blockIdx]; cur == "" {
+					state.toolNames[blockIdx] = toolCall.Function.Name
+					// Re-announce block start with filled name so clients that
+					// only saw empty name can recover (mirrors responses late fill).
+					toolID := ""
+					if state.toolIDs != nil {
+						toolID = state.toolIDs[blockIdx]
+					}
+					if toolID == "" {
+						toolID = toolCall.ID
+					}
+					if !sse.WriteEvent(writer, "content_block_start", map[string]any{
+						"type": "content_block_start", "index": blockIdx,
+						"content_block": map[string]any{
+							"type": "tool_use", "id": toolID, "name": toolCall.Function.Name,
+						},
+					}) {
+						return false
+					}
+				}
 			}
 		}
 		if toolCall.Function.Arguments != "" {
@@ -349,6 +412,29 @@ func (state *streamState) finishIfNeeded(writer http.ResponseWriter) {
 	if !state.finished {
 		_ = state.finish(writer, "stop")
 	}
+}
+
+func (state *streamState) emitErrorAndStop(writer http.ResponseWriter, message string) bool {
+	if state.finished {
+		return true
+	}
+	// Close open blocks then emit error + message_stop (no fake end_turn success).
+	_ = state.closeThinking(writer)
+	_ = state.closeText(writer)
+	_ = state.closeOpenTools(writer)
+	state.finished = true
+	if message == "" {
+		message = "upstream error"
+	}
+	if !sse.WriteEvent(writer, "error", map[string]any{
+		"type": "error",
+		"error": map[string]string{
+			"type": "api_error", "message": message,
+		},
+	}) {
+		return false
+	}
+	return sse.WriteEvent(writer, "message_stop", map[string]any{"type": "message_stop"})
 }
 
 func (state *streamState) finish(writer http.ResponseWriter, finishReason string) bool {

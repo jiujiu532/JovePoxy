@@ -394,6 +394,76 @@ func TestService_acquire_skips_dirty_cooldown(t *testing.T) {
 	}
 }
 
+func TestService_acquire_skips_bad_ciphertext(t *testing.T) {
+	// Given one unreadable ciphertext row and one healthy key.
+	database, service := newPoolWithDB(t)
+	ctx := context.Background()
+	good, err := service.Create(ctx, zenpool.CreateInput{Label: "good", Secret: "secret-good-key"})
+	if err != nil {
+		t.Fatalf("create good: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+		INSERT INTO zen_keys (id, label, key_ciphertext, key_prefix, weight, enabled, cooldown_until, created_at, provider)
+		VALUES (?, ?, ?, ?, 1, 1, NULL, ?, ?)
+	`, "zk_badcipher_acq", "bad", "not-valid-ciphertext", "badpre…", "2026-07-15T12:00:00Z", "opencode"); err != nil {
+		t.Fatalf("insert bad ciphertext row: %v", err)
+	}
+
+	// When / Then — Acquire re-picks past the bad row instead of failing the whole pool.
+	for range 6 {
+		selected, err := service.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("acquire with bad ciphertext: %v", err)
+		}
+		if selected.ID != good.ID {
+			t.Fatalf("selected %s, want good %s", selected.ID, good.ID)
+		}
+		if selected.Secret != "secret-good-key" {
+			t.Fatalf("secret = %q", selected.Secret)
+		}
+	}
+}
+
+func TestProxyPaid_status_cooldown_and_markcooldown_bench_fallback(t *testing.T) {
+	// 429 cools the failed key in SQLite so Acquire prefers the remaining healthy key.
+	service := newPool(t)
+	ctx := context.Background()
+	first, err := service.Create(ctx, zenpool.CreateInput{Label: "rate", Secret: "rate-key"})
+	if err != nil {
+		t.Fatalf("create rate: %v", err)
+	}
+	second, err := service.Create(ctx, zenpool.CreateInput{Label: "good", Secret: "good-key"})
+	if err != nil {
+		t.Fatalf("create good: %v", err)
+	}
+	_ = second
+	dialer := &scriptedDialer{responses: []dialResult{
+		{err: &zen.StatusError{StatusCode: http.StatusTooManyRequests}},
+		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
+	}}
+	response, err := zenpool.ProxyPaid(ctx, service, dialer, json.RawMessage(`{}`), false, "", "")
+	if err != nil {
+		t.Fatalf("ProxyPaid: %v", err)
+	}
+	defer response.Body.Close()
+	if dialer.calls != 2 {
+		t.Fatalf("calls = %d, want 2", dialer.calls)
+	}
+	list, listErr := service.List(ctx)
+	if listErr != nil {
+		t.Fatalf("list: %v", listErr)
+	}
+	cooled := 0
+	for _, item := range list {
+		if item.CooldownUntil != nil {
+			cooled++
+		}
+	}
+	if cooled != 1 {
+		t.Fatalf("expected exactly one key cooled after 429, got %d (first=%s)", cooled, first.ID)
+	}
+}
+
 func TestService_list_tolerates_bad_ciphertext(t *testing.T) {
 	// Given one good key and one row with unreadable ciphertext.
 	database, service := newPoolWithDB(t)

@@ -92,3 +92,54 @@ func TestIsRateLimitPayload(t *testing.T) {
 		})
 	}
 }
+
+func TestErrorEventMessage(t *testing.T) {
+	t.Parallel()
+
+	for _, scenario := range []struct {
+		name    string
+		event   string
+		wantOK  bool
+		wantMsg string
+	}{
+		{
+			name:    "openai server_error",
+			event:   "data: {\"error\":{\"type\":\"server_error\",\"message\":\"boom\"}}\n\n",
+			wantOK:  true,
+			wantMsg: "boom",
+		},
+		{
+			name:    "invalid_request_error",
+			event:   "data: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"bad req\"}}\n\n",
+			wantOK:  true,
+			wantMsg: "bad req",
+		},
+		{
+			name:   "rate_limit excluded",
+			event:  "data: {\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow\"}}\n\n",
+			wantOK: false,
+		},
+		{
+			name:   "normal chat chunk not error",
+			event:  "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n",
+			wantOK: false,
+		},
+		{
+			name:   "done not error",
+			event:  "data: [DONE]\n\n",
+			wantOK: false,
+		},
+	} {
+		scenario := scenario
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			msg, ok := sse.ErrorEventMessage([]byte(scenario.event))
+			if ok != scenario.wantOK {
+				t.Fatalf("ok = %v, want %v (msg=%q)", ok, scenario.wantOK, msg)
+			}
+			if scenario.wantOK && msg != scenario.wantMsg {
+				t.Fatalf("msg = %q, want %q", msg, scenario.wantMsg)
+			}
+		})
+	}
+}

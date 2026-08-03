@@ -384,10 +384,19 @@ func convertMessage(message anthropicMessage) ([]map[string]any, error) {
 		for _, tool := range toolUses {
 			args := "{}"
 			if len(tool.Input) > 0 {
+				// Keep raw JSON text for OpenAI arguments (including invalid payloads).
 				args = string(tool.Input)
 			}
+			toolID := tool.ID
+			if toolID == "" {
+				var idErr error
+				toolID, idErr = NewToolUseID()
+				if idErr != nil {
+					return nil, idErr
+				}
+			}
 			toolCalls = append(toolCalls, map[string]any{
-				"id": tool.ID, "type": "function",
+				"id": toolID, "type": "function",
 				"function": map[string]any{"name": tool.Name, "arguments": args},
 			})
 		}
@@ -404,8 +413,16 @@ func convertMessage(message anthropicMessage) ([]map[string]any, error) {
 	if hasBlockType(blocks, "tool_result") {
 		results := make([]map[string]any, 0)
 		for _, block := range filterBlocks(blocks, "tool_result") {
+			callID := block.ToolUseID
+			if callID == "" {
+				var idErr error
+				callID, idErr = NewToolUseID()
+				if idErr != nil {
+					return nil, idErr
+				}
+			}
 			results = append(results, map[string]any{
-				"role": "tool", "tool_call_id": block.ToolUseID, "content": toolResultText(block),
+				"role": "tool", "tool_call_id": callID, "content": toolResultText(block),
 			})
 		}
 		// 同条 message 里 tool_result 之外的文本 → 追加 user 消息

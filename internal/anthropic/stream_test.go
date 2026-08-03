@@ -257,3 +257,38 @@ func TestWriteStream_tool_then_text_closes_tools(t *testing.T) {
 		t.Fatalf("expected content_block_stop between tool and text:\n%s", body)
 	}
 }
+
+
+func TestWriteStream_first_event_error_not_completed(t *testing.T) {
+	// OpenAI-style error first event must not become empty completed/stop stream.
+	upstream := strings.NewReader("data: {\"error\":{\"type\":\"server_error\",\"message\":\"upstream boom\"}}\n\n")
+	recorder := httptest.NewRecorder()
+	anthropic.WriteStream(recorder, upstream, "demo-free", 1)
+	if recorder.Code != 502 {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, "message_start") || strings.Contains(body, "event: message_stop") {
+		t.Fatalf("error first event must not open SSE success stream:\n%s", body)
+	}
+	if !strings.Contains(body, "upstream boom") {
+		t.Fatalf("expected error message in body: %s", body)
+	}
+}
+
+func TestWriteStream_late_tool_name_backfill(t *testing.T) {
+	// First delta opens tool without name; second fills name on same index.
+	upstream := strings.NewReader(
+		"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"arguments\":\"{\\\"q\\\"\"}}]}}]}\n\n" +
+			"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"lookup\",\"arguments\":\":1}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+	)
+	recorder := httptest.NewRecorder()
+	anthropic.WriteStream(recorder, upstream, "demo-free", 1)
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"name":"lookup"`) {
+		t.Fatalf("expected late tool name backfill:\n%s", body)
+	}
+	if !strings.Contains(body, `"stop_reason":"tool_use"`) {
+		t.Fatalf("expected tool_use stop:\n%s", body)
+	}
+}

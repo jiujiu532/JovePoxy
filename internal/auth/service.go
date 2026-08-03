@@ -67,15 +67,21 @@ func NewService(config Config) (*Service, error) {
 }
 
 // Login verifies parsed credentials and issues a random, bounded-lifetime session.
+// Rate-limit checks run before password verification so blocked sources skip bcrypt.
 // A successful login clears prior failed attempts from that source.
 // Legacy SHA-256 hashes are transparently upgraded to bcrypt after a successful match.
 func (service *Service) Login(ctx context.Context, input LoginInput) (Session, error) {
 	now := service.clock.Now().UTC()
 	source := normalizedSource(input.Source)
+	// Already at the attempt ceiling: reject before any password work (incl. bcrypt).
+	if service.limiter.isBlocked(source, now) {
+		return Session{}, ErrRateLimited
+	}
 	service.passwordMu.RLock()
 	expected := service.passwordHash
 	service.passwordMu.RUnlock()
 	if !verifyPassword(expected, input.Password) {
+		// Record the failure; concurrent racers that passed isBlocked may still hit the ceiling here.
 		if !service.limiter.reserveFailure(source, now) {
 			return Session{}, ErrRateLimited
 		}
@@ -347,6 +353,17 @@ type loginLimiter struct {
 	attempts map[string][]time.Time
 }
 
+// isBlocked reports whether source already has DefaultLoginAttemptLimit failures
+// inside the current window. Callers use this before password verification.
+func (limiter *loginLimiter) isBlocked(source string, now time.Time) bool {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	limiter.prune(source, now)
+	return len(limiter.attempts[source]) >= DefaultLoginAttemptLimit
+}
+
+// reserveFailure records one failed attempt when the source is still under the limit.
+// Returns false when the source is already at the ceiling (no additional record).
 func (limiter *loginLimiter) reserveFailure(source string, now time.Time) bool {
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()

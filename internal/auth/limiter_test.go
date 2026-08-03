@@ -41,6 +41,68 @@ func TestService_Login_rate_limits_failed_attempts_and_success_resets_source(t *
 	}
 }
 
+func TestService_Login_rate_limit_blocks_before_password_verify(t *testing.T) {
+	// Given: exhaust the attempt budget with wrong passwords.
+	clock := newFakeClock(time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC))
+	service, database := newService(t, clock)
+	defer database.Close()
+	source := "198.51.100.40"
+	for range auth.DefaultLoginAttemptLimit {
+		if _, err := service.Login(context.Background(), auth.LoginInput{
+			Password: "wrong-password",
+			Source:   source,
+		}); !errors.Is(err, auth.ErrUnauthorized) {
+			t.Fatalf("failed Login() error = %v, want ErrUnauthorized", err)
+		}
+	}
+
+	// When: source is already limited — even the correct password must not pass.
+	// A blocked Login must also skip bcrypt (cost=10 is tens of ms); map lookup is << 5ms.
+	start := time.Now()
+	_, correctWhileLimitedErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "correct-password",
+		Source:   source,
+	})
+	blockedCorrectElapsed := time.Since(start)
+
+	start = time.Now()
+	_, wrongWhileLimitedErr := service.Login(context.Background(), auth.LoginInput{
+		Password: "still-wrong",
+		Source:   source,
+	})
+	blockedWrongElapsed := time.Since(start)
+
+	// Baseline: one bcrypt verify for a wrong password on a fresh source.
+	start = time.Now()
+	_, _ = service.Login(context.Background(), auth.LoginInput{
+		Password: "wrong-password",
+		Source:   "198.51.100.41",
+	})
+	bcryptElapsed := time.Since(start)
+
+	// Then
+	if !errors.Is(correctWhileLimitedErr, auth.ErrRateLimited) {
+		t.Fatalf("correct password while limited error = %v, want ErrRateLimited", correctWhileLimitedErr)
+	}
+	if !errors.Is(wrongWhileLimitedErr, auth.ErrRateLimited) {
+		t.Fatalf("wrong password while limited error = %v, want ErrRateLimited", wrongWhileLimitedErr)
+	}
+	// Blocked path must be clearly cheaper than a real bcrypt CompareHashAndPassword.
+	// Use a generous floor so CI noise does not flake, but still catch a full bcrypt.
+	const maxBlocked = 5 * time.Millisecond
+	if blockedCorrectElapsed > maxBlocked {
+		t.Fatalf("blocked Login(correct) took %v (> %v); likely still running bcrypt", blockedCorrectElapsed, maxBlocked)
+	}
+	if blockedWrongElapsed > maxBlocked {
+		t.Fatalf("blocked Login(wrong) took %v (> %v); likely still running bcrypt", blockedWrongElapsed, maxBlocked)
+	}
+	// Sanity: baseline bcrypt itself should be slower than the blocked path when the host is healthy.
+	// Skip the relative check if bcrypt is unusually fast (e.g. tiny cost regression / very fast CPU).
+	if bcryptElapsed > maxBlocked && blockedCorrectElapsed*10 > bcryptElapsed {
+		t.Fatalf("blocked Login(correct)=%v not clearly faster than bcrypt baseline=%v", blockedCorrectElapsed, bcryptElapsed)
+	}
+}
+
 func TestService_Login_rate_limits_same_ip_across_different_ports(t *testing.T) {
 	// Given: each TCP connection presents RemoteAddr as ip:ephemeral-port
 	clock := newFakeClock(time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC))

@@ -25,7 +25,6 @@ export { HelpTip } from "@/components/HelpTip";
 export {
   FilterSelect,
   FilterStrip,
-  ListSelectBar,
   ListToolbar,
   SearchField,
   SegmentedFilter,

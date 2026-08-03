@@ -32,9 +32,8 @@ import {
   slicePage,
   useToast,
 } from "@/components";
-import { api, ApiError } from "@/lib/api";
-import { bindFriendlyError } from "@/lib/api-error";
-import { setSessionHint } from "@/lib/auth-session";
+import { api } from "@/lib/api";
+import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -129,11 +128,7 @@ export function ProxiesPage() {
       setRows(next);
       setListError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setListError(friendlyError(err, t("common.loadFailed"), t));
     } finally {
       setLoading(false);
@@ -160,7 +155,8 @@ export function ProxiesPage() {
         try {
           await api.createProxy(item.label, item.url, item.weight);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           fail += 1;
         }
       }
@@ -206,6 +202,7 @@ export function ProxiesPage() {
       push(t("proxies.saved"), "success");
       await load();
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("proxies.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
@@ -262,7 +259,8 @@ export function ProxiesPage() {
         try {
           await api.setProxyEnabled(id, next);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -287,7 +285,8 @@ export function ProxiesPage() {
         try {
           await api.deleteProxy(id);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -619,9 +618,10 @@ export function ProxiesPage() {
                               void api
                                 .setProxyEnabled(row.id, !row.enabled)
                                 .then(load)
-                                .catch((err) =>
-                                  push(friendlyError(err, t("common.actionFailed"), t), "error"),
-                                )
+                                .catch((err) => {
+                                  if (handleUnauthorized(err, (to) => void navigate(to))) return;
+                                  push(friendlyError(err, t("common.actionFailed"), t), "error");
+                                })
                             }
                           >
                             {row.enabled ? t("common.disable") : t("common.enable")}
@@ -632,9 +632,10 @@ export function ProxiesPage() {
                                 void api
                                   .deleteProxy(row.id)
                                   .then(load)
-                                  .catch((err) =>
-                                    push(friendlyError(err, t("proxies.deleteFailed"), t), "error"),
-                                  );
+                                  .catch((err) => {
+                                    if (handleUnauthorized(err, (to) => void navigate(to))) return;
+                                    push(friendlyError(err, t("proxies.deleteFailed"), t), "error");
+                                  });
                               }
                             }}
                           />
@@ -751,9 +752,10 @@ export function ProxiesPage() {
                                   void api
                                     .setProxyEnabled(row.id, !row.enabled)
                                     .then(load)
-                                    .catch((err) =>
-                                      push(friendlyError(err, t("common.actionFailed"), t), "error"),
-                                    )
+                                    .catch((err) => {
+                                      if (handleUnauthorized(err, (to) => void navigate(to))) return;
+                                      push(friendlyError(err, t("common.actionFailed"), t), "error");
+                                    })
                                 }
                               >
                                 {row.enabled ? t("common.disable") : t("common.enable")}
@@ -764,12 +766,13 @@ export function ProxiesPage() {
                                     void api
                                       .deleteProxy(row.id)
                                       .then(load)
-                                      .catch((err) =>
+                                      .catch((err) => {
+                                        if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                         push(
                                           friendlyError(err, t("proxies.deleteFailed"), t),
                                           "error",
-                                        ),
-                                      );
+                                        );
+                                      });
                                   }
                                 }}
                               />

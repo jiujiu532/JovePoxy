@@ -33,15 +33,14 @@ import {
 } from "@/components/model-charts";
 import {
   api,
-  ApiError,
   type LogDTO,
   type OpsKPIsDTO,
-  type OpsWindow,
   type OverviewDTO,
   type UsageRecordDTO,
   type ZenPoolSummaryDTO,
 } from "@/lib/api";
-import { setSessionHint } from "@/lib/auth-session";
+import { handleUnauthorized } from "@/lib/api-error";
+import { opsWindowForRange } from "@/lib/overview-ops-window";
 import { useI18n, type Lang, type Translate } from "@/lib/i18n";
 import {
   bucketHintKey,
@@ -157,19 +156,6 @@ function periodTokens(records: ReadonlyArray<UsageRecordDTO>, range: DateRangeVa
     sum += (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
   }
   return sum;
-}
-
-/**
- * Map UI date range onto backend ops window when it roughly fits.
- * Returns undefined for custom/longer ranges so we fall back to client logs.
- */
-function opsWindowForRange(range: DateRangeValue): OpsWindow | undefined {
-  if (range.preset === "today") return "24h";
-  if (range.preset === "7d" || range.preset === "week") return "7d";
-  const days = rangeDayCount(range.from, range.to);
-  if (days <= 1) return "24h";
-  if (days <= 7) return "7d";
-  return undefined;
 }
 
 type ModelAnalytics = {
@@ -544,6 +530,8 @@ export function OverviewPage() {
   const [usage, setUsage] = useState<UsageRecordDTO[]>([]);
   const [dataTruncated, setDataTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Soft refresh failure banner; does not replace existing data with ErrorState. */
+  const [softError, setSoftError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
   /** Monotonic sequence so fast range changes drop stale responses. */
@@ -599,13 +587,15 @@ export function OverviewPage() {
 
   async function load(opts?: { soft?: boolean; seq?: number }) {
     const seq = opts?.seq ?? ++loadSeqRef.current;
-    if (!opts?.soft) setLoading(true);
+    const soft = Boolean(opts?.soft);
+    if (!soft) setLoading(true);
     try {
       const opsWindow = opsWindowForRange(dateRange);
       const overview = await api.overview(opsWindow);
       if (seq !== loadSeqRef.current) return;
       setData(overview);
       setError(null);
+      setSoftError(null);
 
       const from = dateRange.from.toISOString();
       const to = dateRange.to.toISOString();
@@ -616,17 +606,31 @@ export function OverviewPage() {
       if (seq !== loadSeqRef.current) return;
       const logsRes = settled[0]?.status === "fulfilled" ? settled[0].value : null;
       const usageRes = settled[1]?.status === "fulfilled" ? settled[1].value : null;
-      setLogs(logsRes?.logs ?? []);
-      setUsage(usageRes?.records ?? []);
+      // Prefer fresh results; if a partial soft fetch fails, keep previous series data.
+      if (logsRes) {
+        setLogs(logsRes.logs ?? []);
+      } else if (!soft) {
+        setLogs([]);
+      }
+      if (usageRes) {
+        setUsage(usageRes.records ?? []);
+      } else if (!soft) {
+        setUsage([]);
+      }
       setDataTruncated(Boolean(logsRes?.truncated || usageRes?.truncated));
+      if (soft && (!logsRes || !usageRes)) {
+        setSoftError(t("common.loadFailed"));
+      }
     } catch (err) {
       if (seq !== loadSeqRef.current) return;
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
+      const msg = err instanceof Error ? err.message : t("common.loadFailed");
+      if (soft && data != null) {
+        // Soft refresh: keep existing overview/logs/usage, surface a banner.
+        setSoftError(msg);
+      } else {
+        setError(msg);
       }
-      setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -641,7 +645,8 @@ export function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load closes over latest range via deps
   }, [navigate, rangeFromIso, rangeToIso]);
 
-  if (loading) {
+  // Full-page skeleton only on the initial hard load (no data yet).
+  if (loading && data == null) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-14 w-full" />
@@ -656,7 +661,8 @@ export function OverviewPage() {
     );
   }
 
-  if (error) {
+  // Full ErrorState only when we have nothing to show.
+  if (error && data == null) {
     return (
       <ErrorState
         title={t("overview.loadFailed")}
@@ -731,7 +737,7 @@ export function OverviewPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void load()}
+              onClick={() => void load({ soft: true })}
               className="h-8 min-h-8 px-2.5 text-[12px] shadow-none"
               title={t("common.refresh")}
             >
@@ -741,6 +747,23 @@ export function OverviewPage() {
           </div>
         }
       />
+
+      {softError ? (
+        <p
+          role="status"
+          className="border-2 border-border bg-accent-yellow/20 px-3 py-2 font-mono text-[12px] text-ink"
+        >
+          {softError}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-2 h-7 min-h-7 px-2 text-[12px]"
+            onClick={() => void load({ soft: true })}
+          >
+            {t("common.retry")}
+          </Button>
+        </p>
+      ) : null}
 
       {/* 1. 流量体积：区间指标随全局日期变化，累计为全量 */}
       <section aria-label={t("overview.volume.title")}>

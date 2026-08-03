@@ -11,9 +11,13 @@ import (
 )
 
 // ShouldFailover reports whether an upstream error should trigger another key attempt.
-// Status 401/429/5xx, timeouts, and temporary network failures retry; client cancel does not.
+// Status 401/429/5xx and temporary network failures retry; client cancel and parent
+// deadline exceeded do not. Network failover does not imply key cooldown (see ProxyPaid).
 func ShouldFailover(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	var status *zen.StatusError
@@ -25,6 +29,14 @@ func ShouldFailover(err error) bool {
 	}
 	// Network / dial / TLS / timeout failures (same spirit as free-path proxypool).
 	return true
+}
+
+// shouldMarkCooldown reports whether a failed attempt should cool the key in SQLite.
+// Only upstream HTTP status failures (401/429/5xx path already filtered by ShouldFailover)
+// mark cooldown; pure network errors failover without cooling the key identity.
+func shouldMarkCooldown(err error) bool {
+	var status *zen.StatusError
+	return errors.As(err, &status)
 }
 
 // CooldownFor returns the SQLite cooldown duration for a failed upstream status.
@@ -51,6 +63,12 @@ type ChatDialer interface {
 // ProxyPaid sends a chat request with up to MaxAttempts keys (default 2 = one failover).
 // affinityKey is optional hashed conversation material for sticky policy; empty falls back to spread.
 // provider empty defaults to ProviderOpenCode (AcquireFor compatibility).
+//
+// Failover policy:
+//   - parent ctx cancel/deadline → stop, never cool the key
+//   - StatusError 401 → process-memory MarkBench + try next key
+//   - StatusError 429/5xx → MarkCooldown (MarkBench fallback if store fails) + try next
+//   - pure network/timeout → try next key without MarkCooldown
 func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string, provider Provider) (*http.Response, error) {
 	if service == nil {
 		return nil, ErrNoHealthyKey
@@ -81,7 +99,8 @@ func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body js
 		}
 		lastErr = err
 		tried = append(tried, selected.ID)
-		if !ShouldFailover(err) {
+		// Parent cancel/deadline: no failover and no cooldown (even if dialer returned another err).
+		if ctx.Err() != nil || !ShouldFailover(err) {
 			return nil, err
 		}
 		// 401 → process-memory bench (do not Delete, do not SQLite cooldown by default).
@@ -89,7 +108,13 @@ func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body js
 			service.MarkBench(selected.ID, DefaultBenchDuration)
 			continue
 		}
-		_ = service.MarkCooldown(ctx, selected.ID, CooldownFor(err))
+		// Status failures cool the key; network-only failures just try the next key.
+		if shouldMarkCooldown(err) {
+			if markErr := service.MarkCooldown(ctx, selected.ID, CooldownFor(err)); markErr != nil {
+				// Persist failed: keep the key out of rotation in this process.
+				service.MarkBench(selected.ID, DefaultBenchDuration)
+			}
+		}
 	}
 	return nil, lastErr
 }

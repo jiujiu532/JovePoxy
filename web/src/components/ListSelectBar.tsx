@@ -449,38 +449,3 @@ export function FilterStrip({
   );
 }
 
-/** @deprecated */
-export function ListSelectBar({
-  selectedCount,
-  totalVisible,
-  allSelected,
-  onSelectAll,
-  onInvert,
-  onClear,
-  children,
-  className,
-}: {
-  readonly selectedCount: number;
-  readonly totalVisible: number;
-  readonly allSelected: boolean;
-  readonly onSelectAll: () => void;
-  readonly onInvert: () => void;
-  readonly onClear: () => void;
-  readonly children?: ReactNode;
-  readonly className?: string;
-}) {
-  return (
-    <ListToolbar
-      search=""
-      onSearchChange={() => undefined}
-      selectedCount={selectedCount}
-      totalVisible={totalVisible}
-      allSelected={allSelected}
-      onSelectAll={onSelectAll}
-      onInvert={onInvert}
-      onClear={onClear}
-      {...(children !== undefined ? { bulkActions: children } : {})}
-      {...(className !== undefined ? { className } : {})}
-    />
-  );
-}

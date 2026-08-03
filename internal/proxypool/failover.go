@@ -18,8 +18,13 @@ type FreeDialer interface {
 }
 
 // ShouldFailover reports whether free-path should switch egress proxy.
+// Client cancel and parent deadline exceeded never failover; network failures may,
+// but do not imply cooldown (see ProxyFree).
 func ShouldFailover(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	var status *zen.StatusError
@@ -30,6 +35,13 @@ func ShouldFailover(err error) bool {
 	}
 	// Network / dial / proxy / timeout failures.
 	return true
+}
+
+// shouldMarkCooldown reports whether a failed free-path attempt should cool the proxy.
+// Only upstream HTTP status failures cool; pure network errors failover without cooldown.
+func shouldMarkCooldown(err error) bool {
+	var status *zen.StatusError
+	return errors.As(err, &status)
 }
 
 // CooldownFor maps failure class to proxy rest duration.
@@ -44,6 +56,11 @@ func CooldownFor(err error) time.Duration {
 // ProxyFree sends a free (public auth) chat request via egress proxy pool.
 // If the pool is empty, it falls back to a direct Zen call.
 // At most one failover to a different proxy is attempted.
+//
+// Failover policy:
+//   - parent ctx cancel/deadline → stop, never cool the proxy
+//   - StatusError 429/403/5xx → MarkCooldown + try one other proxy
+//   - pure network/timeout → try one other proxy without MarkCooldown
 func ProxyFree(ctx context.Context, pool *Service, dialer FreeDialer, body json.RawMessage, stream bool) (*http.Response, error) {
 	if pool == nil {
 		return dialer.ChatCompletions(ctx, zen.PublicAuth(), body, stream)
@@ -56,14 +73,17 @@ func ProxyFree(ctx context.Context, pool *Service, dialer FreeDialer, body json.
 		return nil, err
 	}
 	response, err := dialer.ChatCompletionsWithProxy(ctx, zen.PublicAuth(), body, stream, first.URL)
-	if err == nil || !ShouldFailover(err) {
+	if err == nil {
+		return response, nil
+	}
+	// Parent cancel/deadline or non-failover errors: stop without cooling.
+	if ctx.Err() != nil || !ShouldFailover(err) {
 		return response, err
 	}
-	// Do not failover cancellations from the client.
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return response, err
+	// Status failures cool the proxy; network-only failures just try another egress.
+	if shouldMarkCooldown(err) {
+		_ = pool.MarkCooldown(ctx, first.ID, CooldownFor(err))
 	}
-	_ = pool.MarkCooldown(ctx, first.ID, CooldownFor(err))
 	second, acquireErr := pool.AcquireExcluding(ctx, first.ID)
 	if acquireErr != nil {
 		return nil, err

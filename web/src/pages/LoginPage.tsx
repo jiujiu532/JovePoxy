@@ -32,11 +32,13 @@ export function LoginPage() {
           setSessionHint(true);
           setAlreadyAuthed(true);
         }
-      } catch {
-        if (!cancelled) {
+      } catch (err) {
+        if (cancelled) return;
+        // Align AuthGate: only 401 clears the session hint (network/5xx keep it).
+        if (err instanceof ApiError && err.status === 401) {
           setSessionHint(false);
-          setAlreadyAuthed(false);
         }
+        setAlreadyAuthed(false);
       } finally {
         if (!cancelled) setChecking(false);
       }

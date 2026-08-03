@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import { setSessionHint } from "@/lib/auth-session";
 import type { MessageKey, Translate } from "@/lib/i18n";
 
 /** Page-scoped i18n keys for session / network errors. */
@@ -38,4 +39,20 @@ export function bindFriendlyError(
   messages: FriendlyErrorMessages,
 ): (err: unknown, fallback: string, t: Translate) => string {
   return (err, fallback, t) => friendlyError(err, fallback, t, messages);
+}
+
+/**
+ * Unified 401 handling: clear client session hint and send user to login.
+ * Returns true when the error was a 401 (caller should stop other error UI).
+ */
+export function handleUnauthorized(
+  err: unknown,
+  navigate: (to: string) => void,
+): boolean {
+  if (err instanceof ApiError && err.status === 401) {
+    setSessionHint(false);
+    navigate("/login");
+    return true;
+  }
+  return false;
 }

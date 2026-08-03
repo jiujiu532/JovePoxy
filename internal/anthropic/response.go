@@ -18,7 +18,20 @@ type openAIChoice struct {
 type openAIMessage struct {
 	Content          string           `json:"content"`
 	ReasoningContent string           `json:"reasoning_content"`
+	Reasoning        string           `json:"reasoning"`
 	ToolCalls        []openAIToolCall `json:"tool_calls"`
+}
+
+// reasoningText returns non-stream reasoning, accepting both field aliases
+// used by upstreams (reasoning_content preferred, then reasoning).
+func (m *openAIMessage) reasoningText() string {
+	if m == nil {
+		return ""
+	}
+	if m.ReasoningContent != "" {
+		return m.ReasoningContent
+	}
+	return m.Reasoning
 }
 
 type openAIToolCall struct {
@@ -66,21 +79,18 @@ func FromOpenAI(body []byte, model string, inputTokens int) (Message, error) {
 	}
 	choice := response.Choices[0]
 	content := make([]map[string]any, 0, 2+len(choice.Message.ToolCalls))
-	if choice.Message.ReasoningContent != "" {
+	if reasoning := choice.Message.reasoningText(); reasoning != "" {
 		content = append(content, map[string]any{
-			"type": "thinking", "thinking": choice.Message.ReasoningContent,
+			"type": "thinking", "thinking": reasoning,
 		})
 	}
 	if choice.Message.Content != "" {
 		content = append(content, map[string]any{"type": "text", "text": choice.Message.Content})
 	}
 	for _, toolCall := range choice.Message.ToolCalls {
-		input := map[string]any{}
-		if toolCall.Function.Arguments != "" {
-			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &input); err != nil {
-				input = map[string]any{}
-			}
-		}
+		// Prefer parsed object when arguments are valid JSON object/array;
+		// otherwise keep a raw string under input so illegal JSON is not silenced to {}.
+		input := parseToolInput(toolCall.Function.Arguments)
 		toolID := toolCall.ID
 		if toolID == "" {
 			toolID, err = NewToolUseID()
@@ -104,6 +114,23 @@ func FromOpenAI(body []byte, model string, inputTokens int) (Message, error) {
 		Model: model, StopReason: mapStopReason(choice.FinishReason),
 		Usage: usageMap(inputTokens, outputTokens, response.Usage),
 	}, nil
+}
+
+// parseToolInput maps OpenAI function.arguments (JSON string) to Anthropic tool_use.input.
+// Valid JSON object/array → decoded value; empty → {}; invalid JSON → raw string (not {}).
+func parseToolInput(arguments string) any {
+	if arguments == "" {
+		return map[string]any{}
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(arguments), &decoded); err != nil {
+		// Keep raw so callers can see the illegal payload instead of silent {}.
+		return arguments
+	}
+	if decoded == nil {
+		return map[string]any{}
+	}
+	return decoded
 }
 
 func mapStopReason(finishReason string) string {

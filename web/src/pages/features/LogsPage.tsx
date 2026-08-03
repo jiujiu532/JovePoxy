@@ -20,8 +20,8 @@ import {
   Tabs,
   slicePage,
 } from "@/components";
-import { api, ApiError, type AccountDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
-import { setSessionHint } from "@/lib/auth-session";
+import { api, type AccountDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
+import { handleUnauthorized } from "@/lib/api-error";
 import { useI18n, type Translate } from "@/lib/i18n";
 import { isLogsHubTab, type LogsHubTab } from "@/lib/routes";
 
@@ -83,11 +83,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       setLogs(res.logs);
       setError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);
@@ -326,11 +322,15 @@ function UsagePanel({ t }: { readonly t: Translate }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  /** Drop stale responses when the user switches accounts quickly. */
+  const loadSeqRef = useRef(0);
 
   async function load(selectedAccountId?: string) {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const accountList = await api.accounts();
+      if (seq !== loadSeqRef.current) return;
       setAccounts(accountList.accounts);
       const resolvedId =
         selectedAccountId ??
@@ -341,17 +341,17 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       const usage = await api.usage(
         resolvedId ? { account_id: resolvedId, limit: 500 } : { limit: 500 },
       );
+      if (seq !== loadSeqRef.current) return;
       setRecords(usage.records);
       setError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (seq !== loadSeqRef.current) return;
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -390,6 +390,7 @@ function UsagePanel({ t }: { readonly t: Translate }) {
       setError(null);
       await load(accountId);
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("logs.syncFailed"));
     } finally {
       setSyncing(false);
@@ -651,11 +652,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
       setRows(next);
       setError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setError(err instanceof Error ? err.message : t("common.loadFailed"));
     } finally {
       setLoading(false);

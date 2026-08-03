@@ -161,3 +161,69 @@ func TestFromOpenAI_empty_reasoning_content_skipped(t *testing.T) {
 		t.Fatalf("content = %+v", message.Content)
 	}
 }
+
+
+func TestFromOpenAI_reasoning_field_alias(t *testing.T) {
+	// Non-stream should accept message.reasoning like stream does.
+	body := []byte(`{
+		"choices":[{
+			"finish_reason":"stop",
+			"message":{"content":"answer","reasoning":"alias plan"}
+		}]
+	}`)
+	message, err := anthropic.FromOpenAI(body, "demo-free", 1)
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if len(message.Content) < 2 {
+		t.Fatalf("content = %+v", message.Content)
+	}
+	if message.Content[0]["type"] != "thinking" || message.Content[0]["thinking"] != "alias plan" {
+		t.Fatalf("thinking = %+v", message.Content[0])
+	}
+}
+
+func TestFromOpenAI_invalid_tool_arguments_not_empty_object(t *testing.T) {
+	body := []byte(`{
+		"choices":[{
+			"finish_reason":"tool_calls",
+			"message":{
+				"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"not-json{"}}]
+			}
+		}]
+	}`)
+	message, err := anthropic.FromOpenAI(body, "demo-free", 1)
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if len(message.Content) != 1 || message.Content[0]["type"] != "tool_use" {
+		t.Fatalf("content = %+v", message.Content)
+	}
+	input := message.Content[0]["input"]
+	// Must not silently become empty object.
+	if m, ok := input.(map[string]any); ok && len(m) == 0 {
+		t.Fatalf("illegal arguments must not become empty map, got %#v", input)
+	}
+	if s, ok := input.(string); !ok || s != "not-json{" {
+		t.Fatalf("expected raw string input, got %#v", input)
+	}
+}
+
+func TestFromOpenAI_empty_tool_id_generated(t *testing.T) {
+	body := []byte(`{
+		"choices":[{
+			"finish_reason":"tool_calls",
+			"message":{
+				"tool_calls":[{"id":"","type":"function","function":{"name":"lookup","arguments":"{}"}}]
+			}
+		}]
+	}`)
+	message, err := anthropic.FromOpenAI(body, "demo-free", 1)
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	id, _ := message.Content[0]["id"].(string)
+	if id == "" {
+		t.Fatalf("expected generated tool id, content=%+v", message.Content)
+	}
+}

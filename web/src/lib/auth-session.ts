@@ -12,13 +12,3 @@ export function setSessionHint(value: boolean): void {
   }
   sessionStorage.removeItem(CACHE_KEY);
 }
-
-/** @deprecated use setSessionHint */
-export function setLoggedIn(value: boolean): void {
-  setSessionHint(value);
-}
-
-/** @deprecated use hasSessionHint */
-export function isLoggedIn(): boolean {
-  return hasSessionHint();
-}

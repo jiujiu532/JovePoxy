@@ -45,6 +45,86 @@ func IsRateLimitEvent(event []byte) bool {
 	return IsRateLimitPayload(bytes.TrimSpace(event))
 }
 
+// ErrorEventMessage reports whether the first SSE event is an OpenAI-style error
+// envelope that must not be treated as a successful stream start.
+// Rate-limit envelopes are excluded (handle via IsRateLimitEvent first).
+// ok=true means callers should return a non-stream error response before WriteHeaders.
+func ErrorEventMessage(event []byte) (message string, ok bool) {
+	for _, line := range bytes.Split(event, []byte("\n")) {
+		line = bytes.TrimSpace(bytes.TrimSuffix(line, []byte("\r")))
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if msg, isErr := errorPayloadMessage(payload); isErr {
+			return msg, true
+		}
+	}
+	if msg, isErr := errorPayloadMessage(bytes.TrimSpace(event)); isErr {
+		return msg, true
+	}
+	return "", false
+}
+
+// errorPayloadMessage detects OpenAI-style {"error":{...}} / FreeUsageLimitError-like
+// error objects. Rate-limit tokens are excluded so callers can branch on 429 first.
+func errorPayloadMessage(payload []byte) (message string, ok bool) {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || bytes.Equal(payload, []byte("null")) || bytes.Equal(payload, []byte("[DONE]")) {
+		return "", false
+	}
+	if IsRateLimitPayload(payload) {
+		return "", false
+	}
+	var envelope struct {
+		Type    string          `json:"type"`
+		Message string          `json:"message"`
+		Error   json.RawMessage `json:"error"`
+		Choices json.RawMessage `json:"choices"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return "", false
+	}
+	// Successful chat chunk always carries choices (possibly empty array is rare).
+	// Prefer explicit error field; also treat top-level type=error as error.
+	errorPayload := bytes.TrimSpace(envelope.Error)
+	hasErrorField := len(errorPayload) > 0 && !bytes.Equal(errorPayload, []byte("null"))
+	if !hasErrorField && !strings.EqualFold(strings.TrimSpace(envelope.Type), "error") {
+		return "", false
+	}
+	// If choices is present and non-null, treat as a normal chunk unless error is set.
+	// OpenAI error bodies omit choices.
+	if hasErrorField {
+		var detail struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    string `json:"code"`
+		}
+		if err := json.Unmarshal(errorPayload, &detail); err == nil {
+			if msg := strings.TrimSpace(detail.Message); msg != "" {
+				return msg, true
+			}
+			if t := strings.TrimSpace(detail.Type); t != "" {
+				return t, true
+			}
+			if c := strings.TrimSpace(detail.Code); c != "" {
+				return c, true
+			}
+		} else {
+			// error may be a plain string
+			var asString string
+			if err := json.Unmarshal(errorPayload, &asString); err == nil && strings.TrimSpace(asString) != "" {
+				return strings.TrimSpace(asString), true
+			}
+		}
+		return "upstream error", true
+	}
+	if msg := strings.TrimSpace(envelope.Message); msg != "" {
+		return msg, true
+	}
+	return "upstream error", true
+}
+
 // IsRateLimitPayload reports whether a JSON body (or SSE data payload) is a free-usage
 // or explicit rate-limit error. Generic server/invalid-request errors are not treated as 429.
 func IsRateLimitPayload(payload []byte) bool {

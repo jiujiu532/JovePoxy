@@ -454,3 +454,35 @@ func TestFromOpenAIEmptyChoices(t *testing.T) {
 		t.Fatalf("unexpected: %+v", converted)
 	}
 }
+
+
+func TestToOpenAIChatEmptyCallID(t *testing.T) {
+	parsed, err := ParseRequest([]byte(`{
+		"model":"demo",
+		"input":[{"type":"function_call","call_id":"","name":"lookup","arguments":"{\"q\":1}"}]
+	}`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	body, err := ToOpenAIChat(parsed)
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	var chat struct {
+		Messages []struct {
+			ToolCalls []struct {
+				ID string `json:"id"`
+			} `json:"tool_calls"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &chat); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(chat.Messages) == 0 || len(chat.Messages[0].ToolCalls) == 0 {
+		t.Fatalf("messages = %+v", chat.Messages)
+	}
+	id := chat.Messages[0].ToolCalls[0].ID
+	if id == "" || !strings.HasPrefix(id, "call_") {
+		t.Fatalf("generated id = %q", id)
+	}
+}

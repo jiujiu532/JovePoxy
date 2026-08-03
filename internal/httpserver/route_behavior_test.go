@@ -118,7 +118,7 @@ func TestServer_maps_first_sse_error_and_empty_body(t *testing.T) {
 		{name: "free usage error", response: `data: {"type":"FreeUsageLimitError"}` + "\n\n", wantStatus: http.StatusTooManyRequests},
 		{name: "free usage error with comment line", response: ": keep-alive\ndata: {\"type\":\"FreeUsageLimitError\"}\n\n", wantStatus: http.StatusTooManyRequests},
 		{name: "free usage error full first event", response: "event: error\ndata: {\"type\":\"FreeUsageLimitError\"}\n\n", wantStatus: http.StatusTooManyRequests},
-		{name: "server_error is not rate limit", response: `data: {"error":{"type":"server_error","message":"boom"}}` + "\n\n", wantStatus: http.StatusOK},
+		{name: "server_error is not rate limit", response: `data: {"error":{"type":"server_error","message":"boom"}}` + "\n\n", wantStatus: http.StatusBadGateway},
 		{name: "empty response", response: "", wantStatus: http.StatusBadGateway},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {

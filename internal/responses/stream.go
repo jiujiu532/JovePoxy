@@ -16,6 +16,8 @@ import (
 
 // WriteStream converts a chat.completion SSE body into Responses API SSE events.
 func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
+	// First-event probe without idle wrapper so early JSON errors do not leave a
+	// background reader holding the upstream body.
 	reader := bufio.NewReader(body)
 	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
@@ -28,6 +30,13 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 	}
 	if sse.IsRateLimitEvent(firstEvent) {
 		writeError(writer, http.StatusTooManyRequests, "rate_limit_error", "upstream rate limit exceeded")
+		return
+	}
+	if msg, isErr := sse.ErrorEventMessage(firstEvent); isErr {
+		if msg == "" {
+			msg = "upstream error"
+		}
+		writeError(writer, http.StatusBadGateway, "upstream_error", msg)
 		return
 	}
 
@@ -49,6 +58,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		return
 	}
 	if !state.consumeEvent(writer, firstEvent) {
+		state.failIfNeeded(writer, "stream processing failed")
 		return
 	}
 	if errors.Is(err, io.EOF) {
@@ -56,6 +66,8 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 		return
 	}
 
+	// Idle timeout only for the remainder of the upstream body.
+	reader = bufio.NewReader(sse.IdleReader(reader, sse.DefaultIdleTimeout))
 	var buffer bytes.Buffer
 	chunk := make([]byte, 32*1024)
 	for {
@@ -68,6 +80,7 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 					break
 				}
 				if !state.consumeLine(writer, line) {
+					state.failIfNeeded(writer, "stream processing failed")
 					return
 				}
 			}
@@ -80,6 +93,8 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) {
 			return
 		}
 		if readErr != nil {
+			// Mid-stream read failure: best-effort failed terminal if headers sent.
+			state.failIfNeeded(writer, "upstream stream interrupted")
 			return
 		}
 	}
@@ -111,6 +126,8 @@ type streamState struct {
 	reasoningBuf   strings.Builder
 	outputItems    []map[string]any
 	finished       bool
+	// lastFinishReason captures OpenAI finish_reason for completed vs incomplete.
+	lastFinishReason string
 }
 
 func (state *streamState) next() int {
@@ -118,27 +135,31 @@ func (state *streamState) next() int {
 	return state.sequence
 }
 
-func (state *streamState) responseSnapshot(status string) map[string]any {
+func (state *streamState) responseSnapshot(status string, extra map[string]any) map[string]any {
 	output := state.outputItems
 	if output == nil {
 		output = []map[string]any{}
 	}
-	return map[string]any{
+	snap := map[string]any{
 		"id": state.responseID, "object": "response", "created_at": state.createdAt,
 		"status": status, "model": state.model, "output": output,
 	}
+	for k, v := range extra {
+		snap[k] = v
+	}
+	return snap
 }
 
 func (state *streamState) emitCreated(writer http.ResponseWriter) bool {
 	if !sse.WriteEvent(writer, "response.created", map[string]any{
 		"type": "response.created", "sequence_number": state.next(),
-		"response": state.responseSnapshot("in_progress"),
+		"response": state.responseSnapshot("in_progress", nil),
 	}) {
 		return false
 	}
 	return sse.WriteEvent(writer, "response.in_progress", map[string]any{
 		"type": "response.in_progress", "sequence_number": state.next(),
-		"response": state.responseSnapshot("in_progress"),
+		"response": state.responseSnapshot("in_progress", nil),
 	})
 }
 
@@ -180,6 +201,11 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 	if payload == "" || payload == "[DONE]" {
 		return true
 	}
+	// Mid-stream OpenAI error: terminate with response.failed (not completed).
+	if msg, isErr := sse.ErrorEventMessage([]byte("data: " + payload + "\n\n")); isErr {
+		_ = state.fail(writer, msg)
+		return false
+	}
 	var parsed chatStreamChunk
 	if err := json.Unmarshal([]byte(payload), &parsed); err != nil || len(parsed.Choices) == 0 {
 		return true
@@ -206,6 +232,7 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 		}
 	}
 	if choice.FinishReason != "" {
+		state.lastFinishReason = choice.FinishReason
 		return state.finish(writer)
 	}
 	return true
@@ -488,6 +515,32 @@ func (state *streamState) finishIfNeeded(writer http.ResponseWriter) {
 	}
 }
 
+func (state *streamState) failIfNeeded(writer http.ResponseWriter, message string) {
+	if !state.finished {
+		_ = state.fail(writer, message)
+	}
+}
+
+func (state *streamState) fail(writer http.ResponseWriter, message string) bool {
+	if state.finished {
+		return true
+	}
+	// Best-effort close open items, then emit failed (never fake completed).
+	_ = state.closeReasoning(writer)
+	_ = state.closeMessage(writer)
+	_ = state.closeAllTools(writer)
+	state.finished = true
+	if message == "" {
+		message = "upstream error"
+	}
+	return sse.WriteEvent(writer, "response.failed", map[string]any{
+		"type": "response.failed", "sequence_number": state.next(),
+		"response": state.responseSnapshot("failed", map[string]any{
+			"error": map[string]string{"type": "api_error", "message": message},
+		}),
+	})
+}
+
 func (state *streamState) finish(writer http.ResponseWriter) bool {
 	if state.finished {
 		return true
@@ -502,10 +555,41 @@ func (state *streamState) finish(writer http.ResponseWriter) bool {
 		return false
 	}
 	state.finished = true
+	// length / content_filter truncation → incomplete rather than completed.
+	if isIncompleteFinish(state.lastFinishReason) {
+		return sse.WriteEvent(writer, "response.incomplete", map[string]any{
+			"type": "response.incomplete", "sequence_number": state.next(),
+			"response": state.responseSnapshot("incomplete", map[string]any{
+				"incomplete_details": map[string]string{
+					"reason": incompleteReason(state.lastFinishReason),
+				},
+			}),
+		})
+	}
 	return sse.WriteEvent(writer, "response.completed", map[string]any{
 		"type": "response.completed", "sequence_number": state.next(),
-		"response": state.responseSnapshot("completed"),
+		"response": state.responseSnapshot("completed", nil),
 	})
+}
+
+func isIncompleteFinish(finishReason string) bool {
+	switch strings.ToLower(strings.TrimSpace(finishReason)) {
+	case "length", "content_filter":
+		return true
+	default:
+		return false
+	}
+}
+
+func incompleteReason(finishReason string) string {
+	switch strings.ToLower(strings.TrimSpace(finishReason)) {
+	case "length":
+		return "max_output_tokens"
+	case "content_filter":
+		return "content_filter"
+	default:
+		return finishReason
+	}
 }
 
 func writeError(writer http.ResponseWriter, status int, code, message string) {

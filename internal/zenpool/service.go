@@ -321,6 +321,7 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded KeyID) (S
 }
 
 // AcquireFor selects a healthy key under the given options (provider, exclusions, affinity, policy).
+// Decrypt failures exclude that row and re-pick; a single bad ciphertext never fails the whole pool.
 func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Selected, error) {
 	provider := opts.Provider
 	if provider == "" {
@@ -339,7 +340,6 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 	}
 	benched := service.BenchedSnapshot(now)
 	candidates := make([]storedKey, 0, len(records))
-	totalWeight := 0
 	for _, record := range records {
 		if _, skip := excluded[record.id]; skip {
 			continue
@@ -361,9 +361,8 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 			continue
 		}
 		candidates = append(candidates, record)
-		totalWeight += record.weight
 	}
-	if totalWeight == 0 || len(candidates) == 0 {
+	if len(candidates) == 0 {
 		return Selected{}, ErrNoHealthyKey
 	}
 
@@ -371,26 +370,46 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 	if policy == "" {
 		policy = service.LoadPolicy()
 	}
-	var chosen storedKey
-	if policy == LoadPolicySticky && strings.TrimSpace(opts.AffinityKey) != "" {
-		chosen = weightedRendezvousPick(candidates, opts.AffinityKey)
-	} else {
-		// spread: weighted round-robin (also sticky fallback when affinity material is missing)
-		slot := int(service.rr.Add(1) % uint64(totalWeight))
-		cumulative := 0
+
+	// Decrypt failure excludes the row and re-picks among remaining healthy candidates.
+	decryptSkipped := make(map[KeyID]struct{})
+	for len(decryptSkipped) < len(candidates) {
+		usable := make([]storedKey, 0, len(candidates)-len(decryptSkipped))
+		totalWeight := 0
 		for _, candidate := range candidates {
-			cumulative += candidate.weight
-			if slot < cumulative {
-				chosen = candidate
-				break
+			if _, skip := decryptSkipped[candidate.id]; skip {
+				continue
+			}
+			usable = append(usable, candidate)
+			totalWeight += candidate.weight
+		}
+		if totalWeight == 0 || len(usable) == 0 {
+			return Selected{}, ErrNoHealthyKey
+		}
+
+		var chosen storedKey
+		if policy == LoadPolicySticky && strings.TrimSpace(opts.AffinityKey) != "" {
+			chosen = weightedRendezvousPick(usable, opts.AffinityKey)
+		} else {
+			// spread: weighted round-robin (also sticky fallback when affinity material is missing)
+			slot := int(service.rr.Add(1) % uint64(totalWeight))
+			cumulative := 0
+			for _, candidate := range usable {
+				cumulative += candidate.weight
+				if slot < cumulative {
+					chosen = candidate
+					break
+				}
 			}
 		}
+		secret, openErr := service.box.Open(chosen.ciphertext)
+		if openErr != nil {
+			decryptSkipped[chosen.id] = struct{}{}
+			continue
+		}
+		return Selected{ID: chosen.id, Secret: secret, Label: chosen.label}, nil
 	}
-	secret, err := service.box.Open(chosen.ciphertext)
-	if err != nil {
-		return Selected{}, fmt.Errorf("decrypt zen key: %w", err)
-	}
-	return Selected{ID: chosen.id, Secret: secret, Label: chosen.label}, nil
+	return Selected{}, ErrNoHealthyKey
 }
 
 // toMetadata builds secret-free admin metadata without failing List on bad ciphertext.

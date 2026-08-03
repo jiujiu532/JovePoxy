@@ -106,3 +106,57 @@ func TestFromOpenAIEmptyReasoningIgnored(t *testing.T) {
 		t.Fatalf("empty reasoning should not inject item: %+v", resp.Output)
 	}
 }
+
+
+func TestFromOpenAIReasoningAlias(t *testing.T) {
+	body := []byte(`{
+		"choices":[{"finish_reason":"stop","message":{"content":"ok","reasoning":"alias"}}]
+	}`)
+	resp, err := FromOpenAI(body, "demo")
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if len(resp.Output) < 2 || resp.Output[0]["type"] != "reasoning" {
+		t.Fatalf("expected reasoning from alias: %+v", resp.Output)
+	}
+	summary, _ := resp.Output[0]["summary"].([]map[string]any)
+	if len(summary) != 1 || summary[0]["text"] != "alias" {
+		t.Fatalf("summary = %#v", resp.Output[0]["summary"])
+	}
+}
+
+func TestFromOpenAILengthIncomplete(t *testing.T) {
+	body := []byte(`{
+		"choices":[{"finish_reason":"length","message":{"content":"partial"}}]
+	}`)
+	resp, err := FromOpenAI(body, "demo")
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if resp.Status != "incomplete" {
+		t.Fatalf("status = %q, want incomplete", resp.Status)
+	}
+	if resp.IncompleteDetails == nil || resp.IncompleteDetails["reason"] != "max_output_tokens" {
+		t.Fatalf("incomplete_details = %#v", resp.IncompleteDetails)
+	}
+}
+
+func TestFromOpenAIEmptyToolCallID(t *testing.T) {
+	body := []byte(`{
+		"choices":[{
+			"finish_reason":"tool_calls",
+			"message":{"tool_calls":[{"id":"","type":"function","function":{"name":"f","arguments":"{}"}}]}
+		}]
+	}`)
+	resp, err := FromOpenAI(body, "demo")
+	if err != nil {
+		t.Fatalf("FromOpenAI: %v", err)
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("output = %+v", resp.Output)
+	}
+	callID, _ := resp.Output[0]["call_id"].(string)
+	if callID == "" || !strings.HasPrefix(callID, "call_") {
+		t.Fatalf("call_id = %q", callID)
+	}
+}

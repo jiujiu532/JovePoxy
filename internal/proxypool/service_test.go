@@ -2,6 +2,7 @@ package proxypool_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -112,6 +113,145 @@ func TestParseRejectsUnknownScheme(t *testing.T) {
 	}
 }
 
+func TestProxyFree_network_failover_without_cooldown(t *testing.T) {
+	ctx := context.Background()
+	service := newPool(t)
+	if _, err := service.Create(ctx, proxypool.CreateInput{Label: "a", URL: "http://127.0.0.1:18091"}); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	if _, err := service.Create(ctx, proxypool.CreateInput{Label: "b", URL: "http://127.0.0.1:18092"}); err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	dialer := &scriptedFreeDialer{responses: []dialResult{
+		{err: errors.New("dial tcp: connection refused")},
+		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
+	}}
+	resp, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	if err != nil {
+		t.Fatalf("ProxyFree: %v", err)
+	}
+	defer resp.Body.Close()
+	if dialer.calls != 2 {
+		t.Fatalf("calls = %d, want 2", dialer.calls)
+	}
+	list, listErr := service.List(ctx)
+	if listErr != nil {
+		t.Fatalf("list: %v", listErr)
+	}
+	for _, item := range list {
+		if item.CooldownUntil != nil {
+			t.Fatalf("network failover must not MarkCooldown; proxy %s until=%v", item.ID, item.CooldownUntil)
+		}
+	}
+}
+
+func TestProxyFree_no_failover_on_deadline(t *testing.T) {
+	ctx := context.Background()
+	service := newPool(t)
+	if _, err := service.Create(ctx, proxypool.CreateInput{Label: "a", URL: "http://127.0.0.1:18093"}); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	if _, err := service.Create(ctx, proxypool.CreateInput{Label: "b", URL: "http://127.0.0.1:18094"}); err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	dialer := &scriptedFreeDialer{responses: []dialResult{
+		{err: context.DeadlineExceeded},
+		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
+	}}
+	_, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	}
+	if dialer.calls != 1 {
+		t.Fatalf("calls = %d, want 1", dialer.calls)
+	}
+	list, listErr := service.List(ctx)
+	if listErr != nil {
+		t.Fatalf("list: %v", listErr)
+	}
+	for _, item := range list {
+		if item.CooldownUntil != nil {
+			t.Fatalf("deadline must not cool proxy %s", item.ID)
+		}
+	}
+}
+
+func TestService_acquire_skips_dirty_cooldown(t *testing.T) {
+	ctx := context.Background()
+	database, service := newPoolWithDB(t)
+	dirty, err := service.Create(ctx, proxypool.CreateInput{Label: "dirty", URL: "http://127.0.0.1:18101"})
+	if err != nil {
+		t.Fatalf("create dirty: %v", err)
+	}
+	clean, err := service.Create(ctx, proxypool.CreateInput{Label: "clean", URL: "http://127.0.0.1:18102"})
+	if err != nil {
+		t.Fatalf("create clean: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, "UPDATE egress_proxies SET cooldown_until = ? WHERE id = ?", "not-a-timestamp", string(dirty.ID)); err != nil {
+		t.Fatalf("poison cooldown: %v", err)
+	}
+	for range 6 {
+		selected, err := service.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("acquire with dirty cooldown: %v", err)
+		}
+		if selected.ID != clean.ID {
+			t.Fatalf("selected %s, want clean %s", selected.ID, clean.ID)
+		}
+	}
+}
+
+func TestService_acquire_accepts_rfc3339_cooldown(t *testing.T) {
+	ctx := context.Background()
+	database, service := newPoolWithDB(t)
+	cooling, err := service.Create(ctx, proxypool.CreateInput{Label: "cooling", URL: "http://127.0.0.1:18111"})
+	if err != nil {
+		t.Fatalf("create cooling: %v", err)
+	}
+	clean, err := service.Create(ctx, proxypool.CreateInput{Label: "clean", URL: "http://127.0.0.1:18112"})
+	if err != nil {
+		t.Fatalf("create clean: %v", err)
+	}
+	// Plain RFC3339 (no fractional seconds) must still be recognized as cooling.
+	until := time.Date(2026, 7, 15, 12, 5, 0, 0, time.UTC).Format(time.RFC3339)
+	if _, err := database.ExecContext(ctx, "UPDATE egress_proxies SET cooldown_until = ? WHERE id = ?", until, string(cooling.ID)); err != nil {
+		t.Fatalf("set cooldown: %v", err)
+	}
+	for range 5 {
+		selected, err := service.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
+		if selected.ID != clean.ID {
+			t.Fatalf("selected %s, want clean %s (RFC3339 cooldown must apply)", selected.ID, clean.ID)
+		}
+	}
+}
+
+func TestService_acquire_skips_bad_ciphertext(t *testing.T) {
+	ctx := context.Background()
+	database, service := newPoolWithDB(t)
+	good, err := service.Create(ctx, proxypool.CreateInput{Label: "good", URL: "http://127.0.0.1:18121"})
+	if err != nil {
+		t.Fatalf("create good: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+		INSERT INTO egress_proxies (id, label, url_ciphertext, scheme, host, weight, enabled, created_at)
+		VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+	`, "px_badcipher", "bad", "not-valid-ciphertext", "http", "127.0.0.1:9", "2026-07-15T12:00:00Z"); err != nil {
+		t.Fatalf("insert bad ciphertext: %v", err)
+	}
+	for range 6 {
+		selected, err := service.Acquire(ctx)
+		if err != nil {
+			t.Fatalf("acquire with bad ciphertext: %v", err)
+		}
+		if selected.ID != good.ID {
+			t.Fatalf("selected %s, want good %s", selected.ID, good.ID)
+		}
+	}
+}
+
 type dialResult struct {
 	response *http.Response
 	err      error
@@ -145,6 +285,12 @@ func (d *scriptedFreeDialer) ChatCompletionsWithProxy(_ context.Context, _ zen.A
 
 func newPool(t *testing.T) *proxypool.Service {
 	t.Helper()
+	_, service := newPoolWithDB(t)
+	return service
+}
+
+func newPoolWithDB(t *testing.T) (*sql.DB, *proxypool.Service) {
+	t.Helper()
 	database, err := db.Open(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("db: %v", err)
@@ -154,5 +300,5 @@ func newPool(t *testing.T) *proxypool.Service {
 	if err != nil {
 		t.Fatalf("box: %v", err)
 	}
-	return proxypool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
+	return database, proxypool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
 }

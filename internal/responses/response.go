@@ -19,7 +19,19 @@ type chatChoice struct {
 type chatRespMessage struct {
 	Content          string         `json:"content"`
 	ReasoningContent string         `json:"reasoning_content"`
+	Reasoning        string         `json:"reasoning"`
 	ToolCalls        []chatToolCall `json:"tool_calls"`
+}
+
+// reasoningText accepts both reasoning_content and reasoning aliases (stream parity).
+func (m *chatRespMessage) reasoningText() string {
+	if m == nil {
+		return ""
+	}
+	if m.ReasoningContent != "" {
+		return m.ReasoningContent
+	}
+	return m.Reasoning
 }
 
 type chatToolCall struct {
@@ -39,14 +51,15 @@ type chatUsage struct {
 
 // Response is the Responses API non-stream response shape (subset).
 type Response struct {
-	ID         string           `json:"id"`
-	Object     string           `json:"object"`
-	CreatedAt  int64            `json:"created_at"`
-	Status     string           `json:"status"`
-	Model      string           `json:"model"`
-	Output     []map[string]any `json:"output"`
-	OutputText string           `json:"output_text"`
-	Usage      map[string]any   `json:"usage"`
+	ID                string           `json:"id"`
+	Object            string           `json:"object"`
+	CreatedAt         int64            `json:"created_at"`
+	Status            string           `json:"status"`
+	Model             string           `json:"model"`
+	Output            []map[string]any `json:"output"`
+	OutputText        string           `json:"output_text"`
+	Usage             map[string]any   `json:"usage"`
+	IncompleteDetails map[string]any   `json:"incomplete_details,omitempty"`
 }
 
 // FromOpenAI converts a non-stream chat.completion JSON body into a Responses object.
@@ -61,10 +74,13 @@ func FromOpenAI(body []byte, model string) (Response, error) {
 	}
 	output := make([]map[string]any, 0, 3)
 	outputText := ""
+	finishReason := ""
 	if len(parsed.Choices) > 0 && parsed.Choices[0].Message != nil {
-		message := parsed.Choices[0].Message
+		choice := parsed.Choices[0]
+		finishReason = choice.FinishReason
+		message := choice.Message
 		// reasoning 优先于 message / function_call，便于 Codex 展示思考过程
-		if message.ReasoningContent != "" {
+		if reasoning := message.reasoningText(); reasoning != "" {
 			reasoningID, idErr := NewReasoningID()
 			if idErr != nil {
 				return Response{}, idErr
@@ -72,7 +88,7 @@ func FromOpenAI(body []byte, model string) (Response, error) {
 			output = append(output, map[string]any{
 				"id": reasoningID, "type": "reasoning", "status": "completed",
 				"summary": []map[string]any{{
-					"type": "summary_text", "text": message.ReasoningContent,
+					"type": "summary_text", "text": reasoning,
 				}},
 			})
 		}
@@ -100,16 +116,23 @@ func FromOpenAI(body []byte, model string) (Response, error) {
 					return Response{}, idErr
 				}
 			}
+			// Keep raw arguments string (including illegal JSON) — never silence to {}.
 			output = append(output, map[string]any{
 				"type": "function_call", "id": itemID, "status": "completed",
 				"call_id": callID, "name": call.Function.Name, "arguments": call.Function.Arguments,
 			})
 		}
 	}
+	status := "completed"
+	var incomplete map[string]any
+	if isIncompleteFinish(finishReason) {
+		status = "incomplete"
+		incomplete = map[string]any{"reason": incompleteReason(finishReason)}
+	}
 	return Response{
 		ID: responseID, Object: "response", CreatedAt: time.Now().Unix(),
-		Status: "completed", Model: model, Output: output, OutputText: outputText,
-		Usage: usagePayload(parsed.Usage),
+		Status: status, Model: model, Output: output, OutputText: outputText,
+		Usage: usagePayload(parsed.Usage), IncompleteDetails: incomplete,
 	}, nil
 }
 

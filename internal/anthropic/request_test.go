@@ -551,3 +551,39 @@ func TestToOpenAIChat_tool_result_with_text(t *testing.T) {
 		t.Fatalf("user text msg = %+v", payload.Messages[1])
 	}
 }
+
+
+func TestToOpenAIChat_empty_tool_use_id_generated(t *testing.T) {
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"demo-free","max_tokens":16,
+		"messages":[{"role":"assistant","content":[
+			{"type":"tool_use","id":"","name":"lookup","input":{"q":1}}
+		]}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload struct {
+		Messages []struct {
+			ToolCalls []struct {
+				ID string `json:"id"`
+			} `json:"tool_calls"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(payload.Messages) == 0 || len(payload.Messages[0].ToolCalls) == 0 {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if payload.Messages[0].ToolCalls[0].ID == "" {
+		t.Fatalf("expected generated tool call id")
+	}
+	if !strings.HasPrefix(payload.Messages[0].ToolCalls[0].ID, "toolu_") {
+		t.Fatalf("id = %q", payload.Messages[0].ToolCalls[0].ID)
+	}
+}

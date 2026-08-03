@@ -35,9 +35,8 @@ import {
   useToast,
 } from "@/components";
 import { useProviderTab } from "@/hooks/useProviderTab";
-import { api, ApiError, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
-import { bindFriendlyError } from "@/lib/api-error";
-import { setSessionHint } from "@/lib/auth-session";
+import { api, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
+import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import {
   formatCooldownRemaining,
   formatTrafficPct,
@@ -104,11 +103,7 @@ export function KeyPoolPage() {
       setOlKeys(ol.keys);
       setListError(null);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setSessionHint(false);
-        void navigate("/login");
-        return;
-      }
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       setListError(friendlyError(err, t("keypool.loadListFailed"), t));
     } finally {
       setLoading(false);
@@ -150,6 +145,7 @@ export function KeyPoolPage() {
       push(t("keypool.added"), "success");
       await load(true);
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("keypool.addFailed"), t), "error");
     } finally {
       setSaving(false);
@@ -182,6 +178,7 @@ export function KeyPoolPage() {
       push(t("keypool.saved"), "success");
       await load(true);
     } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
       push(friendlyError(err, t("keypool.saveFailed"), t), "error");
     } finally {
       setEditSaving(false);
@@ -254,7 +251,8 @@ export function KeyPoolPage() {
         try {
           await api.setZenKeyEnabled(id, next);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -279,7 +277,8 @@ export function KeyPoolPage() {
         try {
           await api.deleteZenKey(id);
           ok += 1;
-        } catch {
+        } catch (err) {
+          if (handleUnauthorized(err, (to) => void navigate(to))) return;
           /* continue */
         }
       }
@@ -661,9 +660,10 @@ export function KeyPoolPage() {
                                 void api
                                   .setZenKeyEnabled(key.id, !key.enabled)
                                   .then(() => void load(true))
-                                  .catch((err) =>
-                                    push(friendlyError(err, t("common.actionFailed"), t), "error"),
-                                  )
+                                  .catch((err) => {
+                                    if (handleUnauthorized(err, (to) => void navigate(to))) return;
+                                    push(friendlyError(err, t("common.actionFailed"), t), "error");
+                                  })
                               }
                             >
                               {key.enabled ? t("common.disable") : t("common.enable")}
@@ -674,12 +674,13 @@ export function KeyPoolPage() {
                                   void api
                                     .deleteZenKey(key.id)
                                     .then(() => void load(true))
-                                    .catch((err) =>
+                                    .catch((err) => {
+                                      if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                       push(
                                         friendlyError(err, t("keypool.deleteFailed"), t),
                                         "error",
-                                      ),
-                                    );
+                                      );
+                                    });
                                 }
                               }}
                             />
@@ -822,12 +823,13 @@ export function KeyPoolPage() {
                                     void api
                                       .setZenKeyEnabled(key.id, !key.enabled)
                                       .then(() => void load(true))
-                                      .catch((err) =>
+                                      .catch((err) => {
+                                        if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                         push(
                                           friendlyError(err, t("common.actionFailed"), t),
                                           "error",
-                                        ),
-                                      )
+                                        );
+                                      })
                                   }
                                 >
                                   {key.enabled ? t("common.disable") : t("common.enable")}
@@ -838,12 +840,13 @@ export function KeyPoolPage() {
                                       void api
                                         .deleteZenKey(key.id)
                                         .then(() => void load(true))
-                                        .catch((err) =>
+                                        .catch((err) => {
+                                          if (handleUnauthorized(err, (to) => void navigate(to))) return;
                                           push(
                                             friendlyError(err, t("keypool.deleteFailed"), t),
                                             "error",
-                                          ),
-                                        );
+                                          );
+                                        });
                                     }
                                   }}
                                 />

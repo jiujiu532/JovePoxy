@@ -267,16 +267,29 @@ func convertInput(request Request) ([]chatMessage, error) {
 			appendPendingReasoning(extractReasoningText(item))
 
 		case "function_call":
+			callID := item.CallID
+			if callID == "" {
+				generated, idErr := NewCallID()
+				if idErr != nil {
+					return nil, idErr
+				}
+				callID = generated
+			}
+			// Keep arguments as raw string; empty becomes "{}" for chat shape.
+			args := item.Arguments
+			if args == "" {
+				args = "{}"
+			}
 			call := map[string]any{
-				"id":   item.CallID,
+				"id":   callID,
 				"type": "function",
 				"function": map[string]any{
 					"name":      item.Name,
-					"arguments": item.Arguments,
+					"arguments": args,
 				},
 			}
 			pendingToolCalls = append(pendingToolCalls, call)
-			pendingToolCallIDs = append(pendingToolCallIDs, item.CallID)
+			pendingToolCallIDs = append(pendingToolCallIDs, callID)
 
 		case "function_call_output":
 			output := strings.TrimSpace(string(item.Output))

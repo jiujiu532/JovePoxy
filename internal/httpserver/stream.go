@@ -10,6 +10,8 @@ import (
 )
 
 func (server server) copyStream(writer http.ResponseWriter, body io.Reader) {
+	// First-event probe without idle wrapper so early JSON errors do not leave a
+	// background reader holding the upstream body.
 	reader := bufio.NewReader(body)
 	firstEvent, err := sse.ReadFirstEvent(reader)
 	if len(firstEvent) == 0 && errors.Is(err, io.EOF) {
@@ -24,16 +26,24 @@ func (server server) copyStream(writer http.ResponseWriter, body io.Reader) {
 		writeOpenAIError(writer, http.StatusTooManyRequests, "upstream rate limit exceeded", "rate_limit_error", "", "rate_limit_exceeded")
 		return
 	}
-	writer.Header().Set("Content-Type", "text/event-stream")
-	writer.Header().Set("Cache-Control", "no-cache")
-	writer.Header().Set("Connection", "keep-alive")
-	writer.WriteHeader(http.StatusOK)
+	if msg, isErr := sse.ErrorEventMessage(firstEvent); isErr {
+		if msg == "" {
+			msg = "upstream error"
+		}
+		writeOpenAIError(writer, http.StatusBadGateway, msg, "api_error", "", "upstream_error")
+		return
+	}
+	if !sse.WriteHeaders(writer) {
+		return
+	}
 	if !writeAndFlush(writer, firstEvent) {
 		return
 	}
 	if errors.Is(err, io.EOF) {
 		return
 	}
+	// Idle timeout only for the remainder of the upstream body.
+	reader = bufio.NewReader(sse.IdleReader(reader, sse.DefaultIdleTimeout))
 	buffer := make([]byte, 32*1024)
 	for {
 		count, readErr := reader.Read(buffer)
