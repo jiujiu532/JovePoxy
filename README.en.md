@@ -34,8 +34,8 @@ JovePoxy (`module jovepoxy`) is a **single binary** gateway:
 | Surface | Role |
 |---------|------|
 | Data plane | `POST /v1/chat/completions`, `/v1/responses`, `/v1/messages` (SSE supported) |
-| Model catalog | Merges **OpenCode Zen public** list with **Ollama Cloud** when a healthy Ollama pool key exists |
-| Upstream | Free → Zen `Bearer public`; paid OpenCode → Zen key pool; paid Ollama → Ollama Cloud + Ollama key pool |
+| Model catalog | **Zen free** (public) + **OpenCode Go** (healthy OpenCode pool key) + **Ollama Cloud** (healthy Ollama pool key) |
+| Upstream | Free → Zen `Bearer public`; paid OpenCode → **Go** `/zen/go` + key pool; paid Ollama → Ollama Cloud + key pool |
 | Control plane | `/api/admin/*` cookie session + embedded SPA on the same listener |
 | Storage | Single SQLite file; **no** local OpenCode or local Ollama runtime required |
 
@@ -44,8 +44,8 @@ Version: `internal/version.Current` (default **1.0.0**); `--version` and `/healt
 ## Features
 
 - **Triple endpoints**: OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages behind one local API key.
-- **Dual-source catalog**: always fetch Zen public models; if a healthy `provider=ollama` pool key exists, merge Ollama Cloud `/v1/models`.
-- **Provider-aware routing**: OpenCode free / OpenCode paid / Ollama paid use different bases and pools; Ollama uses plain Bearer (no OpenCode compatibility headers).
+- **Plan-scoped catalog**: public Zen keeps free only; merge **Go** `/zen/go/v1/models` when a healthy `provider=opencode` key exists; merge Ollama Cloud `/v1/models` when a healthy `provider=ollama` key exists. Public Claude/Gemini (etc.) not on Go are not advertised.
+- **Provider-aware routing**: OpenCode free → `/zen/v1` + `Bearer public`; OpenCode paid → `/zen/go/v1` + key pool; Ollama paid → Ollama Cloud + key pool (plain Bearer, no OpenCode compatibility headers).
 - **Local keys `sk-oc-...`**: clients only talk to the gateway; optional RPM / daily limits and concurrent sessions; only SHA-256 is stored.
 - **Key pool + egress proxy pool**: key = identity, proxy = egress IP; free path can rotate proxies on 429/5xx; paid supports spread / sticky and failover.
 - **Quota & usage**: OpenCode / Ollama **account cookies are control-plane only** and never enter the chat path.
@@ -63,12 +63,13 @@ flowchart LR
     GW --> AUTH["Local key auth<br/>rate / session limits"]
     AUTH --> CATALOG{"Catalog<br/>provider + free"}
     CATALOG -->|opencode free| FREE["Bearer public<br/>egress proxy rotation"]
-    CATALOG -->|opencode paid| PAID_OC["OpenCode key pool<br/>+ Zen base"]
+    CATALOG -->|opencode paid| PAID_OC["OpenCode key pool<br/>+ Go /zen/go"]
     CATALOG -->|ollama paid| PAID_OL["Ollama key pool<br/>+ Ollama Cloud"]
-    FREE --> ZEN["OpenCode Zen"]
-    PAID_OC --> ZEN
+    FREE --> ZEN["OpenCode Zen free"]
+    PAID_OC --> GO["OpenCode Go"]
     PAID_OL --> OLLAMA["Ollama Cloud"]
     ZEN --> RESP["Response / SSE"]
+    GO --> RESP
     OLLAMA --> RESP
     RESP --> CLIENT
 ```
@@ -174,7 +175,7 @@ curl http://127.0.0.1:6446/v1/messages \
   -d '{"model":"claude-sonnet-4-5","max_tokens":256,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Public `GET /v1/models`: free only by default; set `SHOW_ALL_MODELS=true` to include paid. `owned_by` is `zen` (OpenCode) or `ollama`.
+Public `GET /v1/models`: free only by default; `SHOW_ALL_MODELS=true` includes paid entries from the plan catalog (Go + Ollama, not unusable public paid IDs). `owned_by` is `zen` (OpenCode) or `ollama`.
 
 ## Configuration
 
@@ -184,7 +185,8 @@ Public `GET /v1/models`: free only by default; set `SHOW_ALL_MODELS=true` to inc
 | `ADMIN_SECRET` | yes | - | 32+ chars; encrypts pool keys / cookies / proxy URLs |
 | `LISTEN` | no | `0.0.0.0:6446` | Listen address; use `127.0.0.1:6446` for local-only |
 | `DATA_DIR` | no | `./data` | SQLite directory (`/data` in containers) |
-| `ZEN_BASE` | no | `https://opencode.ai/zen/v1` | OpenCode Zen OpenAI-compatible base |
+| `ZEN_BASE` | no | `https://opencode.ai/zen/v1` | OpenCode Zen **free** upstream (`Bearer public`) |
+| `ZEN_GO_BASE` | no | `https://opencode.ai/zen/go` | OpenCode **Go** suite catalog + paid chat (appends `/v1` when needed) |
 | `OLLAMA_BASE` | no | `https://ollama.com` | Ollama Cloud root; normalized to `…/v1` at runtime |
 | `MODEL_CACHE_TTL` | no | `5m` | Model catalog cache TTL |
 | `UPSTREAM_TIMEOUT` | no | `120s` | Upstream timeout |

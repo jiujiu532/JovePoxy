@@ -14,7 +14,7 @@ import (
 )
 
 func TestCatalog_Refresh_classifies_openai_list_response(t *testing.T) {
-	// Given
+	// Given: public Zen list keeps free only; public paid IDs are dropped.
 	server := modelServer(t, http.StatusOK, `{"object":"list","data":[{"id":"deepseek-v4-flash-free"},{"id":"paid-model"}]}`)
 	catalog := newCatalog(t, server.URL, Settings{TTL: time.Minute})
 
@@ -28,8 +28,8 @@ func TestCatalog_Refresh_classifies_openai_list_response(t *testing.T) {
 	if result.Stale {
 		t.Fatal("Refresh() returned stale result after a successful fetch")
 	}
-	if got := result.Models; len(got) != 2 || !got[0].Free || got[1].Free {
-		t.Fatalf("models = %#v, want free suffix classification", got)
+	if got := result.Models; len(got) != 1 || !got[0].Free || got[0].ID != "deepseek-v4-flash-free" {
+		t.Fatalf("models = %#v, want only free models from public catalog", got)
 	}
 }
 
@@ -66,8 +66,9 @@ func TestCatalog_Refresh_applies_allow_and_deny_overrides_with_deny_winning(t *t
 	if err != nil {
 		t.Fatalf("Refresh() error = %v", err)
 	}
-	if got := result.Models; !got[0].Free || got[1].Free || got[2].Free {
-		t.Fatalf("models = %#v, want allowlist then denylist precedence", got)
+	// Only free models remain; denylisted free models are dropped entirely.
+	if got := result.Models; len(got) != 1 || got[0].ID != "extra-free" || !got[0].Free {
+		t.Fatalf("models = %#v, want only allowlisted free model", got)
 	}
 }
 
@@ -180,6 +181,7 @@ func modelServer(t *testing.T, status int, body string) *httptest.Server {
 }
 
 func TestCatalog_Refresh_merges_ollama_and_skips_id_conflicts(t *testing.T) {
+	// Public source only keeps free IDs; shared-model is paid public → dropped before merge.
 	zenSource := staticSource{models: []zen.Model{{ID: "shared-model"}, {ID: "zen-only-free"}}}
 	ollamaSource := staticSource{models: []zen.Model{{ID: "shared-model"}, {ID: "ollama-only"}}}
 	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: ollamaSource})
@@ -195,14 +197,14 @@ func TestCatalog_Refresh_merges_ollama_and_skips_id_conflicts(t *testing.T) {
 		t.Fatal("Refresh() should not be stale when both sources succeed")
 	}
 	if len(result.Models) != 3 {
-		t.Fatalf("models = %#v, want 3 (conflict skipped)", result.Models)
+		t.Fatalf("models = %#v, want 3 (free + shared ollama + ollama-only)", result.Models)
 	}
 	byID := map[ModelID]Model{}
 	for _, model := range result.Models {
 		byID[model.ID] = model
 	}
-	if got := byID["shared-model"]; got.Provider != ProviderOpenCode || got.Free {
-		t.Fatalf("shared-model = %#v, want opencode paid (OpenCode wins ID conflict)", got)
+	if got := byID["shared-model"]; got.Provider != ProviderOllama || got.Free {
+		t.Fatalf("shared-model = %#v, want ollama paid (public paid dropped, ollama fills ID)", got)
 	}
 	if got := byID["ollama-only"]; got.Provider != ProviderOllama || got.Free {
 		t.Fatalf("ollama-only = %#v, want ollama paid", got)
@@ -212,8 +214,58 @@ func TestCatalog_Refresh_merges_ollama_and_skips_id_conflicts(t *testing.T) {
 	}
 }
 
+func TestCatalog_Refresh_merges_go_paid_catalog(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "demo-free"}, {ID: "claude-haiku-4-5"}}}
+	goSource := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash"}, {ID: "demo-free"}}}
+	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, OpenCodePaid: goSource})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	byID := map[ModelID]Model{}
+	for _, model := range result.Models {
+		byID[model.ID] = model
+	}
+	if _, ok := byID["claude-haiku-4-5"]; ok {
+		t.Fatalf("public paid model leaked into catalog: %#v", result.Models)
+	}
+	if got := byID["demo-free"]; !got.Free || got.Provider != ProviderOpenCode {
+		t.Fatalf("demo-free = %#v, want free opencode", got)
+	}
+	if got := byID["deepseek-v4-flash"]; got.Free || got.Provider != ProviderOpenCode {
+		t.Fatalf("deepseek-v4-flash = %#v, want paid opencode from Go catalog", got)
+	}
+	if len(result.Models) != 2 {
+		t.Fatalf("models = %#v, want free + go paid only", result.Models)
+	}
+}
+
+func TestCatalog_Refresh_marks_stale_when_go_fails_but_zen_ok(t *testing.T) {
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only-free"}}}
+	catalog, err := NewCatalog(zenSource, Settings{
+		TTL:          time.Minute,
+		OpenCodePaid: failingSource{err: errors.New("go down")},
+	})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if !result.Stale {
+		t.Fatal("want stale when go paid source fails")
+	}
+	if len(result.Models) != 1 || result.Models[0].ID != "zen-only-free" {
+		t.Fatalf("models = %#v, want free snapshot", result.Models)
+	}
+}
+
 func TestCatalog_Refresh_marks_stale_when_ollama_fails_but_zen_ok(t *testing.T) {
-	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only-free"}}}
 	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: failingSource{err: errors.New("ollama down")}})
 	if err != nil {
 		t.Fatalf("NewCatalog() error = %v", err)
@@ -226,13 +278,13 @@ func TestCatalog_Refresh_marks_stale_when_ollama_fails_but_zen_ok(t *testing.T) 
 	if !result.Stale {
 		t.Fatal("want stale when ollama fails")
 	}
-	if len(result.Models) != 1 || result.Models[0].ID != "zen-only" || result.Models[0].Provider != ProviderOpenCode {
-		t.Fatalf("models = %#v, want zen-only snapshot", result.Models)
+	if len(result.Models) != 1 || result.Models[0].ID != "zen-only-free" || result.Models[0].Provider != ProviderOpenCode {
+		t.Fatalf("models = %#v, want free snapshot", result.Models)
 	}
 }
 
 func TestCatalog_Refresh_empty_ollama_is_not_error(t *testing.T) {
-	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only-free"}}}
 	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: staticSource{}})
 	if err != nil {
 		t.Fatalf("NewCatalog() error = %v", err)
@@ -243,7 +295,7 @@ func TestCatalog_Refresh_empty_ollama_is_not_error(t *testing.T) {
 		t.Fatalf("Refresh() error = %v", err)
 	}
 	if result.Stale || len(result.Models) != 1 {
-		t.Fatalf("result = %#v, want non-stale zen only", result)
+		t.Fatalf("result = %#v, want non-stale free only", result)
 	}
 }
 
@@ -265,7 +317,7 @@ func TestNormalizeProvider(t *testing.T) {
 }
 
 func TestCatalog_Refresh_skips_blank_ollama_ids(t *testing.T) {
-	zenSource := staticSource{models: []zen.Model{{ID: "zen-only"}}}
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only-free"}}}
 	ollamaSource := staticSource{models: []zen.Model{{ID: "  "}, {ID: "ollama-ok"}}}
 	catalog, err := NewCatalog(zenSource, Settings{TTL: time.Minute, Ollama: ollamaSource})
 	if err != nil {
@@ -276,7 +328,7 @@ func TestCatalog_Refresh_skips_blank_ollama_ids(t *testing.T) {
 		t.Fatalf("Refresh() error = %v", err)
 	}
 	if len(result.Models) != 2 {
-		t.Fatalf("models = %#v, want zen + one ollama", result.Models)
+		t.Fatalf("models = %#v, want free + one ollama", result.Models)
 	}
 }
 

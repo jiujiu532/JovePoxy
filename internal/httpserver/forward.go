@@ -28,7 +28,7 @@ func (server server) forwardChat(ctx context.Context, request *http.Request, bod
 	affinity := zenpool.ConversationAffinityKey(request.Header, body)
 	dialer := server.dialerFor(provider)
 	if dialer == nil {
-		// Misconfigured ollama dialer must not fall through to Zen with an Ollama key.
+		// Misconfigured dialer must not fall through to the wrong upstream.
 		return nil, zenpool.ErrNoHealthyKey
 	}
 	return zenpool.ProxyPaid(ctx, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider))
@@ -39,6 +39,11 @@ func (server server) dialerFor(provider models.Provider) *zen.Client {
 		// Never fall back to Zen: Ollama keys must not be sent to ZEN_BASE.
 		return server.ollama
 	}
+	// Paid OpenCode Go suite uses /zen/go, not public /zen/v1.
+	if server.zenGo != nil {
+		return server.zenGo
+	}
+	// Fallback for tests that only wire Zen (free base); production always sets ZenGo.
 	return server.zen
 }
 

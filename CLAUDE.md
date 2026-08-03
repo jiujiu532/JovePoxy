@@ -92,11 +92,15 @@ Zen keys / cookies / proxy URLs: AES-GCM via `crypto.Box` keyed by `ADMIN_SECRET
 ### Free vs paid chat path
 
 1. Client hits `POST /v1/chat/completions` or `POST /v1/messages` with local key (`httpserver` auth).
-2. Model catalog (`models.Catalog`) classifies free vs paid (heuristic: `*-free` or `big-pickle`; see `models/catalog.go`).
-3. Free → `proxypool.ProxyFree` → Zen with `PublicAuth()` (`Bearer public`); optional egress proxy rotation on 429/5xx/connect fail (one retry).
-4. Paid → `zenpool.ProxyPaid` → Zen with pooled API key + failover.
-5. Zen HTTP client: `internal/zen` (compat headers / OpenCode-ish IDs in `headers.go`).
-6. Anthropic shape: `internal/anthropic` convert request/response/SSE; OpenAI shape mostly pass-through + observe/log.
+2. Model catalog (`models.Catalog`) merges three sources:
+   - Public Zen (`ZEN_BASE`, `Bearer public`) → **free only** (`*-free` / `big-pickle` / allowlist)
+   - OpenCode Go (`ZEN_GO_BASE` + `/v1`, pool OpenCode key) → paid OpenCode
+   - Ollama Cloud (`OLLAMA_BASE` + `/v1`, pool Ollama key) → paid Ollama
+3. Free → `proxypool.ProxyFree` → public Zen with `PublicAuth()`; optional egress proxy rotation on 429/5xx/connect fail (one retry).
+4. Paid OpenCode → `zenpool.ProxyPaid` → **Go** dialer (`/zen/go/v1`) with pooled OpenCode key + failover.
+5. Paid Ollama → `zenpool.ProxyPaid` → Ollama plain dialer with pooled Ollama key.
+6. Zen HTTP client: `internal/zen` (compat headers on OpenCode paths; plain auth on Ollama).
+7. Anthropic shape: `internal/anthropic` convert request/response/SSE; OpenAI shape mostly pass-through + observe/log.
 
 Key vs proxy are independent: **Key = identity, Proxy = egress IP**.
 
@@ -109,7 +113,7 @@ Key vs proxy are independent: **Key = identity, Proxy = egress IP**.
 - `usage` / `analytics` / `reqlog` — usage sync, overview metrics, request logs (**no prompt/response bodies**)
 - `auth` — admin password + httpOnly cookie `jovepoxy_admin` + login rate limit
 - `db` — SQLite (`modernc.org/sqlite`), schema + migrations under `internal/db`
-- `config` — env-only config (`LISTEN`, `DATA_DIR`, `ADMIN_*`, `ZEN_BASE`, TTLs, proxies, `SHOW_ALL_MODELS`, `COOKIE_SECURE`, …)
+- `config` — env-only config (`LISTEN`, `DATA_DIR`, `ADMIN_*`, `ZEN_BASE`, `ZEN_GO_BASE`, `OLLAMA_BASE`, TTLs, proxies, `SHOW_ALL_MODELS`, `COOKIE_SECURE`, …)
 
 ### Frontend (`web/src`)
 

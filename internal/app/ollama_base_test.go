@@ -20,3 +20,21 @@ func TestOllamaAPIBase(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenCodeGoAPIBase(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{in: "", want: "https://opencode.ai/zen/go/v1"},
+		{in: "https://opencode.ai/zen/go", want: "https://opencode.ai/zen/go/v1"},
+		{in: "https://opencode.ai/zen/go/", want: "https://opencode.ai/zen/go/v1"},
+		{in: "https://opencode.ai/zen/go/v1", want: "https://opencode.ai/zen/go/v1"},
+		{in: "https://opencode.ai/zen/go/v1/", want: "https://opencode.ai/zen/go/v1"},
+	}
+	for _, tc := range cases {
+		if got := openCodeGoAPIBase(tc.in); got != tc.want {
+			t.Fatalf("openCodeGoAPIBase(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

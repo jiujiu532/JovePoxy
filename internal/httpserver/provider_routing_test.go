@@ -277,3 +277,111 @@ func TestServer_missing_ollama_dialer_does_not_hit_zen(t *testing.T) {
 		t.Fatalf("expected non-OK when ollama dialer missing, body=%s", recorder.Body.String())
 	}
 }
+
+func TestServer_routes_opencode_paid_model_to_zen_go_not_public(t *testing.T) {
+	var publicHits, goHits int
+	var goAuth string
+
+	publicUpstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		publicHits++
+	}))
+	defer publicUpstream.Close()
+
+	goUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		goHits++
+		goAuth = request.Header.Get("Authorization")
+		if !strings.HasSuffix(request.URL.Path, "/chat/completions") {
+			t.Errorf("go path = %q", request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_go","object":"chat.completion"}`))
+	}))
+	defer goUpstream.Close()
+
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	keyService := keys.NewService(database, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
+	}
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "go-key", Secret: "go-secret-value", Provider: zenpool.ProviderOpenCode,
+	}); err != nil {
+		t.Fatalf("create go pool key: %v", err)
+	}
+
+	publicClient, err := zen.NewClient(config.Config{ZenBase: publicUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("public client: %v", err)
+	}
+	goClient, err := zen.NewClient(config.Config{ZenBase: goUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("go client: %v", err)
+	}
+	catalog, err := models.NewCatalog(
+		testModelSource{models: []zen.Model{{ID: "demo-free"}}},
+		models.Settings{
+			TTL:          time.Hour,
+			OpenCodePaid: testModelSource{models: []zen.Model{{ID: "deepseek-v4-flash"}}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	if _, err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("refresh catalog: %v", err)
+	}
+
+	handler := httpserver.New(httpserver.Dependencies{
+		Keys: keyService, Catalog: catalog, Zen: publicClient, ZenGo: goClient,
+		Pool: pool, Logs: reqlog.NewService(database, nil), Version: "test",
+		ShowAllModels: true,
+	})
+
+	modelsRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(modelsRecorder, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	var listed struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(modelsRecorder.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode models: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, item := range listed.Data {
+		ids[item.ID] = true
+	}
+	if !ids["demo-free"] || !ids["deepseek-v4-flash"] {
+		t.Fatalf("listed ids = %#v, want free + go paid", ids)
+	}
+
+	body := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"}]}`)
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+created.Secret)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("chat status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if publicHits != 0 {
+		t.Fatalf("public zen hits = %d, want 0", publicHits)
+	}
+	if goHits != 1 {
+		t.Fatalf("go upstream hits = %d, want 1", goHits)
+	}
+	if goAuth != "Bearer go-secret-value" {
+		t.Fatalf("go Authorization = %q", goAuth)
+	}
+}

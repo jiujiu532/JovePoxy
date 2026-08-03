@@ -46,6 +46,8 @@ type Settings struct {
 	TTL           time.Duration
 	FreeAllowlist []ModelID
 	FreeDenylist  []ModelID
+	// OpenCodePaid is optional; when non-nil, Refresh merges its models as paid OpenCode (Go suite).
+	OpenCodePaid Source
 	// Ollama is optional; when non-nil, Refresh merges its models (paid only).
 	Ollama Source
 }
@@ -66,12 +68,13 @@ func (err *RefreshError) Unwrap() error { return err.cause }
 
 // Catalog serializes refreshes and serves immutable copies of its last snapshot.
 type Catalog struct {
-	source Source
-	ollama Source
-	ttl    time.Duration
-	allow  map[ModelID]struct{}
-	deny   map[ModelID]struct{}
-	now    func() time.Time
+	source       Source
+	openCodePaid Source
+	ollama       Source
+	ttl          time.Duration
+	allow        map[ModelID]struct{}
+	deny         map[ModelID]struct{}
+	now          func() time.Time
 
 	mu                sync.Mutex
 	models            []Model
@@ -83,6 +86,7 @@ type Catalog struct {
 
 // NewCatalog constructs an in-memory catalog. Settings are parsed once here so
 // classification code only receives typed model IDs.
+// source is the public Zen free-tier catalog (Bearer public).
 func NewCatalog(source Source, settings Settings) (*Catalog, error) {
 	if source == nil {
 		return nil, ErrInvalidSource
@@ -91,12 +95,13 @@ func NewCatalog(source Source, settings Settings) (*Catalog, error) {
 		return nil, ErrInvalidTTL
 	}
 	return &Catalog{
-		source: source,
-		ollama: settings.Ollama,
-		ttl:    settings.TTL,
-		allow:  toSet(settings.FreeAllowlist),
-		deny:   toSet(settings.FreeDenylist),
-		now:    time.Now,
+		source:       source,
+		openCodePaid: settings.OpenCodePaid,
+		ollama:       settings.Ollama,
+		ttl:          settings.TTL,
+		allow:        toSet(settings.FreeAllowlist),
+		deny:         toSet(settings.FreeDenylist),
+		now:          time.Now,
 	}, nil
 }
 
@@ -143,7 +148,7 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 	catalog.fetchedAt = catalog.now()
 	catalog.lastRefreshFailed = partial
 	if partial {
-		catalog.lastRefreshError = errors.New("models: ollama source failed")
+		catalog.lastRefreshError = errors.New("models: secondary catalog source failed")
 	} else {
 		catalog.lastRefreshError = nil
 	}
@@ -151,27 +156,44 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 }
 
 func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, partial bool, err error) {
+	// Public Zen is free-tier only: keep free models, drop public paid IDs
+	// (Claude/Gemini/etc. are not usable with OpenCode Go pool keys).
 	upstreamModels, refreshErr := catalog.source.Models(ctx)
 	if refreshErr != nil {
 		return nil, false, refreshErr
 	}
-	merged = catalog.classifyOpenCode(upstreamModels)
+	merged = catalog.classifyOpenCodeFree(upstreamModels)
+
+	if catalog.openCodePaid != nil {
+		paidModels, paidErr := catalog.openCodePaid.Models(ctx)
+		if paidErr != nil {
+			// Keep free snapshot; mark partial so operators can observe the failure.
+			partial = true
+		} else {
+			merged = mergePaidModels(merged, paidModels, ProviderOpenCode)
+		}
+	}
+
 	if catalog.ollama == nil {
-		return merged, false, nil
+		return merged, partial, nil
 	}
 	ollamaModels, ollamaErr := catalog.ollama.Models(ctx)
 	if ollamaErr != nil {
-		// Keep Zen snapshot; mark partial/stale so operators can observe the failure.
 		return merged, true, nil
 	}
 	if len(ollamaModels) == 0 {
-		return merged, false, nil
+		return merged, partial, nil
 	}
+	merged = mergePaidModels(merged, ollamaModels, ProviderOllama)
+	return merged, partial, nil
+}
+
+func mergePaidModels(merged []Model, upstream []zen.Model, provider Provider) []Model {
 	seen := make(map[ModelID]struct{}, len(merged))
 	for _, model := range merged {
 		seen[model.ID] = struct{}{}
 	}
-	for _, upstreamModel := range ollamaModels {
+	for _, upstreamModel := range upstream {
 		id := ModelID(strings.TrimSpace(upstreamModel.ID))
 		if id == "" {
 			continue
@@ -179,11 +201,10 @@ func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, part
 		if _, exists := seen[id]; exists {
 			continue
 		}
-		// Ollama Cloud has no public free path; always paid + ollama pool.
-		merged = append(merged, Model{ID: id, Free: false, Provider: ProviderOllama})
+		merged = append(merged, Model{ID: id, Free: false, Provider: provider})
 		seen[id] = struct{}{}
 	}
-	return merged, false, nil
+	return merged
 }
 
 func (catalog *Catalog) currentResult() (Result, error) {
@@ -210,7 +231,8 @@ func (catalog *Catalog) resultLocked() Result {
 	return Result{Models: append([]Model(nil), catalog.models...), Stale: catalog.lastRefreshFailed}
 }
 
-func (catalog *Catalog) classifyOpenCode(upstreamModels []zen.Model) []Model {
+// classifyOpenCodeFree keeps only free-tier OpenCode models from the public Zen list.
+func (catalog *Catalog) classifyOpenCodeFree(upstreamModels []zen.Model) []Model {
 	classified := make([]Model, 0, len(upstreamModels))
 	for _, upstreamModel := range upstreamModels {
 		id := ModelID(upstreamModel.ID)
@@ -220,7 +242,11 @@ func (catalog *Catalog) classifyOpenCode(upstreamModels []zen.Model) []Model {
 		if denied {
 			free = false
 		}
-		classified = append(classified, Model{ID: id, Free: free, Provider: ProviderOpenCode})
+		if !free {
+			// Public paid IDs are not part of the Go-suite catalog.
+			continue
+		}
+		classified = append(classified, Model{ID: id, Free: true, Provider: ProviderOpenCode})
 	}
 	return classified
 }

@@ -34,8 +34,8 @@ JovePoxy（`module jovepoxy`）是一个**单二进制**网关：
 | 能力 | 说明 |
 |------|------|
 | 数据面 | `POST /v1/chat/completions`、`/v1/responses`、`/v1/messages`（含 SSE） |
-| 模型目录 | 合并 **OpenCode Zen public** 与 **Ollama Cloud**（有健康 Ollama 池密钥时） |
-| 上游 | Free → Zen `Bearer public`；Paid OpenCode → Zen Key 池；Paid Ollama → Ollama Cloud + Ollama Key 池 |
+| 模型目录 | **Zen free**（public）+ **OpenCode Go**（有健康 OpenCode 池密钥时）+ **Ollama Cloud**（有健康 Ollama 池密钥时） |
+| 上游 | Free → Zen `Bearer public`；Paid OpenCode → **Go** `/zen/go` + Key 池；Paid Ollama → Ollama Cloud + Key 池 |
 | 控制面 | `/api/admin/*` Cookie 会话 + 同端口内嵌管理台 SPA |
 | 存储 | 单文件 SQLite；**不需要**本机 OpenCode / 本机 Ollama 进程 |
 
@@ -44,8 +44,8 @@ JovePoxy（`module jovepoxy`）是一个**单二进制**网关：
 ## 核心功能
 
 - **三端点兼容**：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，一套本地密钥即可调用。
-- **双源模型目录**：Zen 公共列表始终拉取；密钥池中存在健康 `provider=ollama` 的 API Key 时，合并 Ollama Cloud `/v1/models`。
-- **按 provider 路由**：OpenCode free / OpenCode paid / Ollama paid 走不同上游与密钥池；Ollama 请求使用标准 Bearer，不加 OpenCode 兼容头。
+- **套餐对齐目录**：public Zen 只保留 free；有健康 `provider=opencode` 密钥时合并 **Go** `/zen/go/v1/models`；有健康 `provider=ollama` 密钥时合并 Ollama Cloud `/v1/models`。不暴露 public 上的 Claude/Gemini 等 Go 套餐不可用模型。
+- **按 provider 路由**：OpenCode free → `/zen/v1` + `Bearer public`；OpenCode paid → `/zen/go/v1` + Key 池；Ollama paid → Ollama Cloud + Key 池。
 - **本地密钥 `sk-oc-...`**：客户端只认网关密钥；支持 RPM / 日限额与并发会话；库内仅存 SHA-256。
 - **密钥池 + 出口代理池**：Key = 身份，Proxy = 出口 IP，彼此独立；free 遇 429/5xx 可轮换出口重试；paid 支持 spread / sticky 与故障转移。
 - **额度与用量**：OpenCode / Ollama **账号 Cookie 仅用于控制面刮取**，绝不进入聊天链路。
@@ -63,12 +63,13 @@ flowchart LR
     GW --> AUTH["本地密钥校验<br/>限流 / 并发会话"]
     AUTH --> CATALOG{"模型目录<br/>provider + free"}
     CATALOG -->|opencode free| FREE["Bearer public<br/>出口代理轮换"]
-    CATALOG -->|opencode paid| PAID_OC["OpenCode Key 池<br/>+ Zen 上游"]
+    CATALOG -->|opencode paid| PAID_OC["OpenCode Key 池<br/>+ Go /zen/go"]
     CATALOG -->|ollama paid| PAID_OL["Ollama Key 池<br/>+ Ollama Cloud"]
-    FREE --> ZEN["OpenCode Zen"]
-    PAID_OC --> ZEN
+    FREE --> ZEN["OpenCode Zen free"]
+    PAID_OC --> GO["OpenCode Go"]
     PAID_OL --> OLLAMA["Ollama Cloud"]
     ZEN --> RESP["响应 / SSE"]
+    GO --> RESP
     OLLAMA --> RESP
     RESP --> CLIENT
 ```
@@ -174,7 +175,7 @@ curl http://127.0.0.1:6446/v1/messages \
   -d '{"model":"claude-sonnet-4-5","max_tokens":256,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
-公开 `GET /v1/models`：默认仅 free；`SHOW_ALL_MODELS=true` 时包含 paid。`owned_by` 为 `zen`（OpenCode）或 `ollama`。
+公开 `GET /v1/models`：默认仅 free；`SHOW_ALL_MODELS=true` 时包含目录中的 paid（Go + Ollama，不含 public 不可用模型）。`owned_by` 为 `zen`（OpenCode）或 `ollama`。
 
 ## 配置
 
@@ -184,7 +185,8 @@ curl http://127.0.0.1:6446/v1/messages \
 | `ADMIN_SECRET` | 是 | - | ≥32 字符；加密池密钥 / Cookie / 代理 URL |
 | `LISTEN` | 否 | `0.0.0.0:6446` | 监听地址；本机开发可设 `127.0.0.1:6446` |
 | `DATA_DIR` | 否 | `./data` | SQLite 目录（容器内常用 `/data`） |
-| `ZEN_BASE` | 否 | `https://opencode.ai/zen/v1` | OpenCode Zen OpenAI 兼容根路径 |
+| `ZEN_BASE` | 否 | `https://opencode.ai/zen/v1` | OpenCode Zen **free** 上游（`Bearer public`） |
+| `ZEN_GO_BASE` | 否 | `https://opencode.ai/zen/go` | OpenCode **Go** 套餐目录与付费聊天（自动补 `/v1`） |
 | `OLLAMA_BASE` | 否 | `https://ollama.com` | Ollama Cloud 根；进程会规范为 `…/v1` 再请求 |
 | `MODEL_CACHE_TTL` | 否 | `5m` | 模型目录缓存 TTL |
 | `UPSTREAM_TIMEOUT` | 否 | `120s` | 上游超时 |

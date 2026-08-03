@@ -54,10 +54,23 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	// Free path: public Zen + Bearer public.
 	zenClient, err := zen.NewClient(cfg)
 	if err != nil {
 		_ = database.Close()
 		return nil, fmt.Errorf("create zen client: %w", err)
+	}
+	// Paid OpenCode Go suite: /zen/go/v1 with pool sk keys (not public Zen paid list).
+	zenGoClient, err := zen.NewClient(config.Config{
+		ZenBase:         openCodeGoAPIBase(cfg.ZenGoBase),
+		OCVersion:       cfg.OCVersion,
+		UpstreamTimeout: cfg.UpstreamTimeout,
+		HTTPProxy:       cfg.HTTPProxy,
+		HTTPSProxy:      cfg.HTTPSProxy,
+	})
+	if err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("create zen go client: %w", err)
 	}
 	ollamaClient, err := zen.NewPlainClient(cfg, ollamaAPIBase(cfg.OllamaBase))
 	if err != nil {
@@ -80,8 +93,9 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		}
 	}
 	catalog, err := models.NewCatalog(zenClient, models.Settings{
-		TTL:    cfg.ModelCacheTTL,
-		Ollama: ollamaModelsSource{pool: pool, client: ollamaClient},
+		TTL:          cfg.ModelCacheTTL,
+		OpenCodePaid: goModelsSource{pool: pool, client: zenGoClient},
+		Ollama:       ollamaModelsSource{pool: pool, client: ollamaClient},
 	})
 	if err != nil {
 		_ = database.Close()
@@ -129,7 +143,7 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	usageStore := usage.NewSQLiteStore(database)
 	usageService := usage.NewService(usageStore, usageFetcher)
 	dataPlane := httpserver.New(httpserver.Dependencies{
-		Keys: keyService, Catalog: catalog, Zen: zenClient, Ollama: ollamaClient,
+		Keys: keyService, Catalog: catalog, Zen: zenClient, ZenGo: zenGoClient, Ollama: ollamaClient,
 		Pool: pool, Proxies: proxies, Logs: logs, Version: Version, ShowAllModels: cfg.ShowAllModels,
 	})
 	quotaSnapshots := quota.NewSnapshotService(accounts, scraper, 30*time.Second)
@@ -202,6 +216,18 @@ func Run(ctx context.Context) error {
 	}
 }
 
+// openCodeGoAPIBase ensures OpenAI-compatible paths under /v1 when ZEN_GO_BASE is the Go host root.
+func openCodeGoAPIBase(base string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(base), "/")
+	if trimmed == "" {
+		return "https://opencode.ai/zen/go/v1"
+	}
+	if strings.HasSuffix(trimmed, "/v1") {
+		return trimmed
+	}
+	return trimmed + "/v1"
+}
+
 // ollamaAPIBase ensures OpenAI-compatible paths under /v1 when OLLAMA_BASE is the host root.
 func ollamaAPIBase(base string) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(base), "/")
@@ -212,6 +238,31 @@ func ollamaAPIBase(base string) string {
 		return trimmed
 	}
 	return trimmed + "/v1"
+}
+
+// goModelsSource pulls OpenCode Go suite models with a healthy OpenCode pool key.
+// Empty pool is not an error (returns no paid Go models).
+type goModelsSource struct {
+	pool   *zenpool.Service
+	client *zen.Client
+}
+
+func (source goModelsSource) Models(ctx context.Context) ([]zen.Model, error) {
+	if source.pool == nil || source.client == nil {
+		return nil, nil
+	}
+	selected, err := source.pool.AcquireFor(ctx, zenpool.AcquireOptions{Provider: zenpool.ProviderOpenCode})
+	if err != nil {
+		if errors.Is(err, zenpool.ErrNoHealthyKey) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	auth, err := zen.NewAPIKey(selected.Secret)
+	if err != nil {
+		return nil, err
+	}
+	return source.client.ModelsWithAuth(ctx, auth)
 }
 
 // ollamaModelsSource pulls Cloud models with a healthy Ollama pool key; empty pool is not an error.

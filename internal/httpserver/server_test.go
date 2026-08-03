@@ -79,7 +79,21 @@ func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) test
 	if err != nil {
 		t.Fatalf("new Zen client: %v", err)
 	}
-	catalog, err := models.NewCatalog(testModelSource{models: catalogModels}, models.Settings{TTL: time.Hour})
+	// Public source keeps free-only; non-free IDs are treated as OpenCode Go paid catalog
+	// so route tests can exercise paid key checks without public paid leakage.
+	var paid []zen.Model
+	for _, model := range catalogModels {
+		id := model.ID
+		isFree := id == "big-pickle" || (len(id) > 5 && id[len(id)-5:] == "-free")
+		if !isFree {
+			paid = append(paid, model)
+		}
+	}
+	settings := models.Settings{TTL: time.Hour}
+	if len(paid) > 0 {
+		settings.OpenCodePaid = testModelSource{models: paid}
+	}
+	catalog, err := models.NewCatalog(testModelSource{models: catalogModels}, settings)
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
@@ -90,7 +104,7 @@ func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) test
 	logsService := reqlog.NewService(database, nil)
 	return testServer{
 		handler: httpserver.New(httpserver.Dependencies{
-			Keys: keyService, Catalog: catalog, Zen: client,
+			Keys: keyService, Catalog: catalog, Zen: client, ZenGo: client,
 			Pool: zenpool.NewService(database, box, nil), Logs: logsService,
 			Version: "test-version",
 		}),

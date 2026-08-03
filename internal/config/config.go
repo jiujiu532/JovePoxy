@@ -31,6 +31,7 @@ type Config struct {
 	AdminPassword   string
 	AdminSecret     string
 	ZenBase         string
+	ZenGoBase       string
 	OllamaBase      string
 	HTTPProxy       *url.URL
 	HTTPSProxy      *url.URL
@@ -56,6 +57,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	zenBase, err := serviceURL("ZEN_BASE", envOr("ZEN_BASE", "https://opencode.ai/zen/v1"))
+	if err != nil {
+		return Config{}, err
+	}
+	// OpenCode Go suite catalog + paid chat (not the public Zen full list).
+	zenGoBase, err := serviceURL("ZEN_GO_BASE", envOr("ZEN_GO_BASE", "https://opencode.ai/zen/go"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -89,6 +95,7 @@ func Load() (Config, error) {
 		AdminPassword:   adminPassword,
 		AdminSecret:     adminSecret,
 		ZenBase:         zenBase,
+		ZenGoBase:       zenGoBase,
 		OllamaBase:      ollamaBase,
 		HTTPProxy:       httpProxy,
 		HTTPSProxy:      httpsProxy,

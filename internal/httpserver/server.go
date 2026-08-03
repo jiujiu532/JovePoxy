@@ -16,7 +16,8 @@ import (
 type Dependencies struct {
 	Keys          *keys.Service
 	Catalog       *models.Catalog
-	Zen           *zen.Client
+	Zen           *zen.Client // free OpenCode Zen (Bearer public)
+	ZenGo         *zen.Client // paid OpenCode Go suite
 	Ollama        *zen.Client
 	Pool          *zenpool.Service
 	Proxies       *proxypool.Service
@@ -29,6 +30,7 @@ type server struct {
 	keys          *keys.Service
 	catalog       *models.Catalog
 	zen           *zen.Client
+	zenGo         *zen.Client
 	ollama        *zen.Client
 	pool          *zenpool.Service
 	proxies       *proxypool.Service
@@ -46,8 +48,9 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	server := server{
 		keys: dependencies.Keys, catalog: dependencies.Catalog, zen: dependencies.Zen,
-		ollama: dependencies.Ollama, pool: dependencies.Pool, proxies: dependencies.Proxies,
-		logs: dependencies.Logs, version: version, showAllModels: dependencies.ShowAllModels,
+		zenGo: dependencies.ZenGo, ollama: dependencies.Ollama, pool: dependencies.Pool,
+		proxies: dependencies.Proxies, logs: dependencies.Logs, version: version,
+		showAllModels: dependencies.ShowAllModels,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", server.health)
