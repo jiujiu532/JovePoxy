@@ -522,6 +522,86 @@ func TestToOpenAIChat_thinking_enabled_budget_zero_is_high(t *testing.T) {
 	}
 }
 
+
+func TestToOpenAIChat_enabled_with_output_config_effort_high(t *testing.T) {
+	// Kelivo DeepSeek: enabled 无 budget，档位在 output_config.effort
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"deepseek-v4-flash-free","max_tokens":64000,
+		"thinking":{"type":"enabled"},
+		"output_config":{"effort":"high"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, _ := payload["reasoning_effort"].(string); got != "high" {
+		t.Fatalf("reasoning_effort = %v, want high; body=%s", payload["reasoning_effort"], openAIBody)
+	}
+	meta := request.Observability()
+	if meta.ReasoningEffort != "high" || meta.ThinkingType != "enabled" || meta.BudgetTokens != 0 {
+		t.Fatalf("Observability = %+v", meta)
+	}
+}
+
+func TestToOpenAIChat_enabled_with_output_config_effort_max_is_xhigh(t *testing.T) {
+	// Kelivo 极限/全力 → output_config.effort=max；Zen 无 max，落成 xhigh
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"deepseek-v4-flash-free","max_tokens":64000,
+		"thinking":{"type":"enabled"},
+		"output_config":{"effort":"max"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, _ := payload["reasoning_effort"].(string); got != "xhigh" {
+		t.Fatalf("reasoning_effort = %v, want xhigh; body=%s", payload["reasoning_effort"], openAIBody)
+	}
+	if request.Observability().ReasoningEffort != "xhigh" {
+		t.Fatalf("Observability.ReasoningEffort = %q, want xhigh", request.Observability().ReasoningEffort)
+	}
+}
+
+func TestToOpenAIChat_budget_beats_output_config_effort(t *testing.T) {
+	// 有正 budget 时仍按 budget 映射，不被 output_config 覆盖
+	request, err := anthropic.ParseRequest([]byte(`{
+		"model":"demo-free","max_tokens":64,
+		"thinking":{"type":"enabled","budget_tokens":2000},
+		"output_config":{"effort":"max"},
+		"messages":[{"role":"user","content":"hi"}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, _ := payload["reasoning_effort"].(string); got != "medium" {
+		t.Fatalf("reasoning_effort = %v, want medium (budget wins); body=%s", payload["reasoning_effort"], openAIBody)
+	}
+}
+
 func TestToOpenAIChat_unknown_thinking_type_omits_effort(t *testing.T) {
 	request, err := anthropic.ParseRequest([]byte(`{
 		"model":"demo-free","max_tokens":64,

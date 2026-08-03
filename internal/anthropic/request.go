@@ -241,17 +241,21 @@ func mapReasoningEffort(request Request) string {
 	case "disabled":
 		return "none"
 	case "enabled":
+		// 有正 budget 时按阈值映射（经典 Anthropic / 非 DeepSeek 客户端）。
 		if request.Thinking.HasBudget && request.Thinking.BudgetTokens > 0 {
 			return effort.BudgetToLevel(request.Thinking.BudgetTokens)
 		}
-		// enabled 无正 budget：部分客户端只开思考开关。
-		// Zen free 上游拒收 reasoning_effort=auto → 502，故落成 high。
-		return "high"
-	case "adaptive", "auto":
-		if level := effort.NormalizeLevel(request.OutputConfigEffort); level != "" {
+		// Kelivo DeepSeek 等：enabled 不带 budget，档位在 output_config.effort。
+		if level := effort.MapForZen(request.OutputConfigEffort); level != "" {
 			return level
 		}
-		// 裸 auto / adaptive 无 output_config.effort 时上游易 502，落成 high。
+		// 仅 enabled、无 effort：上游拒 auto，默认 high。
+		return "high"
+	case "adaptive", "auto":
+		if level := effort.MapForZen(request.OutputConfigEffort); level != "" {
+			return level
+		}
+		// 裸 adaptive/auto 无 effort：上游拒 auto，默认 high。
 		return "high"
 	default:
 		// Unknown type: ignore thinking config, do not 400.

@@ -39,3 +39,19 @@ func BudgetToLevel(budget int) string {
 func NormalizeLevel(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
+
+// MapForZen normalizes client effort labels for Zen OpenAI-compatible upstream.
+// Empty / auto → "" (caller chooses fallback). max → xhigh (Zen has no "max").
+func MapForZen(s string) string {
+	level := NormalizeLevel(s)
+	switch level {
+	case "", "auto":
+		return ""
+	case "off":
+		return "none"
+	case "max":
+		return "xhigh"
+	default:
+		return level
+	}
+}

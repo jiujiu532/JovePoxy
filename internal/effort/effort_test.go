@@ -45,3 +45,24 @@ func TestNormalizeLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestMapForZen(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"auto", ""},
+		{"AUTO", ""},
+		{"off", "none"},
+		{"max", "xhigh"},
+		{"MAX", "xhigh"},
+		{"high", "high"},
+		{"xhigh", "xhigh"},
+		{" medium ", "medium"},
+	}
+	for _, tc := range cases {
+		if got := MapForZen(tc.in); got != tc.want {
+			t.Fatalf("MapForZen(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
