@@ -39,6 +39,8 @@ type openAIChatRequest struct {
 	Model           string           `json:"model"`
 	Messages        []map[string]any `json:"messages"`
 	Stream          bool             `json:"stream"`
+	// StreamOptions asks OpenAI-compatible upstreams for a final usage frame on streams.
+	StreamOptions   *streamOptions   `json:"stream_options,omitempty"`
 	MaxTokens       int              `json:"max_tokens,omitempty"`
 	Tools           []map[string]any `json:"tools,omitempty"`
 	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
@@ -46,6 +48,10 @@ type openAIChatRequest struct {
 	TopP            *float64         `json:"top_p,omitempty"`
 	Stop            any              `json:"stop,omitempty"`
 	ToolChoice      json.RawMessage  `json:"tool_choice,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type anthropicMessage struct {
@@ -223,6 +229,10 @@ func ToOpenAIChat(request Request) ([]byte, int, error) {
 		TopP:            request.TopP,
 		Stop:            mapStopSequences(request.StopSequences),
 		ToolChoice:      toolChoice,
+	}
+	// Without include_usage many Zen/OpenAI streams never emit a usage object.
+	if request.Stream {
+		payload.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

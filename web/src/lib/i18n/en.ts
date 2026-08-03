@@ -573,6 +573,8 @@ export const en: Record<MessageKey, string> = {
   "logs.detailOutput": "Output tokens",
   "logs.detailTotal": "Total tokens",
   "logs.detailNoUsage": "No upstream usage",
+  "logs.detailUsageHint":
+    "Streaming needs an upstream usage frame for token counts. The gateway requests include_usage; free models may still omit cache detail.",
   "logs.detailMaxTokens": "max_tokens",
   "logs.detailEffort": "Thinking effort",
   "logs.detailThinkingType": "thinking_type",

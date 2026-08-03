@@ -391,109 +391,135 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                             </td>
                           </tr>
                           {expanded ? (
-                            <tr className="border-b-2 border-border bg-paper-2">
-                              <td colSpan={9} className="px-4 py-3">
-                                <div className="border-2 border-border bg-paper-0 p-3 shadow-[var(--shadow-hard)]">
-                                  <div className="mb-2 text-caption font-medium text-ink">
-                                    {t("logs.detailTitle")}
+                            <tr className="border-b-2 border-border bg-paper-2/60">
+                              <td colSpan={9} className="px-3 py-2.5 sm:px-4">
+                                <div className="border-2 border-border bg-paper-0 shadow-[3px_3px_0_0_var(--border)]">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-paper-2 px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={
+                                          usageKnown
+                                            ? "inline-block size-2.5 shrink-0 border border-border bg-accent-teal"
+                                            : "inline-block size-2.5 shrink-0 border border-border bg-accent-yellow"
+                                        }
+                                        aria-hidden
+                                      />
+                                      <span className="text-[12px] font-semibold tracking-tight text-ink">
+                                        {t("logs.detailTitle")}
+                                      </span>
+                                      {!usageKnown ? (
+                                        <span className="text-[11px] text-ink-muted">
+                                          {t("logs.detailNoUsage")}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <span className="font-mono text-[11px] text-ink-faint">
+                                      {row.id}
+                                    </span>
                                   </div>
-                                  {!usageKnown ? (
-                                    <p className="mb-2 text-[12px] text-ink-muted">
-                                      {t("logs.detailNoUsage")}
-                                    </p>
-                                  ) : null}
-                                  <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3 text-[12px]">
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailCacheRead")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
-                                        {cacheRead.toLocaleString()}
-                                      </dd>
-                                    </div>
-                                    {cacheWrite > 0 ? (
-                                      <div className="flex flex-col gap-0.5">
-                                        <dt className="text-ink-muted">{t("logs.detailCacheWrite")}</dt>
-                                        <dd className="font-mono tabular-nums text-ink">
-                                          {cacheWrite.toLocaleString()}
-                                        </dd>
+
+                                  <div className="grid grid-cols-2 gap-0 border-b-2 border-border sm:grid-cols-4">
+                                    <div className="border-b-2 border-border p-3 sm:border-b-0 sm:border-r-2">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                        {t("logs.detailCacheRead")}
                                       </div>
-                                    ) : null}
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailInput")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
+                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
+                                        {cacheRead.toLocaleString()}
+                                      </div>
+                                      {cacheWrite > 0 ? (
+                                        <div className="mt-1 text-[11px] text-ink-muted">
+                                          {t("logs.detailCacheWrite")}{" "}
+                                          {cacheWrite.toLocaleString()}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div className="border-b-2 border-border p-3 sm:border-b-0 sm:border-r-2">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                        {t("logs.detailInput")}
+                                      </div>
+                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
                                         {input.toLocaleString()}
-                                      </dd>
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailOutput")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
+                                    <div className="border-b-2 border-r-2 border-border p-3 sm:border-b-0">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                        {t("logs.detailOutput")}
+                                      </div>
+                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
                                         {output.toLocaleString()}
-                                      </dd>
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailTotal")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
+                                    <div className="p-3">
+                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                        {t("logs.detailTotal")}
+                                      </div>
+                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
                                         {(input + output).toLocaleString()}
-                                      </dd>
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailMaxTokens")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-3 py-2.5 text-[12px]">
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailMaxTokens")}{" "}
+                                      <span className="font-mono text-ink">
                                         {(row.max_tokens ?? 0) > 0
                                           ? (row.max_tokens ?? 0).toLocaleString()
                                           : t("common.none")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailEffort")}</dt>
-                                      <dd className="font-mono text-ink">
+                                      </span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailEffort")}{" "}
+                                      <span className="font-mono text-ink">
                                         {label || t("common.none")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailThinkingType")}</dt>
-                                      <dd className="font-mono text-ink">
+                                      </span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailThinkingType")}{" "}
+                                      <span className="font-mono text-ink">
                                         {row.thinking_type || t("common.none")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailBudget")}</dt>
-                                      <dd className="font-mono tabular-nums text-ink">
+                                      </span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailBudget")}{" "}
+                                      <span className="font-mono text-ink">
                                         {(row.budget_tokens ?? 0) > 0
                                           ? (row.budget_tokens ?? 0).toLocaleString()
                                           : t("common.none")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailRoute")}</dt>
-                                      <dd className="font-mono text-ink">{row.route}</dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailStream")}</dt>
-                                      <dd className="text-ink">
-                                        {row.stream ? t("logs.streamYes") : t("logs.streamNo")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailStatus")}</dt>
-                                      <dd className="font-mono text-ink">{row.status}</dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailError")}</dt>
-                                      <dd className="font-mono text-ink">
-                                        {row.error_class || t("common.none")}
-                                      </dd>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailKey")}</dt>
-                                      <dd className="font-mono text-ink">
+                                      </span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailRoute")}{" "}
+                                      <span className="font-mono text-ink">{row.route}</span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailStream")}{" "}
+                                      <span className="text-ink">
+                                        {row.stream ? t("logs.yes") : t("logs.no")}
+                                      </span>
+                                    </span>
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailStatus")}{" "}
+                                      <span className="font-mono text-ink">{row.status}</span>
+                                    </span>
+                                    {row.error_class ? (
+                                      <span className="text-ink-muted">
+                                        {t("logs.detailError")}{" "}
+                                        <span className="font-mono text-ink">{row.error_class}</span>
+                                      </span>
+                                    ) : null}
+                                    <span className="text-ink-muted">
+                                      {t("logs.detailKey")}{" "}
+                                      <span className="font-mono text-ink">
                                         {row.key_id || t("common.none")}
-                                      </dd>
+                                      </span>
+                                    </span>
+                                  </div>
+                                  {!usageKnown ? (
+                                    <div className="border-t-2 border-border bg-accent-yellow/25 px-3 py-2 text-[11px] leading-snug text-ink-muted">
+                                      {t("logs.detailUsageHint")}
                                     </div>
-                                    <div className="flex flex-col gap-0.5">
-                                      <dt className="text-ink-muted">{t("logs.detailId")}</dt>
-                                      <dd className="font-mono text-ink break-all">{row.id}</dd>
-                                    </div>
-                                  </dl>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>

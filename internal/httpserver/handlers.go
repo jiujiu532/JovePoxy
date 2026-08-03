@@ -119,6 +119,8 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.maxTokens = parsed.MaxTokens
 	meta.reasoningEffort = strings.ToLower(strings.TrimSpace(parsed.ReasoningEffort))
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
+	// Stream usage is often omitted unless the client opts in; inject for logging.
+	body = ensureStreamIncludeUsage(body, parsed.Stream)
 	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, provider)
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {
@@ -154,6 +156,27 @@ func (server server) authorize(writer http.ResponseWriter, request *http.Request
 	}
 	*request = *request.WithContext(withRequestMeta(request.Context(), requestMeta{keyID: string(verified.ID)}))
 	return true
+}
+
+// ensureStreamIncludeUsage injects stream_options.include_usage when streaming and absent.
+// Leaves non-stream bodies and already-configured clients untouched.
+func ensureStreamIncludeUsage(body []byte, stream bool) []byte {
+	if !stream || len(bytes.TrimSpace(body)) == 0 {
+		return body
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(body, &object); err != nil {
+		return body
+	}
+	if _, exists := object["stream_options"]; exists {
+		return body
+	}
+	object["stream_options"] = json.RawMessage(`{"include_usage":true}`)
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return body
+	}
+	return encoded
 }
 
 func parseChatRequest(writer http.ResponseWriter, request *http.Request) (json.RawMessage, chatRequest, error) {

@@ -116,11 +116,16 @@ type chatRequest struct {
 	Model             string           `json:"model"`
 	Messages          []chatMessage    `json:"messages"`
 	Stream            bool             `json:"stream"`
+	StreamOptions     *streamOptions   `json:"stream_options,omitempty"`
 	MaxTokens         int              `json:"max_tokens,omitempty"`
 	Tools             []map[string]any `json:"tools,omitempty"`
 	ReasoningEffort   string           `json:"reasoning_effort,omitempty"`
 	ToolChoice        json.RawMessage  `json:"tool_choice,omitempty"`
 	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 // ToOpenAIChat converts a Responses request into a chat.completions body.
@@ -142,6 +147,9 @@ func ToOpenAIChat(request Request) ([]byte, error) {
 		ReasoningEffort:   effort.NormalizeLevel(request.ReasoningEffort),
 		ToolChoice:        request.ToolChoice,
 		ParallelToolCalls: request.ParallelToolCalls,
+	}
+	if request.Stream {
+		payload.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

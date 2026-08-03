@@ -58,14 +58,23 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) usage
 		tools:      make(map[int]*toolStreamState),
 	}
 	usageparse.ScanSSEEvent(firstEvent, &snap)
+	if !snap.IsZero() {
+		state.applyUsage(snap)
+	}
 	if !state.emitCreated(writer) {
 		return snap
 	}
 	if !state.consumeEvent(writer, firstEvent) {
+		if !snap.IsZero() {
+			state.applyUsage(snap)
+		}
 		state.failIfNeeded(writer, "stream processing failed")
 		return snap
 	}
 	if errors.Is(err, io.EOF) {
+		if !snap.IsZero() {
+			state.applyUsage(snap)
+		}
 		state.finishIfNeeded(writer)
 		return snap
 	}
@@ -84,7 +93,13 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) usage
 					break
 				}
 				usageparse.ScanSSEDataLine([]byte(line), &snap)
+				if !snap.IsZero() {
+					state.applyUsage(snap)
+				}
 				if !state.consumeLine(writer, line) {
+					if !snap.IsZero() {
+						state.applyUsage(snap)
+					}
 					state.failIfNeeded(writer, "stream processing failed")
 					return snap
 				}
@@ -93,13 +108,22 @@ func WriteStream(writer http.ResponseWriter, body io.Reader, model string) usage
 		if errors.Is(readErr, io.EOF) {
 			if remainder := bytes.TrimSpace(buffer.Bytes()); len(remainder) > 0 {
 				usageparse.ScanSSEDataLine(remainder, &snap)
+				if !snap.IsZero() {
+					state.applyUsage(snap)
+				}
 				_ = state.consumeLine(writer, string(remainder))
+			}
+			if !snap.IsZero() {
+				state.applyUsage(snap)
 			}
 			state.finishIfNeeded(writer)
 			return snap
 		}
 		if readErr != nil {
 			// Mid-stream read failure: best-effort failed terminal if headers sent.
+			if !snap.IsZero() {
+				state.applyUsage(snap)
+			}
 			state.failIfNeeded(writer, "upstream stream interrupted")
 			return snap
 		}
@@ -133,7 +157,45 @@ type streamState struct {
 	outputItems    []map[string]any
 	finished       bool
 	// lastFinishReason captures OpenAI finish_reason for completed vs incomplete.
-	lastFinishReason string
+	// Terminal frames are deferred until stream EOF so a trailing usage chunk can
+	// still populate cache/token counters before the client-visible final usage.
+	lastFinishReason    string
+	inputTokens         int
+	outputTokens        int
+	cacheReadTokens     int
+	cacheCreationTokens int
+}
+
+func (state *streamState) applyUsage(snap usageparse.UsageSnapshot) {
+	if snap.IsZero() {
+		return
+	}
+	if snap.PromptTokens > 0 {
+		state.inputTokens = snap.PromptTokens
+	}
+	if snap.CompletionTokens > 0 {
+		state.outputTokens = snap.CompletionTokens
+	}
+	if snap.CacheReadTokens > 0 {
+		state.cacheReadTokens = snap.CacheReadTokens
+	}
+	if snap.CacheCreationTokens > 0 {
+		state.cacheCreationTokens = snap.CacheCreationTokens
+	}
+}
+
+func (state *streamState) usagePayload() map[string]any {
+	return map[string]any{
+		"input_tokens":  state.inputTokens,
+		"output_tokens": state.outputTokens,
+		"total_tokens":  state.inputTokens + state.outputTokens,
+		"input_tokens_details": map[string]int{
+			"cached_tokens": state.cacheReadTokens,
+		},
+		"output_tokens_details": map[string]int{
+			"reasoning_tokens": 0,
+		},
+	}
 }
 
 func (state *streamState) next() int {
@@ -238,8 +300,9 @@ func (state *streamState) consumeLine(writer http.ResponseWriter, line string) b
 		}
 	}
 	if choice.FinishReason != "" {
+		// Defer terminal frames until EOF so a later usage-only chunk can still
+		// populate cache counters before response.completed / incomplete.
 		state.lastFinishReason = choice.FinishReason
-		return state.finish(writer)
 	}
 	return true
 }
@@ -561,6 +624,7 @@ func (state *streamState) finish(writer http.ResponseWriter) bool {
 		return false
 	}
 	state.finished = true
+	usage := state.usagePayload()
 	// length / content_filter truncation → incomplete rather than completed.
 	if isIncompleteFinish(state.lastFinishReason) {
 		return sse.WriteEvent(writer, "response.incomplete", map[string]any{
@@ -569,12 +633,15 @@ func (state *streamState) finish(writer http.ResponseWriter) bool {
 				"incomplete_details": map[string]string{
 					"reason": incompleteReason(state.lastFinishReason),
 				},
+				"usage": usage,
 			}),
 		})
 	}
 	return sse.WriteEvent(writer, "response.completed", map[string]any{
 		"type": "response.completed", "sequence_number": state.next(),
-		"response": state.responseSnapshot("completed", nil),
+		"response": state.responseSnapshot("completed", map[string]any{
+			"usage": usage,
+		}),
 	})
 }
 

@@ -694,3 +694,53 @@ func TestToOpenAIChat_empty_tool_use_id_generated(t *testing.T) {
 		t.Fatalf("id = %q", payload.Messages[0].ToolCalls[0].ID)
 	}
 }
+func TestToOpenAIChat_stream_includes_usage_option(t *testing.T) {
+	body := []byte(`{
+		"model":"demo-free",
+		"max_tokens":32,
+		"stream":true,
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+	request, err := anthropic.ParseRequest(body)
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	opts, ok := payload["stream_options"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected stream_options, got %v", payload["stream_options"])
+	}
+	if opts["include_usage"] != true {
+		t.Fatalf("include_usage=%v", opts["include_usage"])
+	}
+}
+
+func TestToOpenAIChat_nonstream_omits_stream_options(t *testing.T) {
+	body := []byte(`{
+		"model":"demo-free",
+		"max_tokens":32,
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+	request, err := anthropic.ParseRequest(body)
+	if err != nil {
+		t.Fatalf("ParseRequest: %v", err)
+	}
+	openAIBody, _, err := anthropic.ToOpenAIChat(request)
+	if err != nil {
+		t.Fatalf("ToOpenAIChat: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(openAIBody, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, exists := payload["stream_options"]; exists {
+		t.Fatalf("stream_options should be omitted for non-stream")
+	}
+}

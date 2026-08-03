@@ -572,6 +572,8 @@ export const zh = {
   "logs.detailOutput": "输出 Tokens",
   "logs.detailTotal": "合计 Tokens",
   "logs.detailNoUsage": "上游未返回 usage",
+  "logs.detailUsageHint":
+    "流式请求需上游返回 usage 帧才会有 Token 数。网关已自动请求 include_usage；免费模型可能仍不返回缓存明细。",
   "logs.detailMaxTokens": "max_tokens",
   "logs.detailEffort": "思考强度",
   "logs.detailThinkingType": "thinking_type",

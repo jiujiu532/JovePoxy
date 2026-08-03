@@ -376,3 +376,32 @@ func TestWriteStreamLateToolName(t *testing.T) {
 		t.Fatalf("arguments should concatenate:\n%s", body)
 	}
 }
+
+func TestWriteStreamTrailingUsageWithCache(t *testing.T) {
+	// finish_reason first, usage frame later — terminal must wait for usage.
+	upstream := strings.Join([]string{
+		`data: {"choices":[{"delta":{"content":"ok"}}]}`,
+		"",
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		"",
+		`data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":40}}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	snap := WriteStream(recorder, strings.NewReader(upstream), "demo")
+	body := recorder.Body.String()
+	if !strings.Contains(body, "event: response.completed") {
+		t.Fatalf("expected completed:\n%s", body)
+	}
+	if !strings.Contains(body, `"cached_tokens":40`) {
+		t.Fatalf("expected cached_tokens in completed usage:\n%s", body)
+	}
+	if !strings.Contains(body, `"input_tokens":100`) || !strings.Contains(body, `"output_tokens":5`) {
+		t.Fatalf("expected input/output in completed usage:\n%s", body)
+	}
+	if snap.PromptTokens != 100 || snap.CompletionTokens != 5 || snap.CacheReadTokens != 40 {
+		t.Fatalf("snap = %+v", snap)
+	}
+}
