@@ -221,6 +221,7 @@ type logDTO struct {
 	Route               string    `json:"route"`
 	Status              int       `json:"status"`
 	LatencyMS           int64     `json:"latency_ms"`
+	TTFTMS              int64     `json:"ttft_ms"`
 	Stream              bool      `json:"stream"`
 	ErrorClass          string    `json:"error_class,omitempty"`
 	MaxTokens           int       `json:"max_tokens,omitempty"`
@@ -429,8 +430,8 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 	for _, entry := range entries {
 		out = append(out, logDTO{
 			ID: entry.ID, KeyID: entry.KeyID, Model: entry.Model, Route: entry.Route,
-			Status: entry.Status, LatencyMS: entry.LatencyMS, Stream: entry.Stream,
-			ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
+			Status: entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
+			Stream: entry.Stream, ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,
 			BudgetTokens: entry.BudgetTokens,
 			InputTokens:  entry.InputTokens, OutputTokens: entry.OutputTokens,

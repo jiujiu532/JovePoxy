@@ -59,6 +59,7 @@ type testServer struct {
 	handler http.Handler
 	key     string
 	keys    *keys.Service
+	logs    *reqlog.Service
 }
 
 func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) testServer {
@@ -86,14 +87,16 @@ func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) test
 	if err != nil {
 		t.Fatalf("new box: %v", err)
 	}
+	logsService := reqlog.NewService(database, nil)
 	return testServer{
 		handler: httpserver.New(httpserver.Dependencies{
 			Keys: keyService, Catalog: catalog, Zen: client,
-			Pool: zenpool.NewService(database, box, nil), Logs: reqlog.NewService(database, nil),
+			Pool: zenpool.NewService(database, box, nil), Logs: logsService,
 			Version: "test-version",
 		}),
 		key:  created.Secret,
 		keys: keyService,
+		logs: logsService,
 	}
 }
 

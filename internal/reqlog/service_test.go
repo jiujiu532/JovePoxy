@@ -20,7 +20,7 @@ func TestService_record_persists_and_counts(t *testing.T) {
 
 	// When
 	service.Record(context.Background(), reqlog.Entry{
-		Model: "demo-free", Route: "/v1/chat/completions", Status: 200, LatencyMS: 12, Stream: true,
+		Model: "demo-free", Route: "/v1/chat/completions", Status: 200, LatencyMS: 12, TTFTMS: 5, Stream: true,
 	})
 	service.Record(context.Background(), reqlog.Entry{
 		Model: "demo-free", Route: "/v1/messages", Status: 429, LatencyMS: 3,
@@ -40,6 +40,18 @@ func TestService_record_persists_and_counts(t *testing.T) {
 	}
 	if len(list) != 3 {
 		t.Fatalf("list len = %d", len(list))
+	}
+	var foundTTFT bool
+	for _, item := range list {
+		if item.Route == "/v1/chat/completions" && item.Status == 200 {
+			if item.TTFTMS != 5 {
+				t.Fatalf("ttft_ms = %d, want 5", item.TTFTMS)
+			}
+			foundTTFT = true
+		}
+	}
+	if !foundTTFT {
+		t.Fatal("expected stream 200 entry with ttft_ms")
 	}
 	recent := service.Recent(1)
 	if len(recent) != 1 || recent[0].Status != 401 {

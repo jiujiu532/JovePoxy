@@ -136,6 +136,7 @@ export type LogDTO = {
   readonly route: string;
   readonly status: number;
   readonly latency_ms: number;
+  readonly ttft_ms?: number;
   readonly stream: boolean;
   readonly error_class?: string;
   readonly max_tokens?: number;

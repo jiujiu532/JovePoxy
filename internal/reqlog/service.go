@@ -19,6 +19,7 @@ type Entry struct {
 	Route               string
 	Status              int
 	LatencyMS           int64
+	TTFTMS              int64 // time-to-first-byte; 0 when unknown / no body written
 	Stream              bool
 	ErrorClass          string
 	MaxTokens           int
@@ -204,9 +205,9 @@ func (store *sqliteStore) Insert(ctx context.Context, entry Entry) error {
 		keyID = entry.KeyID
 	}
 	_, err := store.db.ExecContext(ctx, `
-		INSERT INTO request_logs (id, key_id, model, route, status, latency_ms, stream, error_class, max_tokens, reasoning_effort, thinking_type, budget_tokens, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, entry.ID, keyID, entry.Model, entry.Route, entry.Status, entry.LatencyMS, boolToInt(entry.Stream), nullString(entry.ErrorClass), entry.MaxTokens, entry.ReasoningEffort, entry.ThinkingType, entry.BudgetTokens, entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheCreationTokens, formatCreatedAt(entry.CreatedAt))
+		INSERT INTO request_logs (id, key_id, model, route, status, latency_ms, ttft_ms, stream, error_class, max_tokens, reasoning_effort, thinking_type, budget_tokens, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.ID, keyID, entry.Model, entry.Route, entry.Status, entry.LatencyMS, entry.TTFTMS, boolToInt(entry.Stream), nullString(entry.ErrorClass), entry.MaxTokens, entry.ReasoningEffort, entry.ThinkingType, entry.BudgetTokens, entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheCreationTokens, formatCreatedAt(entry.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("insert request log: %w", err)
 	}
@@ -227,7 +228,7 @@ func (store *sqliteStore) List(ctx context.Context, filter ListFilter) ([]Entry,
 	}
 	// Closed interval [from, to] on fixed-width RFC3339Nano UTC strings.
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT id, key_id, model, route, status, latency_ms, stream, error_class, max_tokens, reasoning_effort, thinking_type, budget_tokens, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, created_at
+		SELECT id, key_id, model, route, status, latency_ms, ttft_ms, stream, error_class, max_tokens, reasoning_effort, thinking_type, budget_tokens, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, created_at
 		FROM request_logs
 		WHERE (? = '' OR created_at >= ?)
 		  AND (? = '' OR created_at <= ?)
@@ -245,7 +246,7 @@ func (store *sqliteStore) List(ctx context.Context, filter ListFilter) ([]Entry,
 		var errorClass sql.NullString
 		var stream int
 		var created string
-		if err := rows.Scan(&entry.ID, &keyID, &entry.Model, &entry.Route, &entry.Status, &entry.LatencyMS, &stream, &errorClass, &entry.MaxTokens, &entry.ReasoningEffort, &entry.ThinkingType, &entry.BudgetTokens, &entry.InputTokens, &entry.OutputTokens, &entry.CacheReadTokens, &entry.CacheCreationTokens, &created); err != nil {
+		if err := rows.Scan(&entry.ID, &keyID, &entry.Model, &entry.Route, &entry.Status, &entry.LatencyMS, &entry.TTFTMS, &stream, &errorClass, &entry.MaxTokens, &entry.ReasoningEffort, &entry.ThinkingType, &entry.BudgetTokens, &entry.InputTokens, &entry.OutputTokens, &entry.CacheReadTokens, &entry.CacheCreationTokens, &created); err != nil {
 			return nil, fmt.Errorf("scan request log: %w", err)
 		}
 		entry.KeyID = keyID.String

@@ -445,11 +445,18 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                               </div>
                             </td>
                             <td className="px-4 py-3 tabular-nums text-ink whitespace-nowrap">
-                              {formatLatency(row.latency_ms)}
+                              <div className="flex flex-col gap-0.5 leading-tight">
+                                <span className="font-medium">{formatLatency(row.latency_ms)}</span>
+                                {(row.ttft_ms ?? 0) > 0 ? (
+                                  <span className="text-[11px] text-ink-muted">
+                                    {t("logs.colTTFT")} {formatLatency(row.ttft_ms ?? 0)}
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                             <td
                               className="max-w-[10rem] truncate px-4 py-3 text-[12px] font-medium text-ink whitespace-nowrap"
-                              title={row.key_id || undefined}
+                              {...(row.key_id ? { title: row.key_id } : {})}
                             >
                               {keyName}
                             </td>
@@ -542,6 +549,11 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                                     <DetailField
                                       label={t("logs.detailLatency")}
                                       value={formatLatency(row.latency_ms)}
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailTTFT")}
+                                      value={(row.ttft_ms ?? 0) > 0 ? formatLatency(row.ttft_ms ?? 0) : t("common.none")}
                                       mono
                                     />
                                     <DetailField

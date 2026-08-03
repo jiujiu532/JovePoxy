@@ -44,4 +44,17 @@ func TestServer_records_request_log_and_metrics(t *testing.T) {
 	if snapshot.TotalRequests < 1 || snapshot.Status2xx < 1 {
 		t.Fatalf("snapshot = %+v", snapshot)
 	}
+	recent := server.logs.Recent(1)
+	if len(recent) != 1 {
+		t.Fatalf("recent logs = %d, want 1", len(recent))
+	}
+	if recent[0].LatencyMS <= 0 {
+		t.Fatalf("latency_ms = %d, want > 0", recent[0].LatencyMS)
+	}
+	if recent[0].TTFTMS <= 0 {
+		t.Fatalf("ttft_ms = %d, want > 0 (first body write)", recent[0].TTFTMS)
+	}
+	if recent[0].TTFTMS > recent[0].LatencyMS {
+		t.Fatalf("ttft_ms %d > latency_ms %d", recent[0].TTFTMS, recent[0].LatencyMS)
+	}
 }

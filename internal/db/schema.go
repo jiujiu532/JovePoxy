@@ -171,3 +171,8 @@ ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE request_logs ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE request_logs ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0;
 `
+
+// request_logs time-to-first-byte (ms from handler start to first body write).
+const requestLogTTFTSchema = `
+ALTER TABLE request_logs ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0;
+`

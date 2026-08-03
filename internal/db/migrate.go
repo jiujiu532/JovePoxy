@@ -25,6 +25,7 @@ var migrations = []migration{
 	{version: 8, sql: zenKeyPrefixSchema},
 	{version: 9, sql: requestLogMetaSchema},
 	{version: 10, sql: requestLogUsageSchema},
+	{version: 11, sql: requestLogTTFTSchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -106,6 +107,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		return validateRequestLogMetaColumns(ctx, tx)
 	case 10:
 		return validateRequestLogUsageColumns(ctx, tx)
+	case 11:
+		return validateRequestLogTTFTColumn(ctx, tx)
 	default:
 		return nil
 	}
@@ -174,6 +177,17 @@ func validateRequestLogUsageColumns(ctx context.Context, tx *sql.Tx) error {
 		if count != 1 {
 			return fmt.Errorf("migration 10 missing column %s: %w", column, ErrMigrationState)
 		}
+	}
+	return nil
+}
+
+func validateRequestLogTTFTColumn(ctx context.Context, tx *sql.Tx) error {
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name = ?", "ttft_ms").Scan(&count); err != nil {
+		return fmt.Errorf("validate migration 11 column ttft_ms: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("migration 11 missing column ttft_ms: %w", ErrMigrationState)
 	}
 	return nil
 }
