@@ -279,6 +279,13 @@ export const zh = {
   "models.table.family": "系列",
   "models.table.kind": "类型",
   "models.table.route": "路由",
+  "models.table.effort": "思考档位",
+  "models.table.cache": "缓存",
+  "models.effortEmpty": "默认裁剪",
+  "models.effortHint": "网关按模型族裁剪 reasoning_effort，不会乱传 xhigh/max",
+  "models.cacheYes": "可记",
+  "models.cacheNo": "—",
+  "models.cacheHint": "上游若返回 cache 字段会写入请求日志；首字耗时(TTFT)始终记录",
 
   "quotas.title": "额度监控",
   "quotas.description": "控制面额度统一查看，支持网格 / 紧凑 / 表格。",

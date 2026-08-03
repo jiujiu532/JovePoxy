@@ -66,9 +66,31 @@ func strengthIndex(level string) int {
 	return -1
 }
 
+// ProfileForModel returns the effort profile for a catalog model ID.
+// Safe for admin/UI exposure; same rules used by MapForModel.
+func ProfileForModel(model string) Profile {
+	return profileForModel(model)
+}
+
+// LevelsForDisplay returns ordered labels the model accepts, including none/auto
+// when allowed. Used by admin model list so operators see the real clamp set.
+func LevelsForDisplay(model string) []string {
+	p := profileForModel(model)
+	out := make([]string, 0, len(p.Levels)+2)
+	if p.AllowNone {
+		out = append(out, "none")
+	}
+	out = append(out, p.Levels...)
+	if p.AllowAuto {
+		out = append(out, "auto")
+	}
+	return out
+}
+
 // profileForModel returns the effort profile for a catalog model ID.
-// Sources: live Zen/Go/Ollama probes + CLIProxy models.json family tables.
-// Unknown families fall back to the conservative Zen set (OpenCode2API docs).
+// Sources (priority): CLIProxy models.json thinking.levels, live Zen/Go/Ollama
+// probes, vendor docs (OpenAI reasoning_effort, xAI grok, Moonshot Kimi,
+// Ollama thinking). Unknown families fall back to the conservative Zen set.
 func profileForModel(model string) Profile {
 	id := strings.ToLower(strings.TrimSpace(model))
 	// Strip Ollama tag suffix (name:tag) for family matching only.
@@ -79,27 +101,36 @@ func profileForModel(model string) Profile {
 
 	switch {
 	// OpenAI gpt-oss on Ollama Pro: none|low|medium|high|max (no minimal/xhigh/auto).
+	// Aligns with Ollama thinking models + live probes (xhigh→max).
 	case strings.Contains(base, "gpt-oss") || strings.HasPrefix(base, "gpt-oss"):
 		return Profile{Levels: []string{"low", "medium", "high", "max"}, AllowNone: true}
 
-	// Codex-style GPT-5.x (incl. gpt-5.6-luna): low|medium|high|xhigh|max.
-	case strings.HasPrefix(base, "gpt-5.6") || strings.HasPrefix(base, "gpt-5.5") ||
-		strings.HasPrefix(base, "gpt-5.4") || strings.HasPrefix(base, "gpt-5.3") ||
-		strings.HasPrefix(base, "gpt-5"):
+	// GPT-5.6 family (luna/terra/sol): low|medium|high|xhigh|max (CLIProxy codex-*).
+	// No none — off/none is omitted rather than sent.
+	case strings.HasPrefix(base, "gpt-5.6"):
 		return Profile{Levels: []string{"low", "medium", "high", "xhigh", "max"}, AllowNone: false}
 
-	// Kimi K3: low|high|max (CLIProxy).
-	case strings.HasPrefix(base, "kimi-k3") || strings.HasPrefix(base, "kimi/k3"):
-		return Profile{Levels: []string{"low", "high", "max"}, AllowNone: true}
+	// Other Codex GPT-5.x (5.3/5.4/5.5): low|medium|high|xhigh — no max in CLIProxy.
+	case strings.HasPrefix(base, "gpt-5.5") || strings.HasPrefix(base, "gpt-5.4") ||
+		strings.HasPrefix(base, "gpt-5.3") || strings.HasPrefix(base, "gpt-5"):
+		return Profile{Levels: []string{"low", "medium", "high", "xhigh"}, AllowNone: false}
 
-	// Kimi K2.x / code: low|high (CLIProxy); medium/xhigh clamp into that set.
-	// Live also accepted medium/xhigh sometimes — still clamp to documented set.
+	// Kimi K3: low|high|max; none not allowed (CLIProxy zero_allowed=false).
+	case strings.HasPrefix(base, "kimi-k3") || strings.HasPrefix(base, "kimi/k3"):
+		return Profile{Levels: []string{"low", "high", "max"}, AllowNone: false}
+
+	// Kimi K2.7 Code: low|high; none not allowed.
+	case strings.Contains(base, "k2.7-code") || strings.Contains(base, "k2.7_code"):
+		return Profile{Levels: []string{"low", "high"}, AllowNone: false}
+
+	// Other Kimi K2.x / thinking: low|high; none allowed (CLIProxy k2.5/k2.6).
 	case strings.HasPrefix(base, "kimi"):
 		return Profile{Levels: []string{"low", "high"}, AllowNone: true}
 
-	// xAI Grok: low|medium|high.
-	case strings.HasPrefix(base, "grok"):
-		return Profile{Levels: []string{"low", "medium", "high"}, AllowNone: true}
+	// xAI Grok 4.5: low|medium|high; none not allowed (CLIProxy zero_allowed=false).
+	// Older grok-4.3 allows none — we still omit unsupported labels via clamp.
+	case strings.HasPrefix(base, "grok-4.5") || strings.HasPrefix(base, "grok"):
+		return Profile{Levels: []string{"low", "medium", "high"}, AllowNone: false}
 
 	// Xiaomi MiMo: none|low|medium|high|max (minimal/xhigh rejected live).
 	case strings.HasPrefix(base, "mimo"):
@@ -109,23 +140,26 @@ func profileForModel(model string) Profile {
 	case strings.HasPrefix(base, "qwen"):
 		return Profile{Levels: []string{"minimal", "low", "medium", "high", "xhigh"}, AllowNone: true}
 
-	// DeepSeek: broad level set; auto rejected.
+	// DeepSeek: broad level set; auto rejected. Official thinking_mode is on/off;
+	// Zen/Go expose OpenAI-style reasoning_effort with this enum (live + probes).
 	case strings.HasPrefix(base, "deepseek"):
 		return Profile{Levels: []string{"minimal", "low", "medium", "high", "xhigh", "max"}, AllowNone: true}
 
-	// GLM / MiniMax: broad incl. max/xhigh; auto only for minimax (accepted live).
+	// GLM / Zhipu thinking: broad incl. max/xhigh (BigModel thinking guide + live).
 	case strings.HasPrefix(base, "glm"):
 		return Profile{Levels: []string{"minimal", "low", "medium", "high", "xhigh", "max"}, AllowNone: true}
+
+	// MiniMax: broad incl. max/xhigh; auto accepted live.
 	case strings.HasPrefix(base, "minimax"):
 		return Profile{Levels: []string{"minimal", "low", "medium", "high", "xhigh", "max"}, AllowNone: true, AllowAuto: true}
 
-	// Ollama Gemma / Nemotron / Mistral: treat like OpenAI-compat level models.
+	// Ollama Gemma / Nemotron / Mistral: OpenAI-compat level models (low|medium|high).
 	case strings.HasPrefix(base, "gemma") || strings.HasPrefix(base, "nemotron") ||
 		strings.HasPrefix(base, "mistral"):
 		return Profile{Levels: []string{"low", "medium", "high"}, AllowNone: true}
 
-	// Default (Zen free unknowns, hy3, laguna, …): OpenCode2API conservative map.
-	// none|low|medium|high; minimal→none, xhigh/max→high; no auto.
+	// Default (Zen free unknowns, hy3, laguna, ling, north, big-pickle…):
+	// OpenCode2API conservative map — none|low|medium|high; minimal→none, xhigh/max→high.
 	default:
 		return Profile{Levels: []string{"low", "medium", "high"}, AllowNone: true}
 	}

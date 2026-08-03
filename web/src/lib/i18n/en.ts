@@ -280,6 +280,13 @@ export const en: Record<MessageKey, string> = {
   "models.table.family": "Family",
   "models.table.kind": "Kind",
   "models.table.route": "Route",
+  "models.table.effort": "Thinking levels",
+  "models.table.cache": "Cache",
+  "models.effortEmpty": "Default clamp",
+  "models.effortHint": "Gateway clamps reasoning_effort per model family — no random xhigh/max",
+  "models.cacheYes": "Logged",
+  "models.cacheNo": "—",
+  "models.cacheHint": "Cache counters are logged when upstream emits them; TTFT is always recorded",
 
   "quotas.title": "Quota monitor",
   "quotas.description": "Unified control-plane quota view, with grid / compact / table modes.",

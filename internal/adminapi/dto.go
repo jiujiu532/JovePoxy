@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"jovepoxy/internal/analytics"
+	"jovepoxy/internal/effort"
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/models"
 	"jovepoxy/internal/quota"
@@ -45,6 +46,12 @@ type modelDTO struct {
 	ID       string `json:"id"`
 	Free     bool   `json:"free"`
 	Provider string `json:"provider"`
+	// EffortLevels is the ordered reasoning_effort set this model accepts
+	// after gateway clamp (includes none/auto when allowed).
+	EffortLevels []string `json:"effort_levels"`
+	// CacheUsage hints that request logs can surface cache counters for this model
+	// when upstream includes them (gateway always parses when present).
+	CacheUsage bool `json:"cache_usage"`
 }
 
 type modelsResponse struct {
@@ -286,7 +293,14 @@ func mapModels(result models.Result) modelsResponse {
 	out := make([]modelDTO, 0, len(result.Models))
 	for _, model := range result.Models {
 		provider := string(models.NormalizeProvider(model.Provider))
-		out = append(out, modelDTO{ID: string(model.ID), Free: model.Free, Provider: provider})
+		id := string(model.ID)
+		out = append(out, modelDTO{
+			ID:           id,
+			Free:         model.Free,
+			Provider:     provider,
+			EffortLevels: effort.LevelsForDisplay(id),
+			CacheUsage:   true, // gateway parses cache fields whenever upstream emits them
+		})
 	}
 	return modelsResponse{Models: out, Stale: result.Stale}
 }

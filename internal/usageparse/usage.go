@@ -79,7 +79,10 @@ func parseUsageObject(raw []byte) UsageSnapshot {
 		OutputTokens             int `json:"output_tokens"`
 		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
-		PromptTokensDetails      *struct {
+		// DeepSeek OpenAI-compat cache fields (top-level usage).
+		PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
+		PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+		PromptTokensDetails   *struct {
 			CachedTokens      int `json:"cached_tokens"`
 			CacheWriteTokens  int `json:"cache_write_tokens"`
 			CachedTokensWrite int `json:"cached_tokens_write"`
@@ -104,12 +107,14 @@ func parseUsageObject(raw []byte) UsageSnapshot {
 	if snap.CompletionTokens == 0 && u.OutputTokens > 0 {
 		snap.CompletionTokens = u.OutputTokens
 	}
-	// Cache read priority: top-level already set; then prompt_tokens_details; then input_tokens_details.
+	// Cache read priority: top-level Anthropic → OpenAI details → DeepSeek hit.
 	if snap.CacheReadTokens == 0 {
 		if u.PromptTokensDetails != nil && u.PromptTokensDetails.CachedTokens > 0 {
 			snap.CacheReadTokens = u.PromptTokensDetails.CachedTokens
 		} else if u.InputTokensDetails != nil && u.InputTokensDetails.CachedTokens > 0 {
 			snap.CacheReadTokens = u.InputTokensDetails.CachedTokens
+		} else if u.PromptCacheHitTokens > 0 {
+			snap.CacheReadTokens = u.PromptCacheHitTokens
 		}
 	}
 	if snap.CacheCreationTokens == 0 && u.PromptTokensDetails != nil {
@@ -119,5 +124,8 @@ func parseUsageObject(raw []byte) UsageSnapshot {
 			snap.CacheCreationTokens = u.PromptTokensDetails.CachedTokensWrite
 		}
 	}
+	// DeepSeek reports miss tokens; when hit is known and prompt total is known,
+	// miss is informational only — do not invent cache creation from miss.
+	_ = u.PromptCacheMissTokens
 	return snap
 }

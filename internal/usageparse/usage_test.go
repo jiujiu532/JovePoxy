@@ -50,6 +50,24 @@ func TestParseOpenAIUsage_topLevelCacheFields(t *testing.T) {
 	}
 }
 
+func TestParseOpenAIUsage_deepseekPromptCacheHit(t *testing.T) {
+	body := []byte(`{
+		"usage":{
+			"prompt_tokens":120,
+			"completion_tokens":8,
+			"prompt_cache_hit_tokens":90,
+			"prompt_cache_miss_tokens":30
+		}
+	}`)
+	snap := usageparse.ParseOpenAIUsage(body)
+	if snap.PromptTokens != 120 || snap.CompletionTokens != 8 {
+		t.Fatalf("tokens = %+v", snap)
+	}
+	if snap.CacheReadTokens != 90 {
+		t.Fatalf("cache read from prompt_cache_hit_tokens = %d", snap.CacheReadTokens)
+	}
+}
+
 func TestParseOpenAIUsage_missingOrMalformed(t *testing.T) {
 	if !usageparse.ParseOpenAIUsage(nil).IsZero() {
 		t.Fatal("nil body")

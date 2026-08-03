@@ -104,6 +104,66 @@ function routeLabel(
   return labels.paid;
 }
 
+function effortLevels(model: ModelDTO): string[] {
+  return Array.isArray(model.effort_levels) ? [...model.effort_levels] : [];
+}
+
+function EffortLevelsCell({
+  levels,
+  emptyLabel,
+  title,
+}: {
+  readonly levels: ReadonlyArray<string>;
+  readonly emptyLabel: string;
+  readonly title: string;
+}) {
+  if (levels.length === 0) {
+    return (
+      <span className="font-mono text-[11px] text-ink-muted" title={title}>
+        {emptyLabel}
+      </span>
+    );
+  }
+  return (
+    <div className="flex max-w-[18rem] flex-wrap gap-1" title={title}>
+      {levels.map((level) => (
+        <span
+          key={level}
+          className="inline-flex items-center border border-border bg-paper px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-ink shadow-[1px_1px_0_var(--border)]"
+        >
+          {level}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CacheCell({
+  enabled,
+  yesLabel,
+  noLabel,
+  title,
+}: {
+  readonly enabled: boolean;
+  readonly yesLabel: string;
+  readonly noLabel: string;
+  readonly title: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center border px-2 py-0.5 font-mono text-[11px] font-bold shadow-[1px_1px_0_var(--border)]",
+        enabled
+          ? "border-border bg-accent-teal/15 text-ink"
+          : "border-border bg-paper-2 text-ink-muted",
+      )}
+      title={title}
+    >
+      {enabled ? yesLabel : noLabel}
+    </span>
+  );
+}
+
 export function ModelsPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -173,12 +233,14 @@ export function ModelsPage() {
       if (familyFilter !== "all" && modelFamily(model.id) !== familyFilter) return false;
       if (!q) return true;
       const routeText = routeLabel(model, routeLabels).toLowerCase();
+      const effortText = effortLevels(model).join(" ").toLowerCase();
       return (
         model.id.toLowerCase().includes(q) ||
         modelFamily(model.id).includes(q) ||
         provider.includes(q) ||
         (model.free ? "free public" : "paid").includes(q) ||
         routeText.includes(q) ||
+        effortText.includes(q) ||
         (provider === "ollama" && "ollama".includes(q)) ||
         (provider === "opencode" && ("opencode".includes(q) || "zen".includes(q)))
       );
@@ -400,6 +462,13 @@ export function ModelsPage() {
                           <p className="mt-1.5 pl-[2.625rem] text-[12px] text-ink-muted">
                             {family} · {routeLabel(model, routeLabels)}
                           </p>
+                          <div className="mt-2 pl-[2.625rem]">
+                            <EffortLevelsCell
+                              levels={effortLevels(model)}
+                              emptyLabel={t("models.effortEmpty")}
+                              title={t("models.effortHint")}
+                            />
+                          </div>
                         </div>
                         {model.free ? (
                           <Badge kind="free">free</Badge>
@@ -411,7 +480,7 @@ export function ModelsPage() {
                   })}
                 </div>
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full min-w-[40rem] text-left text-sm">
+                  <table className="w-full min-w-[56rem] text-left text-sm">
                     <thead>
                       <tr className="border-b-2 border-border bg-paper-2 font-mono text-[11px] font-bold uppercase tracking-wider text-ink-muted">
                         <th className="whitespace-nowrap px-4 py-3">
@@ -422,6 +491,12 @@ export function ModelsPage() {
                         </th>
                         <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.kind")}
+                        </th>
+                        <th className="whitespace-nowrap px-4 py-3">
+                          {t("models.table.effort")}
+                        </th>
+                        <th className="whitespace-nowrap px-4 py-3">
+                          {t("models.table.cache")}
                         </th>
                         <th className="whitespace-nowrap px-4 py-3">
                           {t("models.table.route")}
@@ -451,6 +526,21 @@ export function ModelsPage() {
                               ) : (
                                 <Badge kind="paid">paid</Badge>
                               )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <EffortLevelsCell
+                                levels={effortLevels(model)}
+                                emptyLabel={t("models.effortEmpty")}
+                                title={t("models.effortHint")}
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              <CacheCell
+                                enabled={model.cache_usage !== false}
+                                yesLabel={t("models.cacheYes")}
+                                noLabel={t("models.cacheNo")}
+                                title={t("models.cacheHint")}
+                              />
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
                               <RouteCell

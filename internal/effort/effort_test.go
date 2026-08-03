@@ -63,23 +63,34 @@ func TestMapForModel_families(t *testing.T) {
 		{"gpt-oss:20b", "max", "max"},
 		{"gpt-oss:120b", "low", "low"},
 
-		// kimi k2: low|high only
-		{"kimi-k2.7-code", "minimal", "none"},
+		// kimi k2.7-code: low|high only; none not allowed
+		{"kimi-k2.7-code", "minimal", "low"}, // no none → nearest low
+		{"kimi-k2.7-code", "none", ""},
 		{"kimi-k2.7-code", "medium", "high"}, // tie low/high → stronger
 		{"kimi-k2.7-code", "xhigh", "high"},
 		{"kimi-k2.7-code", "max", "high"},
 		{"kimi-k2.7-code", "low", "low"},
 		{"kimi-k2.7-code", "high", "high"},
 
-		// kimi k3: low|high|max
+		// kimi k2.5: low|high + none
+		{"kimi-k2.5", "minimal", "none"},
+		{"kimi-k2.5", "none", "none"},
+
+		// kimi k3: low|high|max; none not allowed
 		{"kimi-k3", "max", "max"},
 		{"kimi-k3", "xhigh", "max"},
 		{"kimi-k3", "medium", "high"},
+		{"kimi-k3", "none", ""},
 
 		// gpt-5.6-luna: has xhigh+max
 		{"gpt-5.6-luna", "xhigh", "xhigh"},
 		{"gpt-5.6-luna", "max", "max"},
 		{"gpt-5.6-luna", "minimal", "low"},
+		{"gpt-5.6-luna", "none", ""},
+
+		// gpt-5.4: xhigh yes, max no
+		{"gpt-5.4", "max", "xhigh"},
+		{"gpt-5.4", "xhigh", "xhigh"},
 
 		// qwen: no max
 		{"qwen3.5-plus", "max", "xhigh"},
@@ -91,10 +102,11 @@ func TestMapForModel_families(t *testing.T) {
 		{"mimo-v2.5", "xhigh", "max"},
 		{"mimo-v2.5", "max", "max"},
 
-		// grok
+		// grok-4.5: no none/xhigh/max
 		{"grok-4.5", "xhigh", "high"},
 		{"grok-4.5", "max", "high"},
 		{"grok-4.5", "medium", "medium"},
+		{"grok-4.5", "none", ""},
 
 		// deepseek free/paid
 		{"deepseek-v4-flash-free", "max", "max"},
@@ -144,5 +156,34 @@ func TestClamp_mediumOnKimiPrefersHighOrLow(t *testing.T) {
 	got := MapForModel("kimi-k2.7-code", "medium")
 	if got != "low" && got != "high" {
 		t.Fatalf("medium clamp = %q, want low or high", got)
+	}
+}
+
+func TestLevelsForDisplay(t *testing.T) {
+	cases := []struct {
+		model string
+		want  []string
+	}{
+		{"gpt-oss:20b", []string{"none", "low", "medium", "high", "max"}},
+		{"gpt-5.6-luna", []string{"low", "medium", "high", "xhigh", "max"}},
+		{"gpt-5.4", []string{"low", "medium", "high", "xhigh"}},
+		{"kimi-k2.7-code", []string{"low", "high"}},
+		{"kimi-k2.5", []string{"none", "low", "high"}},
+		{"kimi-k3", []string{"low", "high", "max"}},
+		{"grok-4.5", []string{"low", "medium", "high"}},
+		{"qwen3.5-plus", []string{"none", "minimal", "low", "medium", "high", "xhigh"}},
+		{"minimax-m2.7", []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "auto"}},
+		{"big-pickle", []string{"none", "low", "medium", "high"}},
+	}
+	for _, tc := range cases {
+		got := LevelsForDisplay(tc.model)
+		if len(got) != len(tc.want) {
+			t.Fatalf("LevelsForDisplay(%q)=%v want %v", tc.model, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Fatalf("LevelsForDisplay(%q)=%v want %v", tc.model, got, tc.want)
+			}
+		}
 	}
 }

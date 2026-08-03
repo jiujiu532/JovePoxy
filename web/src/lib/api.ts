@@ -13,6 +13,10 @@ export type ModelDTO = {
   readonly free: boolean;
   /** Missing on older backends → treat as opencode. */
   readonly provider?: ModelProvider;
+  /** Ordered reasoning_effort labels accepted after gateway clamp. */
+  readonly effort_levels?: ReadonlyArray<string>;
+  /** Upstream may emit cache counters that the gateway logs. */
+  readonly cache_usage?: boolean;
 };
 export type LocalKeyDTO = {
   readonly id: string;
