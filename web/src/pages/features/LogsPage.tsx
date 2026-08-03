@@ -20,7 +20,7 @@ import {
   Tabs,
   slicePage,
 } from "@/components";
-import { api, type AccountDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
+import { api, type AccountDTO, type LocalKeyDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
 import { handleUnauthorized } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
 import { useI18n, type Translate } from "@/lib/i18n";
@@ -109,6 +109,49 @@ function hasUsage(row: LogDTO): boolean {
   );
 }
 
+/** Resolve local key id → display name (label). Never show raw key_… ids in cells. */
+function keyDisplayName(
+  keyId: string | undefined,
+  names: ReadonlyMap<string, string>,
+  t: Translate,
+): string {
+  if (!keyId) return t("common.none");
+  const label = names.get(keyId)?.trim();
+  if (label) return label;
+  // Key was revoked / missing from catalog but still referenced in history.
+  return t("logs.keyDeleted");
+}
+
+function DetailField({
+  label,
+  value,
+  mono = false,
+  title,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly mono?: boolean;
+  readonly title?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
+        {label}
+      </div>
+      <div
+        className={
+          mono
+            ? "mt-0.5 truncate font-mono text-[12px] text-ink"
+            : "mt-0.5 truncate text-[13px] font-medium text-ink"
+        }
+        title={title ?? value}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function matchStatusBucket(status: number, bucket: StatusFilter): boolean {
   if (bucket === "all") return true;
   if (bucket === "2xx") return status >= 200 && status < 300;
@@ -134,6 +177,7 @@ function useLogsTab(): readonly [LogsHubTab, (tab: LogsHubTab) => void] {
 function GatewayLogsPanel({ t }: { readonly t: Translate }) {
   const navigate = useNavigate();
   const [logs, setLogs] = useState<LogDTO[]>([]);
+  const [localKeys, setLocalKeys] = useState<LocalKeyDTO[]>([]);
   const [query, setQuery] = useState("");
   const [routeFilter, setRouteFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -145,11 +189,21 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const keyNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const key of localKeys) {
+      const name = key.label.trim() || key.prefix || key.id;
+      map.set(key.id, name);
+    }
+    return map;
+  }, [localKeys]);
+
   async function load() {
     setLoading(true);
     try {
-      const res = await api.logs();
-      setLogs(res.logs);
+      const [logRes, keyRes] = await Promise.all([api.logs(), api.localKeys()]);
+      setLogs(logRes.logs);
+      setLocalKeys(keyRes.keys);
       setError(null);
     } catch (err) {
       if (handleUnauthorized(err, (to) => void navigate(to))) return;
@@ -181,12 +235,13 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       if (streamFilter === "stream" && !row.stream) return false;
       if (streamFilter === "nonstream" && row.stream) return false;
       if (!q) return true;
+      const keyName = keyDisplayName(row.key_id, keyNames, t).toLowerCase();
       return (
         row.route.toLowerCase().includes(q) ||
         row.model.toLowerCase().includes(q) ||
         String(row.status).includes(q) ||
         (row.error_class ?? "").toLowerCase().includes(q) ||
-        (row.key_id ?? "").toLowerCase().includes(q) ||
+        keyName.includes(q) ||
         (row.reasoning_effort ?? "").toLowerCase().includes(q) ||
         (row.thinking_type ?? "").toLowerCase().includes(q)
       );
@@ -199,7 +254,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       return a.latency_ms - b.latency_ms;
     });
     return rows;
-  }, [logs, query, routeFilter, statusFilter, streamFilter, sortKey]);
+  }, [logs, query, routeFilter, statusFilter, streamFilter, sortKey, keyNames, t]);
 
   const paged = useMemo(
     () => slicePage(filtered, page, pageSize),
@@ -325,7 +380,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.streamAria")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colTokens")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colLatency")}</th>
-                      <th className="px-4 py-2.5 font-medium whitespace-nowrap">Key</th>
+                      <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colKey")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -338,6 +393,8 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                       const cacheWrite = tokenCount(row, "cache_creation_tokens");
                       const expanded = expandedId === row.id;
                       const usageKnown = hasUsage(row);
+                      const keyName = keyDisplayName(row.key_id, keyNames, t);
+                      const total = input + output;
                       return (
                         <Fragment key={row.id}>
                           <tr
@@ -390,137 +447,156 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                             <td className="px-4 py-3 tabular-nums text-ink whitespace-nowrap">
                               {formatLatency(row.latency_ms)}
                             </td>
-                            <td className="px-4 py-3 font-mono text-[11px] text-ink-faint whitespace-nowrap">
-                              {row.key_id ?? t("common.none")}
+                            <td
+                              className="max-w-[10rem] truncate px-4 py-3 text-[12px] font-medium text-ink whitespace-nowrap"
+                              title={row.key_id || undefined}
+                            >
+                              {keyName}
                             </td>
                           </tr>
                           {expanded ? (
-                            <tr className="border-b-2 border-border bg-paper-2/60">
-                              <td colSpan={9} className="px-3 py-2.5 sm:px-4">
-                                <div className="border-2 border-border bg-paper-0 shadow-[3px_3px_0_0_var(--border)]">
+                            <tr className="border-b-2 border-border bg-paper-2/40">
+                              <td colSpan={9} className="px-3 py-3 sm:px-4">
+                                <div className="overflow-hidden border-2 border-border bg-paper-1 shadow-[4px_4px_0_0_var(--border)]">
+                                  {/* Header strip */}
                                   <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-paper-2 px-3 py-2">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
                                       <span
                                         className={
                                           usageKnown
-                                            ? "inline-block size-2.5 shrink-0 border border-border bg-accent-teal"
-                                            : "inline-block size-2.5 shrink-0 border border-border bg-accent-yellow"
+                                            ? "inline-block size-2.5 shrink-0 border-2 border-border bg-accent-teal"
+                                            : "inline-block size-2.5 shrink-0 border-2 border-border bg-accent-yellow"
                                         }
                                         aria-hidden
                                       />
-                                      <span className="text-[12px] font-semibold tracking-tight text-ink">
+                                      <span className="text-[13px] font-bold tracking-tight text-ink">
                                         {t("logs.detailTitle")}
                                       </span>
+                                      <Badge kind={statusKind(row.status)}>{row.status}</Badge>
+                                      <Badge kind={row.stream ? "healthy" : "neutral"}>
+                                        {row.stream ? t("logs.streamBadgeYes") : t("logs.streamBadgeNo")}
+                                      </Badge>
                                       {!usageKnown ? (
-                                        <span className="text-[11px] text-ink-muted">
+                                        <span className="text-[11px] font-medium text-ink-muted">
                                           {t("logs.detailNoUsage")}
                                         </span>
                                       ) : null}
                                     </div>
-                                    <span className="font-mono text-[11px] text-ink-faint">
+                                    <span
+                                      className="max-w-full truncate font-mono text-[10px] text-ink-faint"
+                                      title={row.id}
+                                    >
                                       {row.id}
                                     </span>
                                   </div>
 
-                                  <div className="grid grid-cols-2 gap-0 border-b-2 border-border sm:grid-cols-4">
-                                    <div className="border-b-2 border-border p-3 sm:border-b-0 sm:border-r-2">
-                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                  {/* Token metrics — colored neo-brutal tiles */}
+                                  <div className="grid grid-cols-2 border-b-2 border-border sm:grid-cols-4">
+                                    <div className="border-b-2 border-r-2 border-border bg-accent-yellow p-3 text-black sm:border-b-0">
+                                      <div className="text-[10px] font-bold uppercase tracking-wide text-black/70">
                                         {t("logs.detailCacheRead")}
                                       </div>
-                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
+                                      <div className="mt-1 font-mono text-[1.5rem] font-black tabular-nums leading-none tracking-tight">
                                         {cacheRead.toLocaleString()}
                                       </div>
                                       {cacheWrite > 0 ? (
-                                        <div className="mt-1 text-[11px] text-ink-muted">
-                                          {t("logs.detailCacheWrite")}{" "}
-                                          {cacheWrite.toLocaleString()}
+                                        <div className="mt-1 text-[11px] font-semibold text-black/65">
+                                          {t("logs.detailCacheWrite")} {cacheWrite.toLocaleString()}
                                         </div>
                                       ) : null}
                                     </div>
-                                    <div className="border-b-2 border-border p-3 sm:border-b-0 sm:border-r-2">
-                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                    <div className="border-b-2 border-border bg-accent-mint p-3 text-black sm:border-b-0 sm:border-r-2">
+                                      <div className="text-[10px] font-bold uppercase tracking-wide text-black/70">
                                         {t("logs.detailInput")}
                                       </div>
-                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
+                                      <div className="mt-1 font-mono text-[1.5rem] font-black tabular-nums leading-none tracking-tight">
                                         {input.toLocaleString()}
                                       </div>
                                     </div>
-                                    <div className="border-b-2 border-r-2 border-border p-3 sm:border-b-0">
-                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                    <div className="border-r-2 border-border bg-accent-teal p-3 text-black">
+                                      <div className="text-[10px] font-bold uppercase tracking-wide text-black/70">
                                         {t("logs.detailOutput")}
                                       </div>
-                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
+                                      <div className="mt-1 font-mono text-[1.5rem] font-black tabular-nums leading-none tracking-tight">
                                         {output.toLocaleString()}
                                       </div>
                                     </div>
-                                    <div className="p-3">
-                                      <div className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                                    <div className="bg-accent-coral p-3 text-black">
+                                      <div className="text-[10px] font-bold uppercase tracking-wide text-black/70">
                                         {t("logs.detailTotal")}
                                       </div>
-                                      <div className="mt-1 font-mono text-lg font-semibold tabular-nums leading-none text-ink">
-                                        {(input + output).toLocaleString()}
+                                      <div className="mt-1 font-mono text-[1.5rem] font-black tabular-nums leading-none tracking-tight">
+                                        {total.toLocaleString()}
                                       </div>
                                     </div>
                                   </div>
 
-                                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-3 py-2.5 text-[12px]">
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailMaxTokens")}{" "}
-                                      <span className="font-mono text-ink">
-                                        {(row.max_tokens ?? 0) > 0
+                                  {/* Meta grid — label / value pairs, no run-on line */}
+                                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-3 py-3 sm:grid-cols-3 lg:grid-cols-4">
+                                    <DetailField
+                                      label={t("logs.detailTime")}
+                                      value={formatDateTime(row.created_at)}
+                                      mono
+                                      title={row.created_at}
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailLatency")}
+                                      value={formatLatency(row.latency_ms)}
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailModel")}
+                                      value={row.model || t("common.none")}
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailRoute")}
+                                      value={row.route}
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailKey")}
+                                      value={keyName}
+                                      {...(row.key_id ? { title: row.key_id } : {})}
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailEffort")}
+                                      value={label || t("common.none")}
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailThinkingType")}
+                                      value={row.thinking_type || t("common.none")}
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailMaxTokens")}
+                                      value={
+                                        (row.max_tokens ?? 0) > 0
                                           ? (row.max_tokens ?? 0).toLocaleString()
-                                          : t("common.none")}
-                                      </span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailEffort")}{" "}
-                                      <span className="font-mono text-ink">
-                                        {label || t("common.none")}
-                                      </span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailThinkingType")}{" "}
-                                      <span className="font-mono text-ink">
-                                        {row.thinking_type || t("common.none")}
-                                      </span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailBudget")}{" "}
-                                      <span className="font-mono text-ink">
-                                        {(row.budget_tokens ?? 0) > 0
+                                          : t("common.none")
+                                      }
+                                      mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailBudget")}
+                                      value={
+                                        (row.budget_tokens ?? 0) > 0
                                           ? (row.budget_tokens ?? 0).toLocaleString()
-                                          : t("common.none")}
-                                      </span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailRoute")}{" "}
-                                      <span className="font-mono text-ink">{row.route}</span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailStream")}{" "}
-                                      <span className="text-ink">
-                                        {row.stream ? t("logs.yes") : t("logs.no")}
-                                      </span>
-                                    </span>
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailStatus")}{" "}
-                                      <span className="font-mono text-ink">{row.status}</span>
-                                    </span>
+                                          : t("common.none")
+                                      }
+                                      mono
+                                    />
                                     {row.error_class ? (
-                                      <span className="text-ink-muted">
-                                        {t("logs.detailError")}{" "}
-                                        <span className="font-mono text-ink">{row.error_class}</span>
-                                      </span>
+                                      <DetailField
+                                        label={t("logs.detailError")}
+                                        value={row.error_class}
+                                        mono
+                                      />
                                     ) : null}
-                                    <span className="text-ink-muted">
-                                      {t("logs.detailKey")}{" "}
-                                      <span className="font-mono text-ink">
-                                        {row.key_id || t("common.none")}
-                                      </span>
-                                    </span>
                                   </div>
+
                                   {!usageKnown ? (
-                                    <div className="border-t-2 border-border bg-accent-yellow/25 px-3 py-2 text-[11px] leading-snug text-ink-muted">
+                                    <div className="border-t-2 border-border bg-accent-yellow px-3 py-2 text-[11px] font-medium leading-snug text-black">
                                       {t("logs.detailUsageHint")}
                                     </div>
                                   ) : null}
