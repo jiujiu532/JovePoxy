@@ -22,6 +22,7 @@ import {
 } from "@/components";
 import { api, type AccountDTO, type LogDTO, type UsageRecordDTO } from "@/lib/api";
 import { handleUnauthorized } from "@/lib/api-error";
+import { formatDateTime } from "@/lib/format";
 import { useI18n, type Translate } from "@/lib/i18n";
 import { isLogsHubTab, type LogsHubTab } from "@/lib/routes";
 
@@ -344,8 +345,11 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                             onClick={() => setExpandedId(expanded ? null : row.id)}
                             aria-expanded={expanded}
                           >
-                            <td className="px-4 py-3 text-[12px] text-ink-muted whitespace-nowrap">
-                              {row.created_at}
+                            <td
+                              className="px-4 py-3 font-mono text-[12px] tabular-nums text-ink-muted whitespace-nowrap"
+                              title={row.created_at}
+                            >
+                              {formatDateTime(row.created_at)}
                             </td>
                             <td className="px-4 py-3 font-mono text-[13px] text-ink">
                               <span className="inline-flex min-w-0 items-center gap-2.5">
@@ -812,7 +816,12 @@ function UsagePanel({ t }: { readonly t: Translate }) {
                         key={row.id}
                         className="border-b-2 border-border last:border-b-0 hover:bg-accent-soft"
                       >
-                        <td className="px-4 py-3 text-[12px] text-ink-muted">{row.recorded_at}</td>
+                        <td
+                          className="px-4 py-3 font-mono text-[12px] tabular-nums text-ink-muted whitespace-nowrap"
+                          title={row.recorded_at}
+                        >
+                          {formatDateTime(row.recorded_at)}
+                        </td>
                         <td className="px-4 py-3 font-mono text-[13px] text-ink">
                           <span className="inline-flex min-w-0 items-center gap-2.5">
                             <EntityMark name={row.model} size="sm" />

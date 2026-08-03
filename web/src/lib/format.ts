@@ -1,6 +1,39 @@
 import type { Translate } from "./i18n";
 import type { ZenKeyDTO, ZenKeyStatus } from "./api";
 
+/**
+ * Parse API timestamps (often fixed-width RFC3339Nano UTC with 9 fractional digits).
+ * JS Date commonly only accepts ms precision — truncate excess fraction before parse.
+ */
+export function parseApiTime(iso: string): Date | null {
+  const raw = iso.trim();
+  if (!raw) return null;
+  // 2026-08-03T11:10:33.678043900Z → 2026-08-03T11:10:33.678Z
+  const normalized = raw.replace(/(\.\d{3})\d+(Z|[+-]\d{2}:?\d{2})$/i, "$1$2");
+  const ms = Date.parse(normalized);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms);
+}
+
+/**
+ * Human-readable local wall time for log/usage tables.
+ * e.g. "2026-08-03 19:10:33". Falls back to the raw string when unparseable.
+ */
+export function formatDateTime(iso: string): string {
+  const d = parseApiTime(iso);
+  if (!d) {
+    const trimmed = iso.trim();
+    return trimmed.length > 0 ? trimmed : "-";
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+}
+
 /** Format a model id for display tables. */
 export function formatModelId(id: string): string {
   const trimmed = id.trim();
