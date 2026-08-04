@@ -398,3 +398,104 @@ type failingSource struct {
 func (source failingSource) Models(context.Context) ([]zen.Model, error) {
 	return nil, source.err
 }
+
+func TestCatalog_Refresh_preserves_opencode_paid_when_go_source_fails(t *testing.T) {
+	// Given: successful Go+Ollama catalog, then Go listing fails on next refresh.
+	public := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash-free"}, {ID: "kimi-k3"}}}
+	goOK := staticSource{models: []zen.Model{{ID: "kimi-k3"}, {ID: "glm-5.2"}}}
+	ollamaOK := staticSource{models: []zen.Model{{ID: "kimi-k3"}, {ID: "gemma4:31b"}}}
+	catalog, err := NewCatalog(public, Settings{
+		TTL: time.Hour, OpenCodePaid: goOK, Ollama: ollamaOK,
+	})
+	if err != nil {
+		t.Fatalf("NewCatalog: %v", err)
+	}
+	if _, err := catalog.Refresh(context.Background()); err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+
+	// When: Go source errors, Ollama still works.
+	catalog.openCodePaid = failingSource{err: errors.New("go suite down")}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("second refresh: %v", err)
+	}
+	if !result.Stale {
+		t.Fatal("expected stale/partial when OpenCode paid source fails")
+	}
+
+	// Then: kimi-k3 stays primary OpenCode (pool route), not flipped to Ollama-only.
+	var kimi Model
+	var found bool
+	for _, model := range result.Models {
+		if model.ID == "kimi-k3" {
+			kimi = model
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("kimi-k3 missing after failed Go refresh")
+	}
+	if kimi.Free {
+		t.Fatal("kimi-k3 should remain paid")
+	}
+	if NormalizeProvider(kimi.Provider) != ProviderOpenCode {
+		t.Fatalf("kimi-k3 provider = %q, want opencode", kimi.Provider)
+	}
+	if !HasProvider(kimi, ProviderOpenCode) {
+		t.Fatal("kimi-k3 should still advertise opencode")
+	}
+	// Paid-only OpenCode model should also survive from previous snapshot.
+	var glmFound bool
+	for _, model := range result.Models {
+		if model.ID == "glm-5.2" && NormalizeProvider(model.Provider) == ProviderOpenCode {
+			glmFound = true
+		}
+	}
+	if !glmFound {
+		t.Fatal("glm-5.2 from previous OpenCode paid snapshot missing")
+	}
+}
+
+func TestCatalog_Refresh_preserves_opencode_paid_when_go_source_empty(t *testing.T) {
+	// Given: healthy catalog, then Go suite returns empty success (no usable key).
+	public := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash-free"}}}
+	goOK := staticSource{models: []zen.Model{{ID: "kimi-k3"}, {ID: "glm-5.2"}}}
+	ollamaOK := staticSource{models: []zen.Model{{ID: "kimi-k3"}}}
+	catalog, err := NewCatalog(public, Settings{
+		TTL: time.Hour, OpenCodePaid: goOK, Ollama: ollamaOK,
+	})
+	if err != nil {
+		t.Fatalf("NewCatalog: %v", err)
+	}
+	if _, err := catalog.Refresh(context.Background()); err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+
+	// When: empty Go list must not wipe prior paid OpenCode rows.
+	catalog.openCodePaid = staticSource{models: nil}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("second refresh: %v", err)
+	}
+	if !result.Stale {
+		t.Fatal("expected partial/stale when OpenCode paid list is empty")
+	}
+
+	var kimiFound, glmFound bool
+	for _, model := range result.Models {
+		if model.ID == "kimi-k3" && NormalizeProvider(model.Provider) == ProviderOpenCode {
+			kimiFound = true
+		}
+		if model.ID == "glm-5.2" && NormalizeProvider(model.Provider) == ProviderOpenCode {
+			glmFound = true
+		}
+	}
+	if !kimiFound {
+		t.Fatal("kimi-k3 missing after empty Go list")
+	}
+	if !glmFound {
+		t.Fatal("glm-5.2 missing after empty Go list")
+	}
+}

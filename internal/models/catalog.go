@@ -136,9 +136,10 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 	}
 	done := make(chan struct{})
 	catalog.inFlight = done
+	previous := append([]Model(nil), catalog.models...)
 	catalog.mu.Unlock()
 
-	merged, partial, refreshErr := catalog.fetchAndMerge(ctx)
+	merged, partial, refreshErr := catalog.fetchAndMerge(ctx, previous)
 	catalog.mu.Lock()
 	defer catalog.mu.Unlock()
 	defer close(done)
@@ -159,7 +160,7 @@ func (catalog *Catalog) Refresh(ctx context.Context) (Result, error) {
 	return catalog.resultLocked(), nil
 }
 
-func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, partial bool, err error) {
+func (catalog *Catalog) fetchAndMerge(ctx context.Context, previous []Model) (merged []Model, partial bool, err error) {
 	// Public Zen is free-tier only: keep free models, drop public paid IDs
 	// (Claude/Gemini/etc. are not usable with OpenCode Go pool keys).
 	upstreamModels, refreshErr := catalog.source.Models(ctx)
@@ -171,8 +172,14 @@ func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, part
 	if catalog.openCodePaid != nil {
 		paidModels, paidErr := catalog.openCodePaid.Models(ctx)
 		if paidErr != nil {
-			// Keep free snapshot; mark partial so operators can observe the failure.
+			// Keep free list, but re-apply last known OpenCode paid models so dual IDs
+			// do not flip primary route to Ollama when the Go suite is temporarily down.
 			partial = true
+			merged = mergePreviousOpenCodePaid(merged, previous)
+		} else if len(paidModels) == 0 {
+			// Empty success (e.g. no healthy OpenCode key yet) must not wipe prior Go suite.
+			partial = true
+			merged = mergePreviousOpenCodePaid(merged, previous)
 		} else {
 			merged = mergePaidModels(merged, paidModels, ProviderOpenCode)
 		}
@@ -190,6 +197,48 @@ func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, part
 	}
 	merged = mergePaidModels(merged, ollamaModels, ProviderOllama)
 	return merged, partial, nil
+}
+
+// mergePreviousOpenCodePaid re-injects paid OpenCode rows from the previous snapshot.
+// Used when the live Go suite listing fails so chat routing keeps using the OpenCode pool.
+func mergePreviousOpenCodePaid(merged []Model, previous []Model) []Model {
+	if len(previous) == 0 {
+		return merged
+	}
+	index := make(map[ModelID]int, len(merged))
+	for i, model := range merged {
+		index[model.ID] = i
+	}
+	for _, model := range previous {
+		if model.Free {
+			continue
+		}
+		if NormalizeProvider(model.Provider) != ProviderOpenCode {
+			continue
+		}
+		id := model.ID
+		if id == "" {
+			continue
+		}
+		if i, exists := index[id]; exists {
+			// Prefer OpenCode as primary when recovering from a failed Go refresh.
+			entry := merged[i]
+			entry.Free = false
+			entry.Provider = ProviderOpenCode
+			entry.Providers = ProvidersOf(Model{
+				Provider:  ProviderOpenCode,
+				Providers: append(append([]Provider(nil), entry.Providers...), ProvidersOf(model)...),
+			})
+			merged[i] = entry
+			continue
+		}
+		providers := ProvidersOf(Model{Provider: ProviderOpenCode, Providers: model.Providers})
+		merged = append(merged, Model{
+			ID: id, Free: false, Provider: ProviderOpenCode, Providers: providers,
+		})
+		index[id] = len(merged) - 1
+	}
+	return merged
 }
 
 func mergePaidModels(merged []Model, upstream []zen.Model, provider Provider) []Model {
