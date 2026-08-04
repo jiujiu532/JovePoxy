@@ -45,7 +45,11 @@ type loginResponse struct {
 type modelDTO struct {
 	ID       string `json:"id"`
 	Free     bool   `json:"free"`
+	// Provider is the primary chat route (opencode | ollama).
 	Provider string `json:"provider"`
+	// Providers lists every source advertising this ID (OpenCode Go ∩ Ollama overlap).
+	// Always non-empty when mapped from a live catalog entry.
+	Providers []string `json:"providers"`
 	// EffortLevels is the ordered reasoning_effort set this model accepts
 	// after gateway clamp (includes none/auto when allowed).
 	EffortLevels []string `json:"effort_levels"`
@@ -294,10 +298,16 @@ func mapModels(result models.Result) modelsResponse {
 	for _, model := range result.Models {
 		provider := string(models.NormalizeProvider(model.Provider))
 		id := string(model.ID)
+		providers := models.ProvidersOf(model)
+		providerNames := make([]string, 0, len(providers))
+		for _, p := range providers {
+			providerNames = append(providerNames, string(p))
+		}
 		out = append(out, modelDTO{
 			ID:           id,
 			Free:         model.Free,
 			Provider:     provider,
+			Providers:    providerNames,
 			EffortLevels: effort.LevelsForDisplay(id),
 			CacheUsage:   true, // gateway parses cache fields whenever upstream emits them
 		})

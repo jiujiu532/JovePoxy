@@ -276,6 +276,7 @@ export const en: Record<MessageKey, string> = {
   "models.routeFree": "public + egress proxy",
   "models.routePaid": "OpenCode key pool",
   "models.routeOllama": "Ollama key pool",
+  "models.routeBoth": "OpenCode + Ollama",
   "models.table.id": "Model ID",
   "models.table.family": "Family",
   "models.table.kind": "Kind",

@@ -11,8 +11,10 @@ export type ModelProvider = "opencode" | "ollama";
 export type ModelDTO = {
   readonly id: string;
   readonly free: boolean;
-  /** Missing on older backends → treat as opencode. */
+  /** Primary chat route. Missing on older backends → treat as opencode. */
   readonly provider?: ModelProvider;
+  /** All sources advertising this id (OpenCode Go ∩ Ollama overlap). */
+  readonly providers?: ReadonlyArray<ModelProvider>;
   /** Ordered reasoning_effort labels accepted after gateway clamp. */
   readonly effort_levels?: ReadonlyArray<string>;
   /** Upstream may emit cache counters that the gateway logs. */

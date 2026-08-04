@@ -31,7 +31,11 @@ const (
 type Model struct {
 	ID       ModelID
 	Free     bool
-	Provider Provider // empty/zero treated as opencode
+	Provider Provider // primary route; empty/zero treated as opencode
+	// Providers lists every paid/free source that advertises this ID.
+	// Overlap (OpenCode Go ∩ Ollama Cloud) keeps one catalog row but both labels.
+	// Empty means derive from Provider only (backward-compatible).
+	Providers []Provider
 }
 
 // Result exposes the current model snapshot and whether an upstream refresh
@@ -189,22 +193,73 @@ func (catalog *Catalog) fetchAndMerge(ctx context.Context) (merged []Model, part
 }
 
 func mergePaidModels(merged []Model, upstream []zen.Model, provider Provider) []Model {
-	seen := make(map[ModelID]struct{}, len(merged))
-	for _, model := range merged {
-		seen[model.ID] = struct{}{}
+	index := make(map[ModelID]int, len(merged))
+	for i, model := range merged {
+		index[model.ID] = i
 	}
 	for _, upstreamModel := range upstream {
 		id := ModelID(strings.TrimSpace(upstreamModel.ID))
 		if id == "" {
 			continue
 		}
-		if _, exists := seen[id]; exists {
+		if i, exists := index[id]; exists {
+			// Same ID already present (often OpenCode Go first): keep primary route,
+			// but record that this source also serves the model for catalog display.
+			merged[i] = annotateProvider(merged[i], provider)
 			continue
 		}
-		merged = append(merged, Model{ID: id, Free: false, Provider: provider})
-		seen[id] = struct{}{}
+		merged = append(merged, Model{
+			ID: id, Free: false, Provider: provider,
+			Providers: []Provider{NormalizeProvider(provider)},
+		})
+		index[id] = len(merged) - 1
 	}
 	return merged
+}
+
+// annotateProvider unions provider into model.Providers without changing Free or primary Provider.
+func annotateProvider(model Model, provider Provider) Model {
+	model.Providers = ProvidersOf(Model{
+		Provider:  model.Provider,
+		Providers: append(append([]Provider(nil), model.Providers...), provider),
+	})
+	return model
+}
+
+// ProvidersOf returns the de-duplicated provider set for display/filter.
+// Falls back to the primary Provider when Providers is empty.
+func ProvidersOf(model Model) []Provider {
+	seen := make(map[Provider]struct{}, 2)
+	out := make([]Provider, 0, 2)
+	add := func(p Provider) {
+		p = NormalizeProvider(p)
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	if len(model.Providers) == 0 {
+		add(model.Provider)
+		return out
+	}
+	// Keep primary first when present so UI/route labels stay stable.
+	add(model.Provider)
+	for _, p := range model.Providers {
+		add(p)
+	}
+	return out
+}
+
+// HasProvider reports whether model is advertised by provider (primary or overlap).
+func HasProvider(model Model, provider Provider) bool {
+	want := NormalizeProvider(provider)
+	for _, p := range ProvidersOf(model) {
+		if p == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (catalog *Catalog) currentResult() (Result, error) {
@@ -228,7 +283,14 @@ func (catalog *Catalog) hasSnapshotLocked() bool {
 }
 
 func (catalog *Catalog) resultLocked() Result {
-	return Result{Models: append([]Model(nil), catalog.models...), Stale: catalog.lastRefreshFailed}
+	out := make([]Model, len(catalog.models))
+	for i, model := range catalog.models {
+		out[i] = model
+		if len(model.Providers) > 0 {
+			out[i].Providers = append([]Provider(nil), model.Providers...)
+		}
+	}
+	return Result{Models: out, Stale: catalog.lastRefreshFailed}
 }
 
 // classifyOpenCodeFree keeps only free-tier OpenCode models from the public Zen list.
@@ -246,7 +308,10 @@ func (catalog *Catalog) classifyOpenCodeFree(upstreamModels []zen.Model) []Model
 			// Public paid IDs are not part of the Go-suite catalog.
 			continue
 		}
-		classified = append(classified, Model{ID: id, Free: true, Provider: ProviderOpenCode})
+		classified = append(classified, Model{
+			ID: id, Free: true, Provider: ProviderOpenCode,
+			Providers: []Provider{ProviderOpenCode},
+		})
 	}
 	return classified
 }

@@ -38,9 +38,29 @@ function modelFamily(id: string): string {
   return (parts[0] ?? id).toLowerCase();
 }
 
-/** Missing provider on older backends → opencode. */
+/** Primary chat route. Missing provider on older backends → opencode. */
 function modelProvider(model: ModelDTO): ModelProvider {
   return model.provider === "ollama" ? "ollama" : "opencode";
+}
+
+/** All advertised sources (overlap OpenCode ∩ Ollama). */
+function modelProviders(model: ModelDTO): ModelProvider[] {
+  if (Array.isArray(model.providers) && model.providers.length > 0) {
+    const seen = new Set<ModelProvider>();
+    const out: ModelProvider[] = [];
+    for (const raw of model.providers) {
+      const norm: ModelProvider = raw === "ollama" ? "ollama" : "opencode";
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      out.push(norm);
+    }
+    if (out.length > 0) return out;
+  }
+  return [modelProvider(model)];
+}
+
+function hasProvider(model: ModelDTO, provider: ModelProvider): boolean {
+  return modelProviders(model).includes(provider);
 }
 
 function ModelIdCell({ id, family }: { readonly id: string; readonly family: string }) {
@@ -65,19 +85,24 @@ function ModelIdCell({ id, family }: { readonly id: string; readonly family: str
 
 function RouteCell({
   free,
-  provider,
+  providers,
   freeLabel,
   paidLabel,
   ollamaLabel,
+  bothLabel,
 }: {
   readonly free: boolean;
-  readonly provider: ModelProvider;
+  readonly providers: ReadonlyArray<ModelProvider>;
   readonly freeLabel: string;
   readonly paidLabel: string;
   readonly ollamaLabel: string;
+  readonly bothLabel: string;
 }) {
-  const isOllama = provider === "ollama";
-  const label = free ? freeLabel : isOllama ? ollamaLabel : paidLabel;
+  const hasOC = providers.includes("opencode");
+  const hasOllama = providers.includes("ollama");
+  const dual = !free && hasOC && hasOllama;
+  const isOllamaOnly = !free && hasOllama && !hasOC;
+  const label = free ? freeLabel : dual ? bothLabel : isOllamaOnly ? ollamaLabel : paidLabel;
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-ink-muted">
       {free ? (
@@ -86,7 +111,10 @@ function RouteCell({
         <Coins
           size={14}
           weight="duotone"
-          className={cn("shrink-0", isOllama ? "text-accent-teal" : "text-accent-coral")}
+          className={cn(
+            "shrink-0",
+            dual || isOllamaOnly ? "text-accent-teal" : "text-accent-coral",
+          )}
           aria-hidden
         />
       )}
@@ -97,10 +125,14 @@ function RouteCell({
 
 function routeLabel(
   model: ModelDTO,
-  labels: { free: string; paid: string; ollama: string },
+  labels: { free: string; paid: string; ollama: string; both: string },
 ): string {
   if (model.free) return labels.free;
-  if (modelProvider(model) === "ollama") return labels.ollama;
+  const providers = modelProviders(model);
+  const hasOC = providers.includes("opencode");
+  const hasOllama = providers.includes("ollama");
+  if (hasOC && hasOllama) return labels.both;
+  if (hasOllama) return labels.ollama;
   return labels.paid;
 }
 
@@ -185,6 +217,7 @@ export function ModelsPage() {
       free: t("models.routeFree"),
       paid: t("models.routePaid"),
       ollama: t("models.routeOllama"),
+      both: t("models.routeBoth"),
     }),
     [t],
   );
@@ -226,23 +259,25 @@ export function ModelsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = models.filter((model) => {
-      const provider = modelProvider(model);
+      const providers = modelProviders(model);
       if (kind === "free" && !model.free) return false;
       if (kind === "paid" && model.free) return false;
-      if (providerFilter !== "all" && provider !== providerFilter) return false;
+      // Provider filter matches any advertised source (overlap counts for both).
+      if (providerFilter !== "all" && !hasProvider(model, providerFilter)) return false;
       if (familyFilter !== "all" && modelFamily(model.id) !== familyFilter) return false;
       if (!q) return true;
       const routeText = routeLabel(model, routeLabels).toLowerCase();
       const effortText = effortLevels(model).join(" ").toLowerCase();
+      const providerText = providers.join(" ");
       return (
         model.id.toLowerCase().includes(q) ||
         modelFamily(model.id).includes(q) ||
-        provider.includes(q) ||
+        providerText.includes(q) ||
         (model.free ? "free public" : "paid").includes(q) ||
         routeText.includes(q) ||
         effortText.includes(q) ||
-        (provider === "ollama" && "ollama".includes(q)) ||
-        (provider === "opencode" && ("opencode".includes(q) || "zen".includes(q)))
+        (hasProvider(model, "ollama") && "ollama".includes(q)) ||
+        (hasProvider(model, "opencode") && ("opencode".includes(q) || "zen".includes(q)))
       );
     });
 
@@ -266,6 +301,7 @@ export function ModelsPage() {
 
   const freeCount = models.filter((model) => model.free).length;
   const paidCount = models.length - freeCount;
+  const ollamaCount = models.filter((model) => hasProvider(model, "ollama")).length;
   const filteredFree = filtered.filter((m) => m.free).length;
 
   function resetFilters() {
@@ -338,7 +374,7 @@ export function ModelsPage() {
             <StatCard
               label={t("models.kpi.paid")}
               value={paidCount}
-              hint={t("models.routePaid")}
+              hint={`${t("models.filterProviderOllama")} ${ollamaCount}`}
               icon={Coins}
               tone="accent"
             />
@@ -506,7 +542,7 @@ export function ModelsPage() {
                     <tbody>
                       {paged.map((model) => {
                         const family = modelFamily(model.id);
-                        const provider = modelProvider(model);
+                        const providers = modelProviders(model);
                         return (
                           <tr
                             key={model.id}
@@ -545,10 +581,11 @@ export function ModelsPage() {
                             <td className="whitespace-nowrap px-4 py-3">
                               <RouteCell
                                 free={model.free}
-                                provider={provider}
+                                providers={providers}
                                 freeLabel={routeLabels.free}
                                 paidLabel={routeLabels.paid}
                                 ollamaLabel={routeLabels.ollama}
+                                bothLabel={routeLabels.both}
                               />
                             </td>
                           </tr>

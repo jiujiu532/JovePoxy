@@ -214,6 +214,44 @@ func TestCatalog_Refresh_merges_ollama_and_skips_id_conflicts(t *testing.T) {
 	}
 }
 
+func TestCatalog_Refresh_annotates_ollama_on_go_overlap(t *testing.T) {
+	// OpenCode Go wins primary route; Ollama same ID is annotated, not dropped from Ollama filter.
+	zenSource := staticSource{models: []zen.Model{{ID: "zen-only-free"}}}
+	goSource := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash"}, {ID: "go-only"}}}
+	ollamaSource := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash"}, {ID: "ollama-only"}}}
+	catalog, err := NewCatalog(zenSource, Settings{
+		TTL: time.Minute, OpenCodePaid: goSource, Ollama: ollamaSource,
+	})
+	if err != nil {
+		t.Fatalf("NewCatalog() error = %v", err)
+	}
+	result, err := catalog.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	byID := map[ModelID]Model{}
+	for _, model := range result.Models {
+		byID[model.ID] = model
+	}
+	overlap := byID["deepseek-v4-flash"]
+	if overlap.Provider != ProviderOpenCode || overlap.Free {
+		t.Fatalf("overlap primary = %#v, want paid opencode", overlap)
+	}
+	if !HasProvider(overlap, ProviderOpenCode) || !HasProvider(overlap, ProviderOllama) {
+		t.Fatalf("overlap providers = %#v, want both opencode and ollama", ProvidersOf(overlap))
+	}
+	if got := byID["go-only"]; got.Provider != ProviderOpenCode || HasProvider(got, ProviderOllama) {
+		t.Fatalf("go-only = %#v", got)
+	}
+	if got := byID["ollama-only"]; got.Provider != ProviderOllama || !HasProvider(got, ProviderOllama) {
+		t.Fatalf("ollama-only = %#v", got)
+	}
+	// Still one row per ID.
+	if len(result.Models) != 4 {
+		t.Fatalf("models = %#v, want free + overlap + go-only + ollama-only", result.Models)
+	}
+}
+
 func TestCatalog_Refresh_merges_go_paid_catalog(t *testing.T) {
 	zenSource := staticSource{models: []zen.Model{{ID: "demo-free"}, {ID: "claude-haiku-4-5"}}}
 	goSource := staticSource{models: []zen.Model{{ID: "deepseek-v4-flash"}, {ID: "demo-free"}}}

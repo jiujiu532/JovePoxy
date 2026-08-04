@@ -275,6 +275,7 @@ export const zh = {
   "models.routeFree": "public + 出口代理",
   "models.routePaid": "OpenCode 密钥池",
   "models.routeOllama": "Ollama 密钥池",
+  "models.routeBoth": "OpenCode + Ollama",
   "models.table.id": "模型 ID",
   "models.table.family": "系列",
   "models.table.kind": "类型",
