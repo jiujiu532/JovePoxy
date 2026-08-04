@@ -7,6 +7,8 @@ type metaKey struct{}
 type requestMeta struct {
 	model               string
 	keyID               string
+	// upstream channel: opencode_free | opencode_paid | ollama_paid
+	upstream            string
 	stream              bool
 	errorClass          string
 	maxTokens           int

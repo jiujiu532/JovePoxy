@@ -50,6 +50,7 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 	meta.reasoningEffort = observability.ReasoningEffort
 	meta.thinkingType = observability.ThinkingType
 	meta.budgetTokens = observability.BudgetTokens
+	meta.upstream = upstreamChannel(free, provider)
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	openAIBody, inputTokens, err := anthropic.ToOpenAIChat(parsed)
 	if err != nil {

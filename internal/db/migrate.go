@@ -26,6 +26,7 @@ var migrations = []migration{
 	{version: 9, sql: requestLogMetaSchema},
 	{version: 10, sql: requestLogUsageSchema},
 	{version: 11, sql: requestLogTTFTSchema},
+	{version: 12, sql: requestLogUpstreamSchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -109,6 +110,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		return validateRequestLogUsageColumns(ctx, tx)
 	case 11:
 		return validateRequestLogTTFTColumn(ctx, tx)
+	case 12:
+		return validateRequestLogUpstreamColumn(ctx, tx)
 	default:
 		return nil
 	}
@@ -188,6 +191,17 @@ func validateRequestLogTTFTColumn(ctx context.Context, tx *sql.Tx) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("migration 11 missing column ttft_ms: %w", ErrMigrationState)
+	}
+	return nil
+}
+
+func validateRequestLogUpstreamColumn(ctx context.Context, tx *sql.Tx) error {
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name = ?", "upstream").Scan(&count); err != nil {
+		return fmt.Errorf("validate migration 12 column upstream: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("migration 12 missing column upstream: %w", ErrMigrationState)
 	}
 	return nil
 }

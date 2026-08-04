@@ -121,6 +121,7 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.stream = parsed.Stream
 	meta.maxTokens = parsed.MaxTokens
 	meta.reasoningEffort = mappedEffort
+	meta.upstream = upstreamChannel(free, provider)
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	// Stream usage is often omitted unless the client opts in; inject for logging.
 	body = ensureStreamIncludeUsage(body, parsed.Stream)
@@ -291,6 +292,18 @@ func classifyModel(catalogModels []models.Model, requested string) (free bool, p
 		}
 	}
 	return false, models.ProviderOpenCode, false
+}
+
+// upstreamChannel labels the data-plane path for request logs (not the HTTP API path).
+func upstreamChannel(free bool, provider models.Provider) string {
+	provider = models.NormalizeProvider(provider)
+	if provider == models.ProviderOllama {
+		return "ollama_paid"
+	}
+	if free {
+		return "opencode_free"
+	}
+	return "opencode_paid"
 }
 
 func ownedBy(provider models.Provider) string {

@@ -140,6 +140,8 @@ export type LogDTO = {
   readonly key_id?: string;
   readonly model: string;
   readonly route: string;
+  /** Data-plane channel: opencode_free | opencode_paid | ollama_paid. */
+  readonly upstream?: string;
   readonly status: number;
   readonly latency_ms: number;
   readonly ttft_ms?: number;

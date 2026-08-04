@@ -37,6 +37,49 @@ function statusKind(status: number): "healthy" | "warning" | "error" | "neutral"
   return "neutral";
 }
 
+type UpstreamChannel = "opencode_free" | "opencode_paid" | "ollama_paid" | "";
+
+function normalizeUpstream(raw: string | undefined): UpstreamChannel {
+  switch ((raw ?? "").trim()) {
+    case "opencode_free":
+      return "opencode_free";
+    case "opencode_paid":
+      return "opencode_paid";
+    case "ollama_paid":
+      return "ollama_paid";
+    default:
+      return "";
+  }
+}
+
+function upstreamLabel(raw: string | undefined, t: Translate): string {
+  switch (normalizeUpstream(raw)) {
+    case "opencode_free":
+      return t("logs.upstreamOpenCodeFree");
+    case "opencode_paid":
+      return t("logs.upstreamOpenCodePaid");
+    case "ollama_paid":
+      return t("logs.upstreamOllamaPaid");
+    default:
+      return t("logs.upstreamUnknown");
+  }
+}
+
+function upstreamBadgeKind(
+  raw: string | undefined,
+): "free" | "warning" | "healthy" | "neutral" {
+  switch (normalizeUpstream(raw)) {
+    case "opencode_free":
+      return "free";
+    case "opencode_paid":
+      return "warning";
+    case "ollama_paid":
+      return "healthy";
+    default:
+      return "neutral";
+  }
+}
+
 function formatLatency(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(ms >= 10000 ? 1 : 2)} s`;
   return `${ms} ms`;
@@ -179,7 +222,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
   const [logs, setLogs] = useState<LogDTO[]>([]);
   const [localKeys, setLocalKeys] = useState<LocalKeyDTO[]>([]);
   const [query, setQuery] = useState("");
-  const [routeFilter, setRouteFilter] = useState("all");
+  const [channelFilter, setChannelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
@@ -220,23 +263,22 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
 
   useEffect(() => {
     setPage(1);
-  }, [query, routeFilter, statusFilter, streamFilter, sortKey]);
-
-  const routes = useMemo(() => {
-    const set = new Set(logs.map((l) => l.route).filter(Boolean));
-    return [...set].sort();
-  }, [logs]);
+  }, [query, channelFilter, statusFilter, streamFilter, sortKey]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = logs.filter((row) => {
-      if (routeFilter !== "all" && row.route !== routeFilter) return false;
+      const channel = normalizeUpstream(row.upstream);
+      if (channelFilter !== "all" && channel !== channelFilter) return false;
       if (!matchStatusBucket(row.status, statusFilter)) return false;
       if (streamFilter === "stream" && !row.stream) return false;
       if (streamFilter === "nonstream" && row.stream) return false;
       if (!q) return true;
       const keyName = keyDisplayName(row.key_id, keyNames, t).toLowerCase();
+      const channelText = upstreamLabel(row.upstream, t).toLowerCase();
       return (
+        channelText.includes(q) ||
+        (row.upstream ?? "").toLowerCase().includes(q) ||
         row.route.toLowerCase().includes(q) ||
         row.model.toLowerCase().includes(q) ||
         String(row.status).includes(q) ||
@@ -254,7 +296,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       return a.latency_ms - b.latency_ms;
     });
     return rows;
-  }, [logs, query, routeFilter, statusFilter, streamFilter, sortKey, keyNames, t]);
+  }, [logs, query, channelFilter, statusFilter, streamFilter, sortKey, keyNames, t]);
 
   const paged = useMemo(
     () => slicePage(filtered, page, pageSize),
@@ -270,7 +312,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
 
   function resetFilters() {
     setQuery("");
-    setRouteFilter("all");
+    setChannelFilter("all");
     setStatusFilter("all");
     setStreamFilter("all");
     setSortKey("newest");
@@ -334,11 +376,13 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
               <>
                 <FilterSelect
                   label={t("logs.routeLabel")}
-                  value={routeFilter}
-                  onChange={setRouteFilter}
+                  value={channelFilter}
+                  onChange={setChannelFilter}
                   options={[
-                    { value: "all", label: t("common.all") },
-                    ...routes.map((route) => ({ value: route, label: route })),
+                    { value: "all", label: t("logs.upstreamAll") },
+                    { value: "opencode_free", label: t("logs.upstreamOpenCodeFree") },
+                    { value: "opencode_paid", label: t("logs.upstreamOpenCodePaid") },
+                    { value: "ollama_paid", label: t("logs.upstreamOllamaPaid") },
                   ]}
                 />
                 <FilterSelect
@@ -421,8 +465,10 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                                 <span className="text-ink-faint">{t("common.none")}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-mono text-[12px] text-ink-muted whitespace-nowrap">
-                              {row.route}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <Badge kind={upstreamBadgeKind(row.upstream)}>
+                                {upstreamLabel(row.upstream, t)}
+                              </Badge>
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <Badge kind={statusKind(row.status)}>{row.status}</Badge>
@@ -560,6 +606,10 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                                       label={t("logs.detailModel")}
                                       value={row.model || t("common.none")}
                                       mono
+                                    />
+                                    <DetailField
+                                      label={t("logs.detailUpstream")}
+                                      value={upstreamLabel(row.upstream, t)}
                                     />
                                     <DetailField
                                       label={t("logs.detailRoute")}

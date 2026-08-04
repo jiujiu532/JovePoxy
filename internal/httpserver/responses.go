@@ -47,6 +47,7 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 	observability := parsed.Observability()
 	meta.maxTokens = observability.MaxTokens
 	meta.reasoningEffort = observability.ReasoningEffort
+	meta.upstream = upstreamChannel(free, provider)
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	chatBody, err := responses.ToOpenAIChat(parsed)
 	if err != nil {

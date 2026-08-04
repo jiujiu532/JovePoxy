@@ -176,3 +176,8 @@ ALTER TABLE request_logs ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAU
 const requestLogTTFTSchema = `
 ALTER TABLE request_logs ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0;
 `
+
+// request_logs upstream channel: opencode_free | opencode_paid | ollama_paid.
+const requestLogUpstreamSchema = `
+ALTER TABLE request_logs ADD COLUMN upstream TEXT NOT NULL DEFAULT '';
+`

@@ -230,6 +230,8 @@ type logDTO struct {
 	KeyID               string    `json:"key_id,omitempty"`
 	Model               string    `json:"model"`
 	Route               string    `json:"route"`
+	// Upstream is the data-plane channel: opencode_free | opencode_paid | ollama_paid.
+	Upstream            string    `json:"upstream,omitempty"`
 	Status              int       `json:"status"`
 	LatencyMS           int64     `json:"latency_ms"`
 	TTFTMS              int64     `json:"ttft_ms"`
@@ -454,6 +456,7 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 	for _, entry := range entries {
 		out = append(out, logDTO{
 			ID: entry.ID, KeyID: entry.KeyID, Model: entry.Model, Route: entry.Route,
+			Upstream: entry.Upstream,
 			Status: entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
 			Stream: entry.Stream, ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,

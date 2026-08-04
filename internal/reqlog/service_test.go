@@ -20,7 +20,7 @@ func TestService_record_persists_and_counts(t *testing.T) {
 
 	// When
 	service.Record(context.Background(), reqlog.Entry{
-		Model: "demo-free", Route: "/v1/chat/completions", Status: 200, LatencyMS: 12, TTFTMS: 5, Stream: true,
+		Model: "demo-free", Route: "/v1/chat/completions", Upstream: "opencode_free", Status: 200, LatencyMS: 12, TTFTMS: 5, Stream: true,
 	})
 	service.Record(context.Background(), reqlog.Entry{
 		Model: "demo-free", Route: "/v1/messages", Status: 429, LatencyMS: 3,
@@ -46,6 +46,9 @@ func TestService_record_persists_and_counts(t *testing.T) {
 		if item.Route == "/v1/chat/completions" && item.Status == 200 {
 			if item.TTFTMS != 5 {
 				t.Fatalf("ttft_ms = %d, want 5", item.TTFTMS)
+			}
+			if item.Upstream != "opencode_free" {
+				t.Fatalf("upstream = %q, want opencode_free", item.Upstream)
 			}
 			foundTTFT = true
 		}
