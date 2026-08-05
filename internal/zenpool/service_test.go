@@ -309,6 +309,57 @@ func TestService_bench_expires(t *testing.T) {
 	}
 }
 
+
+func TestSetBenchMinutes_ClampsAndMarkBenchDefault(t *testing.T) {
+	clock := &mutableClock{now: time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)}
+	database, err := db.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	box, err := crypto.NewBox(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	service := zenpool.NewService(database, box, clock)
+	if got := service.BenchMinutes(); got != 10 {
+		t.Fatalf("default BenchMinutes=%d want 10", got)
+	}
+	service.SetBenchMinutes(0)
+	if got := service.BenchMinutes(); got != 1 {
+		t.Fatalf("clamp low BenchMinutes=%d want 1", got)
+	}
+	service.SetBenchMinutes(999)
+	if got := service.BenchMinutes(); got != 60 {
+		t.Fatalf("clamp high BenchMinutes=%d want 60", got)
+	}
+	service.SetBenchMinutes(3)
+	if got := service.BenchMinutes(); got != 3 {
+		t.Fatalf("BenchMinutes=%d want 3", got)
+	}
+	if got := service.BenchDuration(); got != 3*time.Minute {
+		t.Fatalf("BenchDuration=%v want 3m", got)
+	}
+	ctx := context.Background()
+	meta, err := service.Create(ctx, zenpool.CreateInput{Label: "bench-cfg", Secret: "secret-bench-cfg"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// duration 0 must use service setting (3m)
+	service.MarkBench(meta.ID, 0)
+	if !service.IsBenched(meta.ID, clock.Now()) {
+		t.Fatal("should be benched immediately")
+	}
+	clock.now = clock.now.Add(2 * time.Minute)
+	if !service.IsBenched(meta.ID, clock.Now()) {
+		t.Fatal("should still be benched at +2m with 3m window")
+	}
+	clock.now = clock.now.Add(2 * time.Minute)
+	if service.IsBenched(meta.ID, clock.Now()) {
+		t.Fatal("bench should expire after 3m")
+	}
+}
+
 type mutableClock struct{ now time.Time }
 
 func (c *mutableClock) Now() time.Time { return c.now }

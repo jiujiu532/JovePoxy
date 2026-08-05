@@ -44,6 +44,18 @@ function clampAttempts(value: number | undefined | null): AttemptCount {
   return 3;
 }
 
+const DEFAULT_BENCH_MINUTES = 10;
+const MIN_BENCH_MINUTES = 1;
+const MAX_BENCH_MINUTES = 60;
+
+function clampBenchMinutes(value: number | undefined | null): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_BENCH_MINUTES;
+  if (n < MIN_BENCH_MINUTES) return MIN_BENCH_MINUTES;
+  if (n > MAX_BENCH_MINUTES) return MAX_BENCH_MINUTES;
+  return Math.round(n);
+}
+
 function normalizePolicy(value: string | undefined | null): LoadPolicy {
   return value === "sticky" ? "sticky" : "spread";
 }
@@ -252,33 +264,43 @@ export function SettingsPage() {
   // Snapshot = last known server/runtime values; draft = editable form.
   const [livePolicy, setLivePolicy] = useState<LoadPolicy>("spread");
   const [liveAttempts, setLiveAttempts] = useState<AttemptCount>(2);
+  const [liveBenchMinutes, setLiveBenchMinutes] = useState(DEFAULT_BENCH_MINUTES);
   const [draftPolicy, setDraftPolicy] = useState<LoadPolicy>("spread");
   const [draftAttempts, setDraftAttempts] = useState<AttemptCount>(2);
+  const [draftBenchMinutes, setDraftBenchMinutes] = useState(DEFAULT_BENCH_MINUTES);
   const [savingPool, setSavingPool] = useState(false);
 
-  const poolDirty = draftPolicy !== livePolicy || draftAttempts !== liveAttempts;
+  const poolDirty =
+    draftPolicy !== livePolicy ||
+    draftAttempts !== liveAttempts ||
+    draftBenchMinutes !== liveBenchMinutes;
 
   const effectiveSummary = useMemo(
     () =>
       t("settings.poolEffectiveSummary", {
         policy: `${livePolicy} · ${policyLabel(t, livePolicy)}`,
         attempts: liveAttempts,
+        bench: liveBenchMinutes,
       }),
-    [livePolicy, liveAttempts, t],
+    [livePolicy, liveAttempts, liveBenchMinutes, t],
   );
 
   function applyPoolSnapshot(next: SettingsDTO) {
     const policy = normalizePolicy(next.load_policy);
     const attempts = clampAttempts(next.max_failover_attempts);
+    const bench = clampBenchMinutes(next.bench_duration_minutes);
     setLivePolicy(policy);
     setLiveAttempts(attempts);
+    setLiveBenchMinutes(bench);
     setDraftPolicy(policy);
     setDraftAttempts(attempts);
+    setDraftBenchMinutes(bench);
   }
 
   function discardPoolDraft() {
     setDraftPolicy(livePolicy);
     setDraftAttempts(liveAttempts);
+    setDraftBenchMinutes(liveBenchMinutes);
   }
 
   async function load() {
@@ -340,6 +362,7 @@ export function SettingsPage() {
       const next = await api.patchSettings({
         load_policy: draftPolicy,
         max_failover_attempts: draftAttempts,
+        bench_duration_minutes: draftBenchMinutes,
       });
       setSettings(next);
       applyPoolSnapshot(next);
@@ -537,6 +560,58 @@ export function SettingsPage() {
                 </p>
               </div>
 
+              {/* 401 bench isolation minutes */}
+              <div className="grid gap-2">
+                <div className="inline-flex items-center gap-1.5">
+                  <span className="text-[13px] font-medium text-ink">
+                    {t("settings.benchDurationMinutes")}
+                  </span>
+                  <HelpTip
+                    content={t("settings.benchDurationMinutesTip")}
+                    label={t("settings.benchDurationMinutes")}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SettingSegmented
+                    aria-label={t("settings.benchDurationMinutes")}
+                    value={
+                      [5, 10, 15, 30].includes(draftBenchMinutes)
+                        ? String(draftBenchMinutes)
+                        : "custom"
+                    }
+                    onChange={(v) => {
+                      if (v === "custom") return;
+                      setDraftBenchMinutes(clampBenchMinutes(Number(v)));
+                    }}
+                    options={[
+                      { value: "5", label: "5" },
+                      { value: "10", label: "10" },
+                      { value: "15", label: "15" },
+                      { value: "30", label: "30" },
+                      { value: "custom", label: "…" },
+                    ]}
+                  />
+                  <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-muted">
+                    <span className="sr-only">{t("settings.benchDurationMinutes")}</span>
+                    <input
+                      type="number"
+                      min={MIN_BENCH_MINUTES}
+                      max={MAX_BENCH_MINUTES}
+                      step={1}
+                      value={draftBenchMinutes}
+                      onChange={(event) =>
+                        setDraftBenchMinutes(clampBenchMinutes(Number(event.target.value)))
+                      }
+                      className="w-20 border-2 border-border bg-paper px-2 py-1.5 font-mono text-[13px] text-ink shadow-[2px_2px_0_var(--border)] outline-none focus:border-ink"
+                    />
+                    <span>min</span>
+                  </label>
+                </div>
+                <p className="text-[12px] leading-relaxed text-ink-muted">
+                  {t("settings.benchDurationPath")}
+                </p>
+              </div>
+
               {/* Key pool deep-link */}
               <div className="flex flex-col gap-2 rounded-none border-2 border-border bg-paper-2 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-start gap-2.5">
@@ -624,6 +699,7 @@ export function SettingsPage() {
                   ["MODEL_CACHE_TTL", t("settings.envModelCacheTtl")],
                   ["ZEN_LOAD_POLICY", t("settings.envZenLoadPolicy")],
                   ["ZEN_MAX_ATTEMPTS", t("settings.envZenMaxAttempts")],
+                  ["ZEN_BENCH_MINUTES", t("settings.envZenBenchMinutes")],
                 ] as const
               ).map(([env, tip]) => (
                 <div

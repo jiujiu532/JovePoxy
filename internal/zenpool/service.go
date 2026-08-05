@@ -45,8 +45,9 @@ type Service struct {
 	clock Clock
 	rr    atomic.Uint64
 
-	loadPolicy  atomic.Value // LoadPolicy
-	maxAttempts atomic.Int32
+	loadPolicy     atomic.Value // LoadPolicy
+	maxAttempts    atomic.Int32
+	benchDurationN atomic.Int64 // nanoseconds; 401 process-memory bench window
 
 	benchMu sync.Mutex
 	benched map[KeyID]time.Time // until
@@ -86,6 +87,7 @@ func NewServiceWithStore(store Store, box *crypto.Box, clock Clock) *Service {
 	}
 	service.loadPolicy.Store(LoadPolicySpread)
 	service.maxAttempts.Store(int32(DefaultMaxAttempts))
+	service.benchDurationN.Store(int64(DefaultBenchDuration))
 	return service
 }
 
@@ -130,6 +132,41 @@ func (service *Service) SetMaxAttempts(n int) {
 	service.maxAttempts.Store(int32(clampMaxAttempts(n)))
 }
 
+// BenchDuration returns the process-memory 401 isolation window.
+func (service *Service) BenchDuration() time.Duration {
+	if service == nil {
+		return DefaultBenchDuration
+	}
+	n := service.benchDurationN.Load()
+	if n <= 0 {
+		return DefaultBenchDuration
+	}
+	return time.Duration(n)
+}
+
+// BenchMinutes returns BenchDuration as whole minutes (rounded, at least 1 when non-zero).
+func (service *Service) BenchMinutes() int {
+	d := service.BenchDuration()
+	mins := int(d / time.Minute)
+	if d%time.Minute != 0 {
+		mins++
+	}
+	return clampBenchMinutes(mins)
+}
+
+// SetBenchDuration sets the 401 isolation window; values outside 1..60 minutes are clamped.
+func (service *Service) SetBenchDuration(d time.Duration) {
+	if service == nil {
+		return
+	}
+	service.benchDurationN.Store(int64(clampBenchDuration(d)))
+}
+
+// SetBenchMinutes sets isolation from whole minutes (1..60).
+func (service *Service) SetBenchMinutes(minutes int) {
+	service.SetBenchDuration(time.Duration(clampBenchMinutes(minutes)) * time.Minute)
+}
+
 func clampMaxAttempts(n int) int {
 	if n < MinMaxAttempts {
 		return MinMaxAttempts
@@ -138,6 +175,27 @@ func clampMaxAttempts(n int) int {
 		return MaxMaxAttempts
 	}
 	return n
+}
+
+func clampBenchMinutes(n int) int {
+	if n < MinBenchMinutes {
+		return MinBenchMinutes
+	}
+	if n > MaxBenchMinutes {
+		return MaxBenchMinutes
+	}
+	return n
+}
+
+func clampBenchDuration(d time.Duration) time.Duration {
+	if d <= 0 {
+		return DefaultBenchDuration
+	}
+	mins := int(d / time.Minute)
+	if d%time.Minute != 0 {
+		mins++
+	}
+	return time.Duration(clampBenchMinutes(mins)) * time.Minute
 }
 
 // Create encrypts and stores an upstream API key. The secret is never returned again.
@@ -281,12 +339,13 @@ func (service *Service) MarkCooldown(ctx context.Context, id KeyID, duration tim
 }
 
 // MarkBench puts a key into process-memory bench after 401. Auto-expires; never deletes the key.
+// duration <= 0 uses the service BenchDuration() setting (default 10m).
 func (service *Service) MarkBench(id KeyID, duration time.Duration) {
 	if service == nil || id == "" {
 		return
 	}
 	if duration <= 0 {
-		duration = DefaultBenchDuration
+		duration = service.BenchDuration()
 	}
 	until := service.clock.Now().UTC().Add(duration)
 	service.benchMu.Lock()

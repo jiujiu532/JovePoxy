@@ -298,11 +298,14 @@ type settingsResponse struct {
 	LoadPolicy string `json:"load_policy"`
 	// MaxFailoverAttempts is ProxyPaid attempts per request (2..4, default 2).
 	MaxFailoverAttempts int `json:"max_failover_attempts"`
+	// BenchDurationMinutes is process-memory 401 isolation window (1..60, default 10).
+	BenchDurationMinutes int `json:"bench_duration_minutes"`
 }
 
 type patchSettingsRequest struct {
-	LoadPolicy          *string `json:"load_policy"`
-	MaxFailoverAttempts *int    `json:"max_failover_attempts"`
+	LoadPolicy           *string `json:"load_policy"`
+	MaxFailoverAttempts  *int    `json:"max_failover_attempts"`
+	BenchDurationMinutes *int    `json:"bench_duration_minutes"`
 }
 
 type overviewResponse struct {

@@ -95,7 +95,8 @@ func (service *Service) RecordPaidOutcome(ctx context.Context, selected Selected
 	service.noteProviderOutcome(provider, is5xx, now)
 	health = updateHealthFailure(health, class, now)
 	if class == healthErrorUnauthorized {
-		service.MarkBench(selected.ID, DefaultBenchDuration)
+		// duration 0 → service BenchDuration() (admin/env configurable, default 10m)
+		service.MarkBench(selected.ID, 0)
 	} else {
 		until := now.Add(cooldownForFailures(health.ConsecutiveFailures))
 		if setErr := service.store.SetCooldown(ctx, selected.ID, &until); setErr != nil {

@@ -92,6 +92,9 @@ const (
 	UnauthorizedCooldown = 5 * time.Minute
 	// DefaultBenchDuration is process-memory bench window after 401 (independent of SQLite cooldown).
 	DefaultBenchDuration = 10 * time.Minute
+	// Bench duration bounds for admin / env configuration (minutes).
+	MinBenchMinutes = 1
+	MaxBenchMinutes = 60
 	// DefaultMaxAttempts is primary + one failover (legacy ProxyPaid semantics).
 	DefaultMaxAttempts = 2
 	MinMaxAttempts     = 2

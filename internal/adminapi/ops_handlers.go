@@ -272,9 +272,11 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 	}
 	loadPolicy := string(zenpool.LoadPolicySpread)
 	maxAttempts := zenpool.DefaultMaxAttempts
+	benchMinutes := int(zenpool.DefaultBenchDuration / time.Minute)
 	if server.pool != nil {
 		loadPolicy = string(server.pool.LoadPolicy())
 		maxAttempts = server.pool.MaxAttempts()
+		benchMinutes = server.pool.BenchMinutes()
 	}
 	writeJSON(writer, http.StatusOK, settingsResponse{
 		ModelCacheTTLSeconds: int(server.cfg.ModelCacheTTL.Seconds()),
@@ -291,6 +293,7 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 		HTTPSProxyConfigured: server.cfg.HTTPSProxy != nil,
 		LoadPolicy:           loadPolicy,
 		MaxFailoverAttempts:  maxAttempts,
+		BenchDurationMinutes: benchMinutes,
 	})
 }
 
@@ -304,7 +307,7 @@ func (server server) patchSettings(writer http.ResponseWriter, request *http.Req
 		writeError(writer, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if body.LoadPolicy == nil && body.MaxFailoverAttempts == nil {
+	if body.LoadPolicy == nil && body.MaxFailoverAttempts == nil && body.BenchDurationMinutes == nil {
 		writeError(writer, http.StatusBadRequest, "no settings fields to update")
 		return
 	}
@@ -323,6 +326,14 @@ func (server server) patchSettings(writer http.ResponseWriter, request *http.Req
 			return
 		}
 		server.pool.SetMaxAttempts(n)
+	}
+	if body.BenchDurationMinutes != nil {
+		n := *body.BenchDurationMinutes
+		if n < zenpool.MinBenchMinutes || n > zenpool.MaxBenchMinutes {
+			writeError(writer, http.StatusBadRequest, "bench_duration_minutes must be 1..60")
+			return
+		}
+		server.pool.SetBenchMinutes(n)
 	}
 	// Return updated snapshot (same shape as GET).
 	server.getSettings(writer, request)

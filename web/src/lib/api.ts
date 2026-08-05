@@ -210,6 +210,8 @@ export type SettingsDTO = {
   readonly load_policy?: "spread" | "sticky" | string;
   /** ProxyPaid attempts per request (2..4) */
   readonly max_failover_attempts?: number;
+  /** process-memory 401 isolation minutes (1..60) */
+  readonly bench_duration_minutes?: number;
 };
 export type OverviewQuotaNarrativeDTO = {
   readonly effective_remaining: number;
@@ -543,6 +545,7 @@ export const api = {
   patchSettings: (body: {
     load_policy?: "spread" | "sticky";
     max_failover_attempts?: number;
+    bench_duration_minutes?: number;
   }) =>
     request<SettingsDTO>("/api/admin/settings", {
       method: "PATCH",

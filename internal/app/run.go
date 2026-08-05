@@ -92,6 +92,11 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 			pool.SetMaxAttempts(n)
 		}
 	}
+	if raw := strings.TrimSpace(os.Getenv("ZEN_BENCH_MINUTES")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			pool.SetBenchMinutes(n)
+		}
+	}
 	catalog, err := models.NewCatalog(zenClient, models.Settings{
 		TTL:          cfg.ModelCacheTTL,
 		OpenCodePaid: goModelsSource{pool: pool, client: zenGoClient},
