@@ -58,6 +58,11 @@ type Service struct {
 	// Overlay on List/Acquire so recovery and intermediate successes stay visible.
 	healthDirty   map[KeyID]Health
 	probeSequence uint64
+
+	// providerWindows tracks short-window dial outcomes per provider for the
+	// pool-wide 5xx storm guard (secret-free counts only).
+	guardMu         sync.Mutex
+	providerWindows map[Provider]*providerOutcomeWindow
 }
 
 // NewService constructs a SQLite-backed pool service.
@@ -71,12 +76,13 @@ func NewServiceWithStore(store Store, box *crypto.Box, clock Clock) *Service {
 		clock = systemClock{}
 	}
 	service := &Service{
-		store:         store,
-		box:           box,
-		clock:         clock,
-		benched:       make(map[KeyID]time.Time),
-		healthRuntime: make(map[KeyID]*healthRuntime),
-		healthDirty:   make(map[KeyID]Health),
+		store:           store,
+		box:             box,
+		clock:           clock,
+		benched:         make(map[KeyID]time.Time),
+		healthRuntime:   make(map[KeyID]*healthRuntime),
+		healthDirty:     make(map[KeyID]Health),
+		providerWindows: make(map[Provider]*providerOutcomeWindow),
 	}
 	service.loadPolicy.Store(LoadPolicySpread)
 	service.maxAttempts.Store(int32(DefaultMaxAttempts))
@@ -486,7 +492,13 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 			decryptSkipped[chosen.record.id] = struct{}{}
 			continue
 		}
-		return Selected{ID: chosen.record.id, Secret: secret, Label: chosen.record.label, Probing: probing}, nil
+		return Selected{
+			ID:       chosen.record.id,
+			Secret:   secret,
+			Label:    chosen.record.label,
+			Probing:  probing,
+			Provider: provider,
+		}, nil
 	}
 	return Selected{}, ErrNoHealthyKey
 }

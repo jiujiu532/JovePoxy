@@ -76,6 +76,9 @@ type Selected struct {
 	Secret  string
 	Label   string
 	Probing bool
+	// Provider is the pool that produced this selection (opencode|ollama).
+	// RecordPaidOutcome uses it for provider-scoped health and 5xx storm guard.
+	Provider Provider
 }
 
 // Cooldown holds how long a key should rest after a failure class.
