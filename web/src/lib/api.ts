@@ -211,6 +211,27 @@ export type OpsKPIsDTO = {
   readonly status_5xx: number;
 };
 
+export type RoutingUpstreamKPI = {
+  readonly upstream: string;
+  readonly requests: number;
+  /** 0..1; null/undefined when requests==0 */
+  readonly success_rate?: number | null;
+  readonly latency_p50_ms?: number | null;
+  readonly latency_p95_ms?: number | null;
+  readonly status_2xx: number;
+  readonly status_429: number;
+  /** 400–499 excluding 429; optional for older backends. */
+  readonly status_4xx?: number;
+  readonly status_5xx: number;
+};
+
+/** Final upstream-channel KPIs from request-log metadata, without bodies or secrets. */
+export type RoutingKPIsDTO = {
+  readonly window: OpsWindow | string;
+  readonly requests: number;
+  readonly by_upstream: ReadonlyArray<RoutingUpstreamKPI>;
+};
+
 export type OverviewDTO = {
   readonly requests_today: number;
   readonly tokens_today: number;
@@ -237,6 +258,8 @@ export type OverviewDTO = {
   readonly zen_pool?: ZenPoolSummaryDTO;
   /** Time-window request KPIs (reqlog; owned by overview-ops-kpis). */
   readonly ops_kpis?: OpsKPIsDTO;
+  /** Additive final-channel aggregates for the requested OpsWindow. */
+  readonly routing_kpis?: RoutingKPIsDTO;
   readonly updated_at?: string;
 };
 export type MetricsDTO = {

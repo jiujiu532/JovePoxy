@@ -377,3 +377,82 @@ func loginCookie(t *testing.T, handler http.Handler, password string) *http.Cook
 	}
 	return cookies[0]
 }
+
+func TestAdminAPI_overview_routing_kpis(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	logs := reqlog.NewService(database, nil)
+	handler := adminapi.New(adminapi.Dependencies{
+		Auth:   authService,
+		Logs:   logs,
+		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false},
+	})
+	cookie := loginCookie(t, handler, "secret-admin")
+
+	now := time.Now().UTC()
+	for _, entry := range []reqlog.Entry{
+		{Model: "m", Route: "/v1/chat/completions", Upstream: "opencode_paid", Status: http.StatusOK, LatencyMS: 12, CreatedAt: now.Add(-5 * time.Minute)},
+		{Model: "m", Route: "/v1/chat/completions", Upstream: "ollama_paid", Status: http.StatusTooManyRequests, LatencyMS: 20, CreatedAt: now.Add(-4 * time.Minute)},
+		{Model: "m", Route: "/v1/chat/completions", Upstream: "", Status: http.StatusBadGateway, LatencyMS: 30, CreatedAt: now.Add(-3 * time.Minute)},
+		{Model: "old", Route: "/v1/chat/completions", Upstream: "opencode_paid", Status: http.StatusOK, LatencyMS: 1, CreatedAt: now.Add(-2 * time.Hour)},
+	} {
+		logs.Record(ctx, entry)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		listed, listErr := logs.List(ctx, 20, 0)
+		if listErr == nil && len(listed) >= 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("logs not persisted: err=%v count=%d", listErr, len(listed))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview?window=1h", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("overview status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Routing *struct {
+			Window     string `json:"window"`
+			Requests   int64  `json:"requests"`
+			ByUpstream []struct {
+				Upstream  string `json:"upstream"`
+				Requests  int64  `json:"requests"`
+				Status2xx int64  `json:"status_2xx"`
+				Status429 int64  `json:"status_429"`
+				Status5xx int64  `json:"status_5xx"`
+			} `json:"by_upstream"`
+		} `json:"routing_kpis"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode overview: %v", err)
+	}
+	if payload.Routing == nil || payload.Routing.Window != "1h" || payload.Routing.Requests != 3 {
+		t.Fatalf("routing_kpis=%+v", payload.Routing)
+	}
+	by := make(map[string]int64)
+	for _, item := range payload.Routing.ByUpstream {
+		by[item.Upstream] = item.Requests
+	}
+	if by["opencode_paid"] != 1 || by["ollama_paid"] != 1 || by["unknown"] != 1 {
+		t.Fatalf("unexpected upstream aggregates: %#v", by)
+	}
+	if _, exists := by[""]; exists {
+		t.Fatalf("legacy empty upstream must normalize to unknown: %#v", by)
+	}
+}

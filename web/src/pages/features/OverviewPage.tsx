@@ -22,6 +22,7 @@ import {
   type DateRangeValue,
 } from "@/components";
 import { StatusStackBar } from "@/components/charts";
+import { RoutingChannelsCard } from "@/components/RoutingChannelsCard";
 import {
   ModelCallTrendChart,
   ModelRankBars,
@@ -35,7 +36,9 @@ import {
   api,
   type LogDTO,
   type OpsKPIsDTO,
+  type OpsWindow,
   type OverviewDTO,
+  type RoutingKPIsDTO,
   type UsageRecordDTO,
   type ZenPoolSummaryDTO,
 } from "@/lib/api";
@@ -534,8 +537,12 @@ export function OverviewPage() {
   const [softError, setSoftError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => presetRange("7d"));
+  const [routingWindow, setRoutingWindow] = useState<OpsWindow>("24h");
+  const [routingKpis, setRoutingKpis] = useState<RoutingKPIsDTO | null>(null);
+  const [routingLoading, setRoutingLoading] = useState(false);
   /** Monotonic sequence so fast range changes drop stale responses. */
   const loadSeqRef = useRef(0);
+  const routingSeqRef = useRef(0);
 
   const rangeText = useMemo(() => rangeLabel(dateRange, t), [dateRange, t]);
   const rangePickerLabels = useMemo(
@@ -590,8 +597,7 @@ export function OverviewPage() {
     const soft = Boolean(opts?.soft);
     if (!soft) setLoading(true);
     try {
-      const opsWindow = opsWindowForRange(dateRange);
-      const overview = await api.overview(opsWindow);
+      const overview = await api.overview(opsWindowForRange(dateRange));
       if (seq !== loadSeqRef.current) return;
       setData(overview);
       setError(null);
@@ -638,12 +644,33 @@ export function OverviewPage() {
     }
   }
 
+  async function loadRouting(window: OpsWindow) {
+    const seq = ++routingSeqRef.current;
+    setRoutingLoading(true);
+    try {
+      const overview = await api.overview(window);
+      if (seq !== routingSeqRef.current) return;
+      setRoutingKpis(overview.routing_kpis ?? null);
+    } catch (err) {
+      if (seq !== routingSeqRef.current) return;
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
+      setSoftError(err instanceof Error ? err.message : t("common.loadFailed"));
+    } finally {
+      if (seq === routingSeqRef.current) setRoutingLoading(false);
+    }
+  }
+
   useEffect(() => {
     const seq = ++loadSeqRef.current;
     // Soft re-fetch when range changes so the page does not flash full skeleton.
     void load({ soft: data != null, seq });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load closes over latest range via deps
   }, [navigate, rangeFromIso, rangeToIso]);
+
+  useEffect(() => {
+    void loadRouting(routingWindow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run for routing window
+  }, [routingWindow]);
 
   // Full-page skeleton only on the initial hard load (no data yet).
   if (loading && data == null) {
@@ -799,6 +826,14 @@ export function OverviewPage() {
           onOpen={() => void navigate("/app/key-pool")}
         />
       </div>
+
+      <RoutingChannelsCard
+        kpis={routingKpis}
+        window={routingWindow}
+        onWindowChange={setRoutingWindow}
+        loading={routingLoading}
+        t={t}
+      />
 
       {dataTruncated ? (
         <p

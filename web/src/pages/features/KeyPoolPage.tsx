@@ -35,6 +35,7 @@ import {
   useToast,
 } from "@/components";
 import { useProviderTab } from "@/hooks/useProviderTab";
+import { KeyPoolSharePanel } from "@/components/KeyPoolSharePanel";
 import { api, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
 import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import {
@@ -482,6 +483,12 @@ export function KeyPoolPage() {
                 tone: "accent",
               },
             ]}
+          />
+
+          <KeyPoolSharePanel
+            keys={keys}
+            nowMs={nowMs}
+            provider={provider}
           />
 
           <SectionPanel

@@ -291,8 +291,10 @@ type overviewResponse struct {
 	// ZenPool is owned by the zenpool status surface; do not merge quota narrative here.
 	ZenPool *zenPoolSummaryDTO `json:"zen_pool,omitempty"`
 	// OpsKPIs is owned by the overview-ops-kpis surface (reqlog time-window aggregates).
-	OpsKPIs   *analytics.OpsKPIs `json:"ops_kpis,omitempty"`
-	UpdatedAt time.Time          `json:"updated_at"`
+	OpsKPIs *analytics.OpsKPIs `json:"ops_kpis,omitempty"`
+	// RoutingKPIs groups the same window's request metadata by final upstream channel.
+	RoutingKPIs *analytics.RoutingKPIs `json:"routing_kpis,omitempty"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 }
 
 func mapModels(result models.Result) modelsResponse {

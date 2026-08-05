@@ -19,10 +19,12 @@ import (
 
 func (server server) overview(writer http.ResponseWriter, request *http.Request) {
 	window := analytics.NormalizeWindow(request.URL.Query().Get("window"))
+	opsKPIs, routingKPIs := server.buildWindowKPIs(request, window)
 	if server.analytics == nil {
 		resp := overviewResponse{ByModel: nil}
 		resp.ZenPool = server.zenPoolSummary(request)
-		resp.OpsKPIs = server.buildOpsKPIs(request, window)
+		resp.OpsKPIs = opsKPIs
+		resp.RoutingKPIs = routingKPIs
 		writeJSON(writer, http.StatusOK, resp)
 		return
 	}
@@ -37,26 +39,32 @@ func (server server) overview(writer http.ResponseWriter, request *http.Request)
 	}
 	resp := mapOverview(overview)
 	resp.ZenPool = server.zenPoolSummary(request)
-	resp.OpsKPIs = server.buildOpsKPIs(request, window)
+	resp.OpsKPIs = opsKPIs
+	resp.RoutingKPIs = routingKPIs
 	writeJSON(writer, http.StatusOK, resp)
 }
 
-// buildOpsKPIs aggregates reqlog metadata for the requested window.
-// Prefer persisted List; fall back to in-memory Recent. Never panics on empty logs.
-func (server server) buildOpsKPIs(request *http.Request, window string) *analytics.OpsKPIs {
-	now := time.Now().UTC()
-	const limit = 5000
-	var entries []reqlog.Entry
-	if server.logs != nil {
-		listed, err := server.logs.List(request.Context(), limit, 0)
-		if err != nil {
-			entries = server.logs.Recent(limit)
-		} else {
-			entries = listed
-		}
+const overviewLogLimit = 5000
+
+// loadOverviewLogEntries prefers persisted logs and falls back to in-memory recent logs.
+func (server server) loadOverviewLogEntries(request *http.Request) []reqlog.Entry {
+	if server.logs == nil {
+		return nil
 	}
-	kpis := analytics.AggregateOpsKPIs(entries, window, now)
-	return &kpis
+	listed, err := server.logs.List(request.Context(), overviewLogLimit, 0)
+	if err != nil {
+		return server.logs.Recent(overviewLogLimit)
+	}
+	return listed
+}
+
+// buildWindowKPIs aggregates all overview request KPIs from one bounded log load.
+func (server server) buildWindowKPIs(request *http.Request, window string) (*analytics.OpsKPIs, *analytics.RoutingKPIs) {
+	now := time.Now().UTC()
+	entries := server.loadOverviewLogEntries(request)
+	ops := analytics.AggregateOpsKPIs(entries, window, now)
+	routing := analytics.AggregateRoutingKPIs(entries, window, now)
+	return &ops, &routing
 }
 
 func (server server) zenPoolSummary(request *http.Request) *zenPoolSummaryDTO {
