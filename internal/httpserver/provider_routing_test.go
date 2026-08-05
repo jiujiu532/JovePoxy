@@ -385,3 +385,354 @@ func TestServer_routes_opencode_paid_model_to_zen_go_not_public(t *testing.T) {
 		t.Fatalf("go Authorization = %q", goAuth)
 	}
 }
+
+func TestServer_dual_provider_round_robin_across_pools(t *testing.T) {
+	var goHits, ollamaHits int
+	goUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		goHits++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_go","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"go"}}]}`))
+	}))
+	defer goUpstream.Close()
+	ollamaUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		ollamaHits++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_ol","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ol"}}]}`))
+	}))
+	defer ollamaUpstream.Close()
+
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	keyService := keys.NewService(database, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
+	}
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "go-key", Secret: "go-secret-value", Provider: zenpool.ProviderOpenCode,
+	}); err != nil {
+		t.Fatalf("create go key: %v", err)
+	}
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "ol-key", Secret: "ol-secret-value", Provider: zenpool.ProviderOllama,
+	}); err != nil {
+		t.Fatalf("create ollama key: %v", err)
+	}
+
+	goClient, err := zen.NewClient(config.Config{ZenBase: goUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("go client: %v", err)
+	}
+	ollamaClient, err := zen.NewPlainClient(config.Config{UpstreamTimeout: time.Second, OCVersion: "test"}, ollamaUpstream.URL)
+	if err != nil {
+		t.Fatalf("ollama client: %v", err)
+	}
+	catalog, err := models.NewCatalog(
+		testModelSource{models: []zen.Model{{ID: "demo-free"}}},
+		models.Settings{
+			TTL:          time.Hour,
+			OpenCodePaid: testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+			Ollama:       testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	if _, err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	handler := httpserver.New(httpserver.Dependencies{
+		Keys: keyService, Catalog: catalog, Zen: goClient, ZenGo: goClient, Ollama: ollamaClient,
+		Pool: pool, Logs: reqlog.NewService(database, nil), Version: "test", ShowAllModels: true,
+	})
+
+	for i := 0; i < 10; i++ {
+		body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}],"max_tokens":4}`)
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Secret)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if goHits == 0 || ollamaHits == 0 {
+		t.Fatalf("expected both pools used; goHits=%d ollamaHits=%d", goHits, ollamaHits)
+	}
+	if goHits < 3 || ollamaHits < 3 {
+		t.Fatalf("unbalanced RR: goHits=%d ollamaHits=%d", goHits, ollamaHits)
+	}
+}
+
+func TestServer_dual_provider_failover_when_primary_pool_empty(t *testing.T) {
+	var goHits, ollamaHits int
+	goUpstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		goHits++
+	}))
+	defer goUpstream.Close()
+	ollamaUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		ollamaHits++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_ol","object":"chat.completion"}`))
+	}))
+	defer ollamaUpstream.Close()
+
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	keyService := keys.NewService(database, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
+	}
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "ol-key", Secret: "ol-secret-value", Provider: zenpool.ProviderOllama,
+	}); err != nil {
+		t.Fatalf("create ollama key: %v", err)
+	}
+
+	goClient, err := zen.NewClient(config.Config{ZenBase: goUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("go client: %v", err)
+	}
+	ollamaClient, err := zen.NewPlainClient(config.Config{UpstreamTimeout: time.Second, OCVersion: "test"}, ollamaUpstream.URL)
+	if err != nil {
+		t.Fatalf("ollama client: %v", err)
+	}
+	catalog, err := models.NewCatalog(
+		testModelSource{models: []zen.Model{{ID: "demo-free"}}},
+		models.Settings{
+			TTL:          time.Hour,
+			OpenCodePaid: testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+			Ollama:       testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	if _, err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	handler := httpserver.New(httpserver.Dependencies{
+		Keys: keyService, Catalog: catalog, Zen: goClient, ZenGo: goClient, Ollama: ollamaClient,
+		Pool: pool, Logs: reqlog.NewService(database, nil), Version: "test", ShowAllModels: true,
+	})
+
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+created.Secret)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if goHits != 0 {
+		t.Fatalf("goHits=%d, want 0 (no OpenCode keys)", goHits)
+	}
+	if ollamaHits != 1 {
+		t.Fatalf("ollamaHits=%d, want 1", ollamaHits)
+	}
+}
+
+func TestServer_dual_provider_failover_on_upstream_5xx(t *testing.T) {
+	var goHits, ollamaHits int
+	goUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		goHits++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_go","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"go"}}]}`))
+	}))
+	defer goUpstream.Close()
+	ollamaUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		ollamaHits++
+		http.Error(writer, "upstream boom", http.StatusBadGateway)
+	}))
+	defer ollamaUpstream.Close()
+
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	keyService := keys.NewService(database, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
+	}
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "go-key", Secret: "go-secret-value", Provider: zenpool.ProviderOpenCode,
+	}); err != nil {
+		t.Fatalf("create go key: %v", err)
+	}
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "ol-key", Secret: "ol-secret-value", Provider: zenpool.ProviderOllama,
+	}); err != nil {
+		t.Fatalf("create ollama key: %v", err)
+	}
+
+	goClient, err := zen.NewClient(config.Config{ZenBase: goUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("go client: %v", err)
+	}
+	ollamaClient, err := zen.NewPlainClient(config.Config{UpstreamTimeout: time.Second, OCVersion: "test"}, ollamaUpstream.URL)
+	if err != nil {
+		t.Fatalf("ollama client: %v", err)
+	}
+	catalog, err := models.NewCatalog(
+		testModelSource{models: []zen.Model{{ID: "demo-free"}}},
+		models.Settings{
+			TTL:          time.Hour,
+			OpenCodePaid: testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+			Ollama:       testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	if _, err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	handler := httpserver.New(httpserver.Dependencies{
+		Keys: keyService, Catalog: catalog, Zen: goClient, ZenGo: goClient, Ollama: ollamaClient,
+		Pool: pool, Logs: reqlog.NewService(database, nil), Version: "test", ShowAllModels: true,
+	})
+
+	// Fire enough requests that Ollama is selected first on some of them.
+	// Every request must still end 200 via OpenCode failover when Ollama 502s.
+	for i := 0; i < 8; i++ {
+		body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}],"max_tokens":4}`)
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Secret)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status=%d body=%s (goHits=%d ollamaHits=%d)", i, rec.Code, rec.Body.String(), goHits, ollamaHits)
+		}
+	}
+	if ollamaHits == 0 {
+		t.Fatal("expected some ollama attempts so failover path is exercised")
+	}
+	if goHits == 0 {
+		t.Fatal("expected OpenCode hits (direct or failover)")
+	}
+}
+
+func TestServer_dual_provider_failover_on_upstream_4xx(t *testing.T) {
+	// Live Ollama often returns 400/404 for unavailable model SKUs; gateway maps
+	// that to client 502. Cross-provider must still hand off to OpenCode.
+	var goHits, ollamaHits int
+	goUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		goHits++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":"chatcmpl_go","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"go"}}]}`))
+	}))
+	defer goUpstream.Close()
+	ollamaUpstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		ollamaHits++
+		http.Error(writer, `{"error":"model not found"}`, http.StatusNotFound)
+	}))
+	defer ollamaUpstream.Close()
+
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	keyService := keys.NewService(database, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
+	}
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "go-key", Secret: "go-secret-value", Provider: zenpool.ProviderOpenCode,
+	}); err != nil {
+		t.Fatalf("create go key: %v", err)
+	}
+	if _, err := pool.Create(ctx, zenpool.CreateInput{
+		Label: "ol-key", Secret: "ol-secret-value", Provider: zenpool.ProviderOllama,
+	}); err != nil {
+		t.Fatalf("create ollama key: %v", err)
+	}
+
+	goClient, err := zen.NewClient(config.Config{ZenBase: goUpstream.URL, OCVersion: "test", UpstreamTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("go client: %v", err)
+	}
+	ollamaClient, err := zen.NewPlainClient(config.Config{UpstreamTimeout: time.Second, OCVersion: "test"}, ollamaUpstream.URL)
+	if err != nil {
+		t.Fatalf("ollama client: %v", err)
+	}
+	catalog, err := models.NewCatalog(
+		testModelSource{models: []zen.Model{{ID: "demo-free"}}},
+		models.Settings{
+			TTL:          time.Hour,
+			OpenCodePaid: testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+			Ollama:       testModelSource{models: []zen.Model{{ID: "deepseek-v4-pro"}}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	if _, err := catalog.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	handler := httpserver.New(httpserver.Dependencies{
+		Keys: keyService, Catalog: catalog, Zen: goClient, ZenGo: goClient, Ollama: ollamaClient,
+		Pool: pool, Logs: reqlog.NewService(database, nil), Version: "test", ShowAllModels: true,
+	})
+
+	// 8 requests force Ollama-first on half of them via RR; all must end 200.
+	for i := 0; i < 8; i++ {
+		body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}],"max_tokens":4}`)
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+created.Secret)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d status=%d body=%s (goHits=%d ollamaHits=%d)", i, rec.Code, rec.Body.String(), goHits, ollamaHits)
+		}
+	}
+	if ollamaHits == 0 {
+		t.Fatal("expected ollama attempts so 4xx failover path is exercised")
+	}
+	if goHits < ollamaHits {
+		// Every ollama 404 must hand off to go; plus direct go-first successes.
+		t.Fatalf("goHits=%d ollamaHits=%d, want goHits >= ollamaHits (failover)", goHits, ollamaHits)
+	}
+}

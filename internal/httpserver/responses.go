@@ -36,7 +36,7 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 		writeCatalogError(writer, err)
 		return
 	}
-	free, provider, found := classifyModel(result.Models, parsed.Model)
+	free, providers, found := classifyModel(result.Models, parsed.Model)
 	if !found {
 		writeOpenAIError(writer, http.StatusBadRequest, "model is not available", "invalid_request_error", "model", "model_not_available")
 		return
@@ -47,14 +47,14 @@ func (server server) responsesHandler(writer http.ResponseWriter, request *http.
 	observability := parsed.Observability()
 	meta.maxTokens = observability.MaxTokens
 	meta.reasoningEffort = observability.ReasoningEffort
-	meta.upstream = upstreamChannel(free, provider)
-	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	chatBody, err := responses.ToOpenAIChat(parsed)
 	if err != nil {
 		writeOpenAIError(writer, http.StatusBadRequest, err.Error(), "invalid_request_error", "", "invalid_request_error")
 		return
 	}
-	response, err := server.forwardChat(request.Context(), request, chatBody, parsed.Stream, free, provider)
+	response, provider, err := server.forwardChat(request.Context(), request, chatBody, parsed.Stream, free, providers)
+	meta.upstream = upstreamChannel(free, provider)
+	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {
 			return

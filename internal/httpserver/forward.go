@@ -12,26 +12,89 @@ import (
 	"jovepoxy/internal/zenpool"
 )
 
-func (server server) forwardChat(ctx context.Context, request *http.Request, body json.RawMessage, stream bool, free bool, provider models.Provider) (*http.Response, error) {
-	provider = models.NormalizeProvider(provider)
-	// Ollama never uses the Zen free/public path (Bearer public + egress proxy).
-	if provider == models.ProviderOllama {
-		free = false
-	}
+// forwardChat routes free traffic to public Zen, and paid traffic through key pools.
+// providers lists every paid source advertising the model ID (primary + overlap).
+// Dual-provider IDs are rotated request-by-request; on pool/upstream failure the next
+// provider is tried. The returned provider is the one that produced the response
+// (or the last attempted provider when all fail).
+func (server server) forwardChat(ctx context.Context, request *http.Request, body json.RawMessage, stream bool, free bool, providers []models.Provider) (*http.Response, models.Provider, error) {
 	if free {
 		// Free models are IP-limited; rotate egress proxies when configured.
-		return proxypool.ProxyFree(ctx, server.proxies, server.zen, body, stream)
+		resp, err := proxypool.ProxyFree(ctx, server.proxies, server.zen, body, stream)
+		return resp, models.ProviderOpenCode, err
 	}
 	if server.pool == nil {
-		return nil, zenpool.ErrNoHealthyKey
+		return nil, firstProvider(providers), zenpool.ErrNoHealthyKey
 	}
+	order := server.rotateProviders(providers)
 	affinity := zenpool.ConversationAffinityKey(request.Header, body)
-	dialer := server.dialerFor(provider)
-	if dialer == nil {
-		// Misconfigured dialer must not fall through to the wrong upstream.
-		return nil, zenpool.ErrNoHealthyKey
+	var lastErr error
+	lastProvider := firstProvider(order)
+	for _, provider := range order {
+		provider = models.NormalizeProvider(provider)
+		lastProvider = provider
+		dialer := server.dialerFor(provider)
+		if dialer == nil {
+			lastErr = zenpool.ErrNoHealthyKey
+			continue
+		}
+		response, err := zenpool.ProxyPaid(ctx, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider))
+		if err == nil {
+			return response, provider, nil
+		}
+		lastErr = err
+		// Client gone → stop; do not burn the next pool.
+		if ctx.Err() != nil {
+			return nil, provider, err
+		}
+		// Cross-provider: always try the next dual source. ProxyPaid already
+		// exhausted in-pool key failover. Intra-pool ShouldFailover is intentionally
+		// narrower (401/429/5xx); here 4xx like Ollama 404/400 must still hand off
+		// so the sibling pool can serve the same model ID.
+		continue
 	}
-	return zenpool.ProxyPaid(ctx, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider))
+	if lastErr == nil {
+		lastErr = zenpool.ErrNoHealthyKey
+	}
+	return nil, lastProvider, lastErr
+}
+
+func firstProvider(providers []models.Provider) models.Provider {
+	if len(providers) == 0 {
+		return models.ProviderOpenCode
+	}
+	return models.NormalizeProvider(providers[0])
+}
+
+// rotateProviders returns providers starting at the next RR slot.
+// Single-provider lists are returned as-is (no counter bump needed for fairness).
+func (server server) rotateProviders(providers []models.Provider) []models.Provider {
+	normalized := make([]models.Provider, 0, len(providers))
+	seen := make(map[models.Provider]struct{}, len(providers))
+	for _, p := range providers {
+		p = models.NormalizeProvider(p)
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		normalized = append(normalized, p)
+	}
+	if len(normalized) == 0 {
+		return []models.Provider{models.ProviderOpenCode}
+	}
+	if len(normalized) == 1 {
+		return normalized
+	}
+	var start uint64
+	if server.providerRR != nil {
+		start = server.providerRR.Add(1) - 1
+	}
+	out := make([]models.Provider, len(normalized))
+	n := uint64(len(normalized))
+	for i := uint64(0); i < n; i++ {
+		out[i] = normalized[(start+i)%n]
+	}
+	return out
 }
 
 func (server server) dialerFor(provider models.Provider) *zen.Client {

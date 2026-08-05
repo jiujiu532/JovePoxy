@@ -3,6 +3,7 @@ package httpserver
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/models"
@@ -37,6 +38,8 @@ type server struct {
 	logs          *reqlog.Service
 	version       string
 	showAllModels bool
+	// providerRR rotates dual-provider paid models across OpenCode/Ollama pools.
+	providerRR *atomic.Uint64
 }
 
 // New constructs the public data-plane handler. Models and health are public;
@@ -51,6 +54,7 @@ func New(dependencies Dependencies) http.Handler {
 		zenGo: dependencies.ZenGo, ollama: dependencies.Ollama, pool: dependencies.Pool,
 		proxies: dependencies.Proxies, logs: dependencies.Logs, version: version,
 		showAllModels: dependencies.ShowAllModels,
+		providerRR: new(atomic.Uint64),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", server.health)

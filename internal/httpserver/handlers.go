@@ -109,7 +109,7 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 		writeCatalogError(writer, err)
 		return
 	}
-	free, provider, found := classifyModel(result.Models, parsed.Model)
+	free, providers, found := classifyModel(result.Models, parsed.Model)
 	if !found {
 		writeOpenAIError(writer, http.StatusBadRequest, "model is not available", "invalid_request_error", "model", "model_not_available")
 		return
@@ -121,11 +121,11 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.stream = parsed.Stream
 	meta.maxTokens = parsed.MaxTokens
 	meta.reasoningEffort = mappedEffort
-	meta.upstream = upstreamChannel(free, provider)
-	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	// Stream usage is often omitted unless the client opts in; inject for logging.
 	body = ensureStreamIncludeUsage(body, parsed.Stream)
-	response, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, provider)
+	response, provider, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, providers)
+	meta.upstream = upstreamChannel(free, provider)
+	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {
 			return
@@ -280,18 +280,24 @@ func parseChatRequest(writer http.ResponseWriter, request *http.Request) (json.R
 	return json.RawMessage(body), parsed, nil
 }
 
-func classifyModel(catalogModels []models.Model, requested string) (free bool, provider models.Provider, found bool) {
+// classifyModel returns free flag and the full provider set for routing.
+// Dual-provider IDs expose both OpenCode and Ollama so forwardChat can RR/failover.
+func classifyModel(catalogModels []models.Model, requested string) (free bool, providers []models.Provider, found bool) {
 	for _, model := range catalogModels {
 		if string(model.ID) == requested {
-			provider = models.NormalizeProvider(model.Provider)
+			providers = models.ProvidersOf(model)
+			if len(providers) == 0 {
+				providers = []models.Provider{models.NormalizeProvider(model.Provider)}
+			}
 			free = model.Free
-			if provider == models.ProviderOllama {
+			// Ollama-only (or dual with ollama primary) never uses free/public path.
+			if models.NormalizeProvider(model.Provider) == models.ProviderOllama {
 				free = false
 			}
-			return free, provider, true
+			return free, providers, true
 		}
 	}
-	return false, models.ProviderOpenCode, false
+	return false, []models.Provider{models.ProviderOpenCode}, false
 }
 
 // upstreamChannel labels the data-plane path for request logs (not the HTTP API path).
