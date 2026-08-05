@@ -72,8 +72,16 @@ export function useRowSelection(visibleIds: readonly string[]) {
   } as const;
 }
 
-export type StatusFilter = "all" | "enabled" | "disabled" | "cooling" | "benched" | "revoked";
+export type StatusFilter =
+  | "all"
+  | "enabled"
+  | "disabled"
+  | "cooling"
+  | "benched"
+  | "probing"
+  | "revoked";
 
+/** Still used by egress proxy page (manual weight remains valid there). */
 export type WeightFilter = "all" | "1" | "ge2" | "ge5";
 export type LimitFilter = "all" | "unlimited" | "has_rpm" | "has_daily";
 export type SortKey =
@@ -81,6 +89,8 @@ export type SortKey =
   | "label_desc"
   | "weight_desc"
   | "weight_asc"
+  | "health_desc"
+  | "health_asc"
   | "status"
   | "host_asc";
 
@@ -98,6 +108,7 @@ export function compareBySort<T>(
   getters: {
     label: (item: T) => string;
     weight?: (item: T) => number;
+    health?: (item: T) => number;
     host?: (item: T) => string;
     statusRank?: (item: T) => number;
   },
@@ -111,6 +122,10 @@ export function compareBySort<T>(
       return (getters.weight?.(b) ?? 0) - (getters.weight?.(a) ?? 0);
     case "weight_asc":
       return (getters.weight?.(a) ?? 0) - (getters.weight?.(b) ?? 0);
+    case "health_desc":
+      return (getters.health?.(b) ?? 0) - (getters.health?.(a) ?? 0);
+    case "health_asc":
+      return (getters.health?.(a) ?? 0) - (getters.health?.(b) ?? 0);
     case "host_asc":
       return (getters.host?.(a) ?? "").localeCompare(getters.host?.(b) ?? "", "zh");
     case "status":

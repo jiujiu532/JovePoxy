@@ -19,15 +19,15 @@ func TestTrafficShares_singleKey(t *testing.T) {
 	}
 }
 
-func TestTrafficShares_weighted1to3(t *testing.T) {
+func TestTrafficShares_selectionScore1to3(t *testing.T) {
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	list := []zenpool.Metadata{
-		{ID: "a", Weight: 1, Enabled: true},
-		{ID: "b", Weight: 3, Enabled: true},
+		{ID: "a", Weight: 99, Enabled: true, SelectionScore: 1, HealthScore: 10},
+		{ID: "b", Weight: 1, Enabled: true, SelectionScore: 3, HealthScore: 30},
 	}
 	shares := zenpool.TrafficShares(list, now, nil)
 	if math.Abs(shares[0]-25) > 0.001 || math.Abs(shares[1]-75) > 0.001 {
-		t.Fatalf("shares = %v, want [25, 75]", shares)
+		t.Fatalf("shares = %v, want [25, 75] from selection_score (weight ignored)", shares)
 	}
 	if math.Abs(shares[0]+shares[1]-100) > 0.001 {
 		t.Fatalf("sum = %v, want 100", shares[0]+shares[1])
@@ -59,16 +59,28 @@ func TestTrafficShares_allDisabled(t *testing.T) {
 	}
 }
 
-func TestTrafficShares_weightZeroExcluded(t *testing.T) {
-	// Align with Acquire: weight <= 0 is never selected.
+func TestTrafficShares_legacyWeightZeroStillEligible(t *testing.T) {
+	// Weight is legacy-only; enabled keys with cold-start mass still share traffic.
 	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
 	list := []zenpool.Metadata{
 		{ID: "a", Weight: 0, Enabled: true},
 		{ID: "b", Weight: 2, Enabled: true},
 	}
 	shares := zenpool.TrafficShares(list, now, nil)
+	if math.Abs(shares[0]-50) > 0.001 || math.Abs(shares[1]-50) > 0.001 {
+		t.Fatalf("shares = %v, want [50, 50] cold-start equal mass", shares)
+	}
+}
+
+func TestTrafficShares_probingExcluded(t *testing.T) {
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	list := []zenpool.Metadata{
+		{ID: "probe", Weight: 1, Enabled: true, NeedsProbe: true, SelectionScore: 70, HealthScore: 70},
+		{ID: "active", Weight: 1, Enabled: true, SelectionScore: 70, HealthScore: 70},
+	}
+	shares := zenpool.TrafficShares(list, now, nil)
 	if shares[0] != 0 || math.Abs(shares[1]-100) > 0.001 {
-		t.Fatalf("shares = %v, want [0, 100]", shares)
+		t.Fatalf("shares = %v, want probing excluded [0, 100]", shares)
 	}
 }
 
@@ -77,17 +89,17 @@ func TestTrafficShares_mixedIneligible(t *testing.T) {
 	until := now.Add(30 * time.Second)
 	past := now.Add(-time.Minute)
 	list := []zenpool.Metadata{
-		{ID: "disabled", Weight: 10, Enabled: false},
-		{ID: "cooling", Weight: 10, Enabled: true, CooldownUntil: &until},
-		{ID: "past", Weight: 1, Enabled: true, CooldownUntil: &past},
-		{ID: "active", Weight: 3, Enabled: true},
+		{ID: "disabled", Weight: 10, Enabled: false, SelectionScore: 10},
+		{ID: "cooling", Weight: 10, Enabled: true, CooldownUntil: &until, SelectionScore: 10},
+		{ID: "past", Weight: 99, Enabled: true, CooldownUntil: &past, SelectionScore: 1, HealthScore: 10},
+		{ID: "active", Weight: 1, Enabled: true, SelectionScore: 3, HealthScore: 30},
 	}
 	shares := zenpool.TrafficShares(list, now, nil)
 	if shares[0] != 0 || shares[1] != 0 {
 		t.Fatalf("ineligible must be 0: %v", shares)
 	}
 	if math.Abs(shares[2]-25) > 0.001 || math.Abs(shares[3]-75) > 0.001 {
-		t.Fatalf("shares = %v, want past=25 active=75", shares)
+		t.Fatalf("shares = %v, want past=25 active=75 from selection_score", shares)
 	}
 }
 

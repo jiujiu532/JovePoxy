@@ -12,6 +12,8 @@ const (
 	StatusCooling KeyStatus = "cooling"
 	// StatusBenched is enabled but process-benched after 401 (memory only).
 	StatusBenched KeyStatus = "benched"
+	// StatusProbing is a cooling-expired Key awaiting one controlled recovery attempt.
+	StatusProbing KeyStatus = "probing"
 	// StatusDisabled is not eligible for selection.
 	StatusDisabled KeyStatus = "disabled"
 )
@@ -23,6 +25,7 @@ type ProviderSummary struct {
 	Healthy  int `json:"healthy"`
 	Cooled   int `json:"cooled"`
 	Benched  int `json:"benched"`
+	Probing  int `json:"probing"`
 	Disabled int `json:"disabled"`
 }
 
@@ -33,6 +36,7 @@ type PoolSummary struct {
 	Healthy    int                        `json:"healthy"`
 	Cooled     int                        `json:"cooled"`
 	Benched    int                        `json:"benched"`
+	Probing    int                        `json:"probing"`
 	Disabled   int                        `json:"disabled"`
 	ByProvider map[string]ProviderSummary `json:"by_provider,omitempty"`
 }
@@ -46,7 +50,7 @@ type KeyView struct {
 }
 
 // DeriveStatus classifies a key for admin surfaces.
-// benched is process-memory state (401); priority: disabled > benched > cooling > active.
+// Priority: disabled > benched > cooling > probing > active.
 func DeriveStatus(meta Metadata, now time.Time, benched bool) KeyStatus {
 	if !meta.Enabled {
 		return StatusDisabled
@@ -56,6 +60,9 @@ func DeriveStatus(meta Metadata, now time.Time, benched bool) KeyStatus {
 	}
 	if isCoolingMeta(meta.CooldownUntil, now) {
 		return StatusCooling
+	}
+	if meta.NeedsProbe {
+		return StatusProbing
 	}
 	return StatusActive
 }
@@ -79,10 +86,12 @@ func CooldownRemainingSec(meta Metadata, now time.Time) int {
 
 // TrafficShares returns per-index traffic percentages for one provider pool.
 //
-// Aligns with AcquireFor selection:
-//   - eligible = enabled && not cooling && not benched && weight > 0
-//   - traffic_pct(k) = weight(k)/totalWeight*100 for eligible, else 0
-//   - if totalWeight == 0 (all disabled/cooling/benched/zero-weight): all 0
+// Aligns with AcquireFor dynamic health selection:
+//   - eligible = enabled && not cooling && not benched && not probing
+//   - legacy Weight is ignored (kept only for API compatibility)
+//   - traffic_pct(k) = shareMass(k)/totalMass*100 for eligible, else 0
+//   - shareMass prefers SelectionScore; falls back to HealthScore; both unset → cold-start mass
+//   - if totalMass == 0: all 0
 //
 // Callers that hold mixed providers must group first; shares are relative to
 // the given list only. benched may be nil.
@@ -91,23 +100,45 @@ func TrafficShares(list []Metadata, now time.Time, benched map[KeyID]time.Time) 
 	if len(list) == 0 {
 		return out
 	}
-	totalWeight := 0
-	for _, meta := range list {
-		if !isTrafficEligible(meta, now, benched) {
-			continue
-		}
-		totalWeight += meta.Weight
-	}
-	if totalWeight == 0 {
-		return out
-	}
+	totalMass := 0.0
+	masses := make([]float64, len(list))
 	for i, meta := range list {
 		if !isTrafficEligible(meta, now, benched) {
 			continue
 		}
-		out[i] = float64(meta.Weight) / float64(totalWeight) * 100
+		mass := trafficShareMass(meta)
+		if mass <= 0 {
+			continue
+		}
+		masses[i] = mass
+		totalMass += mass
+	}
+	if totalMass == 0 {
+		return out
+	}
+	for i, mass := range masses {
+		if mass <= 0 {
+			continue
+		}
+		out[i] = mass / totalMass * 100
 	}
 	return out
+}
+
+// trafficShareMass is the proportional weight for admin traffic_pct estimates.
+// SelectionScore is preferred; HealthScore is used when SelectionScore is unset.
+// Both zero with no domain enrichment uses DefaultHealthScore (cold-start display).
+// A real scored zero always has SelectionScore >= minSelectionScore after toMetadata.
+func trafficShareMass(meta Metadata) float64 {
+	if meta.SelectionScore > 0 {
+		return float64(meta.SelectionScore)
+	}
+	if meta.HealthScore > 0 {
+		return meta.HealthScore
+	}
+	// Unpopulated Metadata (tests / create path before enrichment): cold-start mass.
+	// Explicit health 0 is represented via SelectionScore from SelectionScore().
+	return DefaultHealthScore
 }
 
 // DeriveViews attaches status, remaining cooldown, and per-provider traffic %.
@@ -187,6 +218,11 @@ func Summarize(list []Metadata, now time.Time, benched map[KeyID]time.Time) Pool
 			ps.Cooled++
 			summary.Enabled++
 			summary.Cooled++
+		case StatusProbing:
+			ps.Enabled++
+			ps.Probing++
+			summary.Enabled++
+			summary.Probing++
 		default: // active
 			ps.Enabled++
 			ps.Healthy++
@@ -202,7 +238,7 @@ func Summarize(list []Metadata, now time.Time, benched map[KeyID]time.Time) Pool
 }
 
 func isTrafficEligible(meta Metadata, now time.Time, benched map[KeyID]time.Time) bool {
-	if !meta.Enabled || meta.Weight <= 0 {
+	if !meta.Enabled {
 		return false
 	}
 	if benched != nil {
@@ -210,7 +246,14 @@ func isTrafficEligible(meta Metadata, now time.Time, benched map[KeyID]time.Time
 			return false
 		}
 	}
-	return !isCoolingMeta(meta.CooldownUntil, now)
+	if isCoolingMeta(meta.CooldownUntil, now) {
+		return false
+	}
+	// Probing keys are controlled recovery only — not normal active traffic share.
+	if meta.NeedsProbe {
+		return false
+	}
+	return true
 }
 
 func isCoolingMeta(until *time.Time, now time.Time) bool {

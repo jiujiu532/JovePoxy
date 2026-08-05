@@ -181,3 +181,35 @@ ALTER TABLE request_logs ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0;
 const requestLogUpstreamSchema = `
 ALTER TABLE request_logs ADD COLUMN upstream TEXT NOT NULL DEFAULT '';
 `
+
+// zen_key_health persists secret-free dynamic health scores for paid pool keys.
+// Missing rows are treated as cold-start defaults (score 70) by the zenpool store.
+const zenKeyHealthSchema = `
+CREATE TABLE zen_key_health (
+    key_id TEXT PRIMARY KEY REFERENCES zen_keys(id) ON DELETE CASCADE,
+    health_score REAL NOT NULL DEFAULT 70,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    latency_ema_ms REAL,
+    last_error_class TEXT NOT NULL DEFAULT '',
+    last_success_at TEXT,
+    last_failure_at TEXT,
+    score_updated_at TEXT NOT NULL,
+    cooldown_reason TEXT NOT NULL DEFAULT ''
+);
+`
+
+var zenKeyHealthColumns = []string{
+	"key_id",
+	"health_score",
+	"success_count",
+	"failure_count",
+	"consecutive_failures",
+	"latency_ema_ms",
+	"last_error_class",
+	"last_success_at",
+	"last_failure_at",
+	"score_updated_at",
+	"cooldown_reason",
+}

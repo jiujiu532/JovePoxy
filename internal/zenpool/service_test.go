@@ -21,8 +21,8 @@ type fixedClock struct{ now time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.now }
 
-func TestService_weighted_selection_and_cooldown(t *testing.T) {
-	// Given
+func TestService_dynamic_health_selection_and_cooldown(t *testing.T) {
+	// Given two keys; stored weight is legacy and must not control dynamic selection.
 	service := newPool(t)
 	ctx := context.Background()
 	first, err := service.Create(ctx, zenpool.CreateInput{Label: "a", Secret: "secret-aaaa", Weight: 1})
@@ -41,8 +41,8 @@ func TestService_weighted_selection_and_cooldown(t *testing.T) {
 		}
 		counts[selected.ID]++
 	}
-	if counts[second.ID] <= counts[first.ID] {
-		t.Fatalf("weighted counts = %+v, want b heavier than a", counts)
+	if delta := counts[first.ID] - counts[second.ID]; delta < -8 || delta > 8 {
+		t.Fatalf("cold-start selection should ignore legacy weight, counts=%+v", counts)
 	}
 
 	// When
@@ -274,7 +274,6 @@ func TestLoadPolicy_and_MaxAttempts_clamp(t *testing.T) {
 	}
 }
 
-
 func TestService_bench_expires(t *testing.T) {
 	// mutable clock so we can advance past bench window
 	clock := &mutableClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)}
@@ -332,7 +331,6 @@ func (dialer *scriptedDialer) ChatCompletions(_ context.Context, _ zen.Auth, _ j
 	dialer.calls++
 	return result.response, result.err
 }
-
 
 func TestService_create_stores_key_prefix(t *testing.T) {
 	// Given
@@ -518,7 +516,6 @@ func newPool(t *testing.T) *zenpool.Service {
 	}
 	return zenpool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
 }
-
 
 func newPoolWithDB(t *testing.T) (*sql.DB, *zenpool.Service) {
 	t.Helper()

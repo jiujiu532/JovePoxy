@@ -46,21 +46,36 @@ type UpdateInput struct {
 
 // Metadata is a secret-free view of an upstream key.
 type Metadata struct {
-	ID            KeyID
-	Label         string
-	Prefix        string
+	ID     KeyID
+	Label  string
+	Prefix string
+	// Weight remains in the stored/API shape only for backwards compatibility.
+	// Dynamic health selection ignores it.
 	Weight        int
 	Enabled       bool
 	Provider      Provider
 	CooldownUntil *time.Time
 	CreatedAt     time.Time
+
+	HealthScore         float64
+	SelectionScore      int
+	SuccessCount        int
+	FailureCount        int
+	ConsecutiveFailures int
+	LastErrorClass      string
+	LastSuccessAt       *time.Time
+	LastFailureAt       *time.Time
+	HealthUpdatedAt     *time.Time
+	CooldownReason      string
+	NeedsProbe          bool
 }
 
 // Selected is a decrypted key chosen for an upstream request.
 type Selected struct {
-	ID     KeyID
-	Secret string
-	Label  string
+	ID      KeyID
+	Secret  string
+	Label   string
+	Probing bool
 }
 
 // Cooldown holds how long a key should rest after a failure class.

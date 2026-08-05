@@ -27,6 +27,7 @@ var migrations = []migration{
 	{version: 10, sql: requestLogUsageSchema},
 	{version: 11, sql: requestLogTTFTSchema},
 	{version: 12, sql: requestLogUpstreamSchema},
+	{version: 13, sql: zenKeyHealthSchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -112,6 +113,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		return validateRequestLogTTFTColumn(ctx, tx)
 	case 12:
 		return validateRequestLogUpstreamColumn(ctx, tx)
+	case 13:
+		return validateZenKeyHealthTable(ctx, tx)
 	default:
 		return nil
 	}
@@ -202,6 +205,32 @@ func validateRequestLogUpstreamColumn(ctx context.Context, tx *sql.Tx) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("migration 12 missing column upstream: %w", ErrMigrationState)
+	}
+	return nil
+}
+
+func validateZenKeyHealthTable(ctx context.Context, tx *sql.Tx) error {
+	var name string
+	err := tx.QueryRowContext(
+		ctx,
+		"SELECT name FROM sqlite_master WHERE type = ? AND name = ?",
+		"table",
+		"zen_key_health",
+	).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("migration 13 missing table zen_key_health: %w", ErrMigrationState)
+	}
+	if err != nil {
+		return fmt.Errorf("validate migration 13 table zen_key_health: %w", err)
+	}
+	for _, column := range zenKeyHealthColumns {
+		var count int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('zen_key_health') WHERE name = ?", column).Scan(&count); err != nil {
+			return fmt.Errorf("validate migration 13 column %s: %w", column, err)
+		}
+		if count != 1 {
+			return fmt.Errorf("migration 13 missing column %s: %w", column, ErrMigrationState)
+		}
 	}
 	return nil
 }

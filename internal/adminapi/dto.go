@@ -43,8 +43,8 @@ type loginResponse struct {
 }
 
 type modelDTO struct {
-	ID       string `json:"id"`
-	Free     bool   `json:"free"`
+	ID   string `json:"id"`
+	Free bool   `json:"free"`
 	// Provider is the primary chat route (opencode | ollama).
 	Provider string `json:"provider"`
 	// Providers lists every source advertising this ID (OpenCode Go ∩ Ollama overlap).
@@ -95,37 +95,62 @@ type updateLocalKeyRequest struct {
 	DailyLimit int    `json:"daily_limit"`
 }
 
+// coldStartHealthScore is the design default when no zen_key_health row / domain is present.
+// Kept in adminapi until zenpool exposes Health on Metadata/KeyView.
+const coldStartHealthScore = 70.0
+
 type zenKeyDTO struct {
-	ID                   string     `json:"id"`
-	Label                string     `json:"label"`
-	Prefix               string     `json:"prefix"`
-	Weight               int        `json:"weight"`
-	Enabled              bool       `json:"enabled"`
-	Provider             string     `json:"provider"`
-	CooldownUntil        *time.Time `json:"cooldown_until,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	Status               string     `json:"status"`
-	TrafficPct           float64    `json:"traffic_pct"`
-	CooldownRemainingSec int        `json:"cooldown_remaining_sec"`
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Prefix string `json:"prefix"`
+	// Weight is legacy JSON for old clients; P0 selection ignores it (health_score drives share).
+	Weight        int        `json:"weight"`
+	Enabled       bool       `json:"enabled"`
+	Provider      string     `json:"provider"`
+	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	// Status: active | cooling | benched | disabled | probing (probing when domain supports it).
+	Status string `json:"status"`
+	// TrafficPct is the estimated dynamic share within the same provider (not historical hits).
+	TrafficPct           float64 `json:"traffic_pct"`
+	CooldownRemainingSec int     `json:"cooldown_remaining_sec"`
+
+	// Dynamic health (secret-free). Cold-start defaults apply when zenpool health domain is absent.
+	HealthScore         float64    `json:"health_score"`
+	SelectionScore      float64    `json:"selection_score"`
+	SuccessCount        int        `json:"success_count"`
+	FailureCount        int        `json:"failure_count"`
+	ConsecutiveFailures int        `json:"consecutive_failures"`
+	LastErrorClass      string     `json:"last_error_class"`
+	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt       *time.Time `json:"last_failure_at,omitempty"`
+	HealthUpdatedAt     *time.Time `json:"health_updated_at,omitempty"`
+	CooldownReason      string     `json:"cooldown_reason"`
 }
 
 type zenPoolProviderSummaryDTO struct {
-	Total    int `json:"total"`
-	Enabled  int `json:"enabled"`
-	Healthy  int `json:"healthy"`
-	Cooled   int `json:"cooled"`
-	Benched  int `json:"benched"`
-	Disabled int `json:"disabled"`
+	Total     int `json:"total"`
+	Enabled   int `json:"enabled"`
+	Healthy   int `json:"healthy"`
+	Cooled    int `json:"cooled"`
+	Benched   int `json:"benched"`
+	Disabled  int `json:"disabled"`
+	Probing   int `json:"probing"`
+	Attention int `json:"attention"`
 }
 
 // zenPoolSummaryDTO is secret-free pool health for overview / key list.
 type zenPoolSummaryDTO struct {
-	Total      int                                  `json:"total"`
-	Enabled    int                                  `json:"enabled"`
-	Healthy    int                                  `json:"healthy"`
-	Cooled     int                                  `json:"cooled"`
-	Benched    int                                  `json:"benched"`
-	Disabled   int                                  `json:"disabled"`
+	Total     int `json:"total"`
+	Enabled   int `json:"enabled"`
+	Healthy   int `json:"healthy"`
+	Cooled    int `json:"cooled"`
+	Benched   int `json:"benched"`
+	Disabled  int `json:"disabled"`
+	Probing   int `json:"probing"`
+	Attention int `json:"attention"`
+	// ShareMode documents how traffic_pct is derived; not historical hit rate or cross-provider routing.
+	ShareMode  string                               `json:"share_mode,omitempty"`
 	ByProvider map[string]zenPoolProviderSummaryDTO `json:"by_provider,omitempty"`
 }
 
@@ -135,8 +160,9 @@ type zenKeysResponse struct {
 }
 
 type createZenKeyRequest struct {
-	Label    string `json:"label"`
-	Secret   string `json:"secret"`
+	Label  string `json:"label"`
+	Secret string `json:"secret"`
+	// Weight is accepted for API compatibility but does not control P0 scheduling.
 	Weight   int    `json:"weight"`
 	Provider string `json:"provider"`
 }
@@ -144,7 +170,8 @@ type createZenKeyRequest struct {
 type updateZenKeyRequest struct {
 	Label  string `json:"label"`
 	Secret string `json:"secret"`
-	Weight int    `json:"weight"`
+	// Weight is accepted for API compatibility but does not control P0 scheduling.
+	Weight int `json:"weight"`
 }
 
 type accountDTO struct {
@@ -226,10 +253,10 @@ type usageResponse struct {
 }
 
 type logDTO struct {
-	ID                  string    `json:"id"`
-	KeyID               string    `json:"key_id,omitempty"`
-	Model               string    `json:"model"`
-	Route               string    `json:"route"`
+	ID    string `json:"id"`
+	KeyID string `json:"key_id,omitempty"`
+	Model string `json:"model"`
+	Route string `json:"route"`
 	// Upstream is the data-plane channel: opencode_free | opencode_paid | ollama_paid.
 	Upstream            string    `json:"upstream,omitempty"`
 	Status              int       `json:"status"`
@@ -347,31 +374,145 @@ func mapZenKeysAt(list []zenpool.Metadata, now time.Time, benched map[zenpool.Ke
 		if provider == "" {
 			provider = string(zenpool.ProviderOpenCode)
 		}
-		// Round to one decimal for stable JSON / UI display.
-		pct := math.Round(view.TrafficPct*10) / 10
-		out = append(out, zenKeyDTO{
+		dto := zenKeyDTO{
 			ID: string(view.ID), Label: view.Label, Prefix: view.Prefix, Weight: view.Weight,
 			Enabled: view.Enabled, Provider: provider,
 			CooldownUntil: view.CooldownUntil, CreatedAt: view.CreatedAt,
-			Status: string(view.Status), TrafficPct: pct,
+			Status:               string(view.Status),
 			CooldownRemainingSec: view.CooldownRemainingSec,
-		})
+		}
+		applyHealthView(&dto, view, now)
+		out = append(out, dto)
 	}
-	summary := mapZenPoolSummary(zenpool.Summarize(list, now, benched))
+	// Dynamic share estimate from selection_score (not legacy weight, not historical hits).
+	applyDynamicTrafficShares(out)
+	summary := mapZenPoolSummaryFromKeys(out, zenpool.Summarize(list, now, benched))
 	return zenKeysResponse{Keys: out, Summary: &summary}
 }
 
+// applyHealthView fills secret-free health fields from zenpool's persisted state.
+// Explicit health_score 0 is preserved; only a fully empty cold-start view defaults to 70.
+func applyHealthView(dto *zenKeyDTO, view zenpool.KeyView, _ time.Time) {
+	if dto == nil {
+		return
+	}
+	dto.HealthScore = view.HealthScore
+	// Cold-start: no samples/state and score unset -> DefaultHealthScore.
+	// Do not rewrite a deliberate 0 (e.g. after heavy failures with samples).
+	empty := view.SuccessCount == 0 &&
+		view.FailureCount == 0 &&
+		view.ConsecutiveFailures == 0 &&
+		view.LastErrorClass == "" &&
+		view.LastSuccessAt == nil &&
+		view.LastFailureAt == nil &&
+		view.HealthUpdatedAt == nil &&
+		view.CooldownReason == ""
+	if empty && dto.HealthScore == 0 {
+		dto.HealthScore = coldStartHealthScore
+	}
+	dto.SelectionScore = float64(view.SelectionScore)
+	if dto.SelectionScore <= 0 {
+		// Ephemeral mass when domain left SelectionScore unset; keep min 1 for real 0 health.
+		dto.SelectionScore = math.Max(1, math.Round(dto.HealthScore))
+	}
+	dto.SuccessCount = view.SuccessCount
+	dto.FailureCount = view.FailureCount
+	dto.ConsecutiveFailures = view.ConsecutiveFailures
+	dto.LastErrorClass = view.LastErrorClass
+	dto.LastSuccessAt = view.LastSuccessAt
+	dto.LastFailureAt = view.LastFailureAt
+	dto.HealthUpdatedAt = view.HealthUpdatedAt
+	dto.CooldownReason = view.CooldownReason
+}
+
+// applyDynamicTrafficShares sets traffic_pct from selection_score within each provider.
+// Only status=active keys participate; others get 0. Values rounded to 1 decimal.
+func applyDynamicTrafficShares(keys []zenKeyDTO) {
+	if len(keys) == 0 {
+		return
+	}
+	type shareAcc struct {
+		total float64
+		idxs  []int
+	}
+	byProvider := make(map[string]*shareAcc)
+	for i, key := range keys {
+		provider := key.Provider
+		if provider == "" {
+			provider = string(zenpool.ProviderOpenCode)
+		}
+		acc, ok := byProvider[provider]
+		if !ok {
+			acc = &shareAcc{}
+			byProvider[provider] = acc
+		}
+		if key.Status == string(zenpool.StatusActive) && key.SelectionScore > 0 {
+			acc.total += key.SelectionScore
+			acc.idxs = append(acc.idxs, i)
+		} else {
+			keys[i].TrafficPct = 0
+		}
+	}
+	for _, acc := range byProvider {
+		if acc.total <= 0 {
+			for _, idx := range acc.idxs {
+				keys[idx].TrafficPct = 0
+			}
+			continue
+		}
+		for _, idx := range acc.idxs {
+			pct := keys[idx].SelectionScore / acc.total * 100
+			keys[idx].TrafficPct = math.Round(pct*10) / 10
+		}
+	}
+}
+
 func mapZenPoolSummary(sum zenpool.PoolSummary) zenPoolSummaryDTO {
+	return mapZenPoolSummaryFromKeys(nil, sum)
+}
+
+// mapZenPoolSummaryFromKeys enriches pool counters with probing/attention and share mode.
+// When key DTOs are present, probing is counted from status=probing rows.
+// When keys is empty/nil (overview path), use domain PoolSummary.Probing so attention is not undercounted.
+// Attention = cooled + benched + probing (keys needing operator awareness).
+func mapZenPoolSummaryFromKeys(keys []zenKeyDTO, sum zenpool.PoolSummary) zenPoolSummaryDTO {
+	probing := sum.Probing
+	probingByProvider := map[string]int{}
+	if len(sum.ByProvider) > 0 {
+		for provider, item := range sum.ByProvider {
+			probingByProvider[provider] = item.Probing
+		}
+	}
+	if len(keys) > 0 {
+		probing = 0
+		probingByProvider = map[string]int{}
+		for _, key := range keys {
+			if key.Status != "probing" {
+				continue
+			}
+			probing++
+			provider := key.Provider
+			if provider == "" {
+				provider = string(zenpool.ProviderOpenCode)
+			}
+			probingByProvider[provider]++
+		}
+	}
+	attention := sum.Cooled + sum.Benched + probing
 	dto := zenPoolSummaryDTO{
 		Total: sum.Total, Enabled: sum.Enabled, Healthy: sum.Healthy,
 		Cooled: sum.Cooled, Benched: sum.Benched, Disabled: sum.Disabled,
+		Probing: probing, Attention: attention,
+		ShareMode: "dynamic_health_estimate",
 	}
 	if len(sum.ByProvider) > 0 {
 		dto.ByProvider = make(map[string]zenPoolProviderSummaryDTO, len(sum.ByProvider))
 		for provider, item := range sum.ByProvider {
+			pProbing := probingByProvider[provider]
 			dto.ByProvider[provider] = zenPoolProviderSummaryDTO{
 				Total: item.Total, Enabled: item.Enabled, Healthy: item.Healthy,
 				Cooled: item.Cooled, Benched: item.Benched, Disabled: item.Disabled,
+				Probing: pProbing, Attention: item.Cooled + item.Benched + pProbing,
 			}
 		}
 	}
@@ -459,7 +600,7 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 		out = append(out, logDTO{
 			ID: entry.ID, KeyID: entry.KeyID, Model: entry.Model, Route: entry.Route,
 			Upstream: entry.Upstream,
-			Status: entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
+			Status:   entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
 			Stream: entry.Stream, ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,
 			BudgetTokens: entry.BudgetTokens,

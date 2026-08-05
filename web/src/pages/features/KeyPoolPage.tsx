@@ -1,5 +1,4 @@
 import {
-  Coins,
   Key,
   PencilSimple,
   Plus,
@@ -40,20 +39,18 @@ import { api, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
 import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import {
   formatCooldownRemaining,
-  formatTrafficPct,
   zenKeyStatus,
 } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { ProviderTab } from "@/lib/routes";
 import {
   compareBySort,
-  matchWeight,
   useRowSelection,
   type SortKey,
   type StatusFilter,
-  type WeightFilter,
 } from "@/lib/selection";
 import { tableRowClass } from "@/lib/table-row";
+import { estimateKeySharePct, formatCount, formatErrorClass, formatHealthScore } from "@/lib/key-pool-share";
 
 const friendlyError = bindFriendlyError({
   sessionExpired: "keypool.sessionExpired",
@@ -69,7 +66,6 @@ export function KeyPoolPage() {
   const [olKeys, setOlKeys] = useState<ZenKeyDTO[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [weightFilter, setWeightFilter] = useState<WeightFilter>("all");
   const [sort, setSort] = useState<SortKey>("label_asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -77,13 +73,11 @@ export function KeyPoolPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [label, setLabel] = useState("");
   const [secret, setSecret] = useState("");
-  const [weight, setWeight] = useState("1");
   const [listError, setListError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<ZenKeyDTO | null>(null);
   const [editLabel, setEditLabel] = useState("");
-  const [editWeight, setEditWeight] = useState("1");
   const [editSecret, setEditSecret] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
@@ -118,7 +112,6 @@ export function KeyPoolPage() {
   useEffect(() => {
     setQuery("");
     setStatus("all");
-    setWeightFilter("all");
     setSort("label_asc");
     setPage(1);
     setShowAdd(false);
@@ -136,12 +129,10 @@ export function KeyPoolPage() {
       await api.createZenKey(
         label.trim() || `${provider}-key`,
         secret.trim(),
-        Number(weight) || 1,
         keyProvider,
       );
       setLabel("");
       setSecret("");
-      setWeight("1");
       setShowAdd(false);
       push(t("keypool.added"), "success");
       await load(true);
@@ -156,7 +147,6 @@ export function KeyPoolPage() {
   function openEdit(key: ZenKeyDTO) {
     setEditing(key);
     setEditLabel(key.label);
-    setEditWeight(String(key.weight));
     setEditSecret("");
   }
 
@@ -169,9 +159,8 @@ export function KeyPoolPage() {
     }
     setEditSaving(true);
     try {
-      const payload: { label: string; weight: number; secret?: string } = {
+      const payload: { label: string; secret?: string } = {
         label: editLabel.trim(),
-        weight: Number(editWeight) || 1,
       };
       if (editSecret.trim()) payload.secret = editSecret.trim();
       await api.updateZenKey(editing.id, payload);
@@ -197,10 +186,6 @@ export function KeyPoolPage() {
   const enabled = keys.filter((k) => k.enabled).length;
   const cooling = keys.filter((k) => zenKeyStatus(k, nowMs) === "cooling").length;
   const benched = keys.filter((k) => zenKeyStatus(k, nowMs) === "benched").length;
-  const totalWeight = keys
-    .filter((k) => zenKeyStatus(k, nowMs) === "active" && k.weight > 0)
-    .reduce((s, k) => s + k.weight, 0);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = keys.filter((k) => {
@@ -209,7 +194,7 @@ export function KeyPoolPage() {
       if (status === "disabled" && k.enabled) return false;
       if (status === "cooling" && keyStatus !== "cooling") return false;
       if (status === "benched" && keyStatus !== "benched") return false;
-      if (!matchWeight(k.weight, weightFilter)) return false;
+      if (status === "probing" && keyStatus !== "probing") return false;
       if (!q) return true;
       return (
         k.label.toLowerCase().includes(q) ||
@@ -219,22 +204,23 @@ export function KeyPoolPage() {
     list.sort((a, b) =>
       compareBySort(a, b, sort, {
         label: (x) => x.label,
-        weight: (x) => x.weight,
+        health: (x) => x.health_score ?? 70,
         statusRank: (x) => {
           const s = zenKeyStatus(x, nowMs);
           if (s === "active") return 0;
+          if (s === "probing") return 1;
           if (s === "cooling") return 2;
           if (s === "benched") return 3;
-          return 1;
+          return 4; // disabled
         },
       }),
     );
     return list;
-  }, [keys, query, status, weightFilter, sort, nowMs]);
+  }, [keys, query, status, sort, nowMs]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, status, weightFilter, sort]);
+  }, [query, status, sort]);
 
   const paged = useMemo(
     () => slicePage(filtered, page, pageSize),
@@ -325,7 +311,6 @@ export function KeyPoolPage() {
           onClose={() => setShowAdd(false)}
           footer={
             <>
-              <p className="text-[12px] text-ink-faint">{t("keypool.weightHint")}</p>
               <Button type="submit" form="key-pool-create" size="sm" loading={saving}>
                 {t("keypool.submit")}
               </Button>
@@ -334,7 +319,7 @@ export function KeyPoolPage() {
         >
           <form
             id="key-pool-create"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1.3fr_6.5rem]"
+            className="grid gap-4 sm:grid-cols-2"
             onSubmit={(e) => void onCreate(e)}
           >
             <CompactField label={t("keypool.labelField")}>
@@ -353,19 +338,6 @@ export function KeyPoolPage() {
                 onChange={(e) => setSecret(e.target.value)}
                 autoComplete="off"
                 placeholder="sk-…"
-              />
-            </CompactField>
-            <CompactField
-              label={t("keypool.weightField")}
-              tip={
-                <HelpTip content={t("keypool.weightTip")} />
-              }
-            >
-              <input
-                className={fieldInputClass}
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                inputMode="numeric"
               />
             </CompactField>
           </form>
@@ -518,22 +490,12 @@ export function KeyPoolPage() {
                     { value: "disabled", label: t("common.disabled") },
                     { value: "cooling", label: t("keypool.statusCooling") },
                     { value: "benched", label: t("keypool.statusBenched") },
+                    { value: "probing", label: t("keypool.statusProbing") },
                   ]}
                 />
               }
               trailing={
                 <>
-                  <FilterSelect
-                    label={t("keypool.weightFilterLabel")}
-                    value={weightFilter}
-                    onChange={(v) => setWeightFilter(v as WeightFilter)}
-                    options={[
-                      { value: "all", label: t("common.all") },
-                      { value: "1", label: t("keypool.weightEq1") },
-                      { value: "ge2", label: t("keypool.weightGe2") },
-                      { value: "ge5", label: t("keypool.weightGe5") },
-                    ]}
-                  />
                   <FilterSelect
                     label={t("keypool.sortLabel")}
                     value={sort}
@@ -541,8 +503,8 @@ export function KeyPoolPage() {
                     options={[
                       { value: "label_asc", label: t("keypool.sortLabelAsc") },
                       { value: "label_desc", label: t("keypool.sortLabelDesc") },
-                      { value: "weight_desc", label: t("keypool.sortWeightDesc") },
-                      { value: "weight_asc", label: t("keypool.sortWeightAsc") },
+                      { value: "health_desc", label: t("keypool.sortHealthDesc") },
+                      { value: "health_asc", label: t("keypool.sortHealthAsc") },
                       { value: "status", label: t("keypool.sortStatus") },
                     ]}
                   />
@@ -599,12 +561,8 @@ export function KeyPoolPage() {
                 <div>
                   {paged.map((key) => {
                     const keyStatus = zenKeyStatus(key, nowMs);
-                    const share =
-                      typeof key.traffic_pct === "number"
-                        ? formatTrafficPct(key.traffic_pct)
-                        : keyStatus === "active" && totalWeight > 0
-                          ? formatTrafficPct((key.weight / totalWeight) * 100)
-                          : t("keypool.shareZero");
+                    const shareValue = estimateKeySharePct(key, keys, nowMs);
+                    const share = shareValue == null ? t("keypool.shareZero") : `${shareValue.toFixed(1)}%`;
                     const remaining = formatCooldownRemaining(key, nowMs);
                     return (
                       <MobileEntityCard
@@ -632,6 +590,8 @@ export function KeyPoolPage() {
                             <Badge kind="warning">{t("keypool.statusCooling")}</Badge>
                           ) : keyStatus === "benched" ? (
                             <Badge kind="warning">{t("keypool.statusBenched")}</Badge>
+                          ) : keyStatus === "probing" ? (
+                            <Badge kind="warning">{t("keypool.statusProbing")}</Badge>
                           ) : keyStatus === "active" ? (
                             <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                           ) : (
@@ -639,7 +599,8 @@ export function KeyPoolPage() {
                           )
                         }
                         fields={[
-                          { label: t("keypool.weightField"), value: key.weight },
+                          { label: t("keypool.colHealth"), value: formatHealthScore(key.health_score) },
+                          { label: t("keypool.colResults"), value: `${formatCount(key.success_count)} / ${formatCount(key.failure_count)}` },
                           { label: t("keypool.shareLabel"), value: share },
                           {
                             label: t("keypool.coolingLabel"),
@@ -719,12 +680,10 @@ export function KeyPoolPage() {
                         </th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colLabel")}</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colPrefix")}</th>
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">
-                          <span className="inline-flex items-center gap-1">
-                            {t("keypool.colWeight")}
-                            <HelpTip content={t("keypool.weightColTip")} />
-                          </span>
-                        </th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colHealth")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colSelection")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colResults")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colError")}</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">
                           <span className="inline-flex items-center gap-1">
                             {t("keypool.colShare")}
@@ -746,12 +705,8 @@ export function KeyPoolPage() {
                     <tbody>
                       {paged.map((key) => {
                         const keyStatus = zenKeyStatus(key, nowMs);
-                        const share =
-                          typeof key.traffic_pct === "number"
-                            ? formatTrafficPct(key.traffic_pct)
-                            : keyStatus === "active" && totalWeight > 0
-                              ? formatTrafficPct((key.weight / totalWeight) * 100)
-                              : t("keypool.shareZero");
+                        const shareValue = estimateKeySharePct(key, keys, nowMs);
+                        const share = shareValue == null ? t("keypool.shareZero") : `${shareValue.toFixed(1)}%`;
                         const remaining = formatCooldownRemaining(key, nowMs);
                         return (
                           <tr
@@ -778,20 +733,10 @@ export function KeyPoolPage() {
                             <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px] text-ink-muted">
                               {key.prefix}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2.5">
-                              <span
-                                className={`inline-flex items-center gap-1 font-mono tabular-nums ${key.enabled ? "text-ink" : "text-ink-faint"}`}
-                              >
-                                <Coins
-                                  size={14}
-                                  className={
-                                    key.enabled ? "text-accent" : "text-ink-faint"
-                                  }
-                                  weight="duotone"
-                                />
-                                {key.weight}
-                              </span>
-                            </td>
+                            <td className="whitespace-nowrap px-3 py-2.5 font-mono tabular-nums">{formatHealthScore(key.health_score)}</td>
+                            <td className="whitespace-nowrap px-3 py-2.5 font-mono tabular-nums">{formatHealthScore(key.selection_score)}</td>
+                            <td className="whitespace-nowrap px-3 py-2.5 font-mono tabular-nums">{formatCount(key.success_count)} / {formatCount(key.failure_count)}</td>
+                            <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[12px] text-ink-muted">{formatErrorClass(key.last_error_class)}</td>
                             <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-ink-muted">
                               {share}
                             </td>
@@ -894,18 +839,6 @@ export function KeyPoolPage() {
             value={editLabel}
             onChange={(e) => setEditLabel(e.target.value)}
           />
-          <div>
-            <label className="mb-1 flex items-center gap-1 text-caption text-ink-muted">
-              {t("keypool.weightField")}
-              <HelpTip content={t("keypool.weightTipShort")} />
-            </label>
-            <input
-              className="h-10 w-full rounded-none border border-border bg-paper-1 px-3 text-sm text-ink"
-              value={editWeight}
-              onChange={(e) => setEditWeight(e.target.value)}
-              inputMode="numeric"
-            />
-          </div>
           <SecretInput
             label={t("keypool.newSecretLabel")}
             value={editSecret}

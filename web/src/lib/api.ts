@@ -36,7 +36,7 @@ export type LocalKeyCreatedDTO = {
 };
 export type KeyProvider = "opencode" | "ollama";
 
-export type ZenKeyStatus = "active" | "cooling" | "benched" | "disabled";
+export type ZenKeyStatus = "active" | "cooling" | "benched" | "disabled" | "probing";
 
 export type ZenPoolProviderSummaryDTO = {
   readonly total: number;
@@ -45,6 +45,10 @@ export type ZenPoolProviderSummaryDTO = {
   readonly cooled: number;
   readonly benched?: number;
   readonly disabled: number;
+  /** Keys currently in controlled probe (0 or 1 concurrent per key). */
+  readonly probing?: number;
+  /** Keys that need attention (cooling / benched / probing). */
+  readonly attention?: number;
 };
 
 export type ZenPoolSummaryDTO = {
@@ -54,6 +58,8 @@ export type ZenPoolSummaryDTO = {
   readonly cooled: number;
   readonly benched?: number;
   readonly disabled: number;
+  readonly probing?: number;
+  readonly attention?: number;
   readonly by_provider?: Readonly<Record<string, ZenPoolProviderSummaryDTO>>;
 };
 
@@ -61,17 +67,37 @@ export type ZenKeyDTO = {
   readonly id: string;
   readonly label: string;
   readonly prefix: string;
-  readonly weight: number;
+  /**
+   * Legacy fixed weight. Still returned/accepted for API compatibility;
+   * P0 selection ignores it — use health_score / selection_score instead.
+   */
+  readonly weight?: number;
   readonly enabled: boolean;
   readonly provider?: KeyProvider;
   readonly cooldown_until?: string;
   readonly created_at?: string;
-  /** active | cooling | benched | disabled — derived server-side */
+  /** active | cooling | benched | disabled | probing — derived server-side */
   readonly status?: ZenKeyStatus;
-  /** Traffic share within the same provider eligible set (0–100). */
+  /**
+   * Estimated dynamic traffic share within the same provider eligible set (0–100).
+   * Not historical hits; not cross-provider routing.
+   */
   readonly traffic_pct?: number;
   /** Seconds remaining until cooldown_until; 0 when not cooling. */
   readonly cooldown_remaining_sec?: number;
+  /** Persistent 0–100 health score (cold start 70 when missing). */
+  readonly health_score?: number;
+  /** In-memory selection score after load penalty (drives weighted pick). */
+  readonly selection_score?: number;
+  readonly success_count?: number;
+  readonly failure_count?: number;
+  readonly consecutive_failures?: number;
+  /** Coarse class e.g. unauthorized / rate_limited / upstream_5xx — never raw body. */
+  readonly last_error_class?: string;
+  readonly last_success_at?: string;
+  readonly last_failure_at?: string;
+  readonly health_updated_at?: string;
+  readonly cooldown_reason?: string;
 };
 export type AccountDTO = {
   readonly id: string;
@@ -346,19 +372,19 @@ export const api = {
   createZenKey: (
     label: string,
     secret: string,
-    weight = 1,
     provider: KeyProvider = "opencode",
   ) =>
     request<ZenKeyDTO>("/api/admin/zen-keys", {
       method: "POST",
-      body: JSON.stringify({ label, secret, weight, provider }),
+      // Omit weight: backend defaults to 1 for DB compat; selection uses health_score.
+      body: JSON.stringify({ label, secret, provider }),
     }),
-  updateZenKey: (id: string, body: { label: string; weight: number; secret?: string }) =>
+  updateZenKey: (id: string, body: { label: string; secret?: string }) =>
     request<ZenKeyDTO>(`/api/admin/zen-keys/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
         label: body.label,
-        weight: body.weight,
+        // Do not send weight — backend preserves existing weight when omitted / ≤0.
         secret: body.secret ?? "",
       }),
     }),

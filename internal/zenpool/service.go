@@ -33,6 +33,9 @@ type AcquireOptions struct {
 	AffinityKey string
 	// Policy empty uses the service LoadPolicy().
 	Policy LoadPolicy
+	// ForAttempt reserves controlled probe state for a real paid dial. Generic callers
+	// such as model-catalog refreshes must not consume a probe slot.
+	ForAttempt bool
 }
 
 // Service manages encrypted Zen API keys and weighted healthy selection.
@@ -47,6 +50,14 @@ type Service struct {
 
 	benchMu sync.Mutex
 	benched map[KeyID]time.Time // until
+
+	healthMu      sync.Mutex
+	outcomeMu     sync.Mutex
+	healthRuntime map[KeyID]*healthRuntime
+	// healthDirty holds secret-free health not yet flushed (success throttle).
+	// Overlay on List/Acquire so recovery and intermediate successes stay visible.
+	healthDirty   map[KeyID]Health
+	probeSequence uint64
 }
 
 // NewService constructs a SQLite-backed pool service.
@@ -60,10 +71,12 @@ func NewServiceWithStore(store Store, box *crypto.Box, clock Clock) *Service {
 		clock = systemClock{}
 	}
 	service := &Service{
-		store:   store,
-		box:     box,
-		clock:   clock,
-		benched: make(map[KeyID]time.Time),
+		store:         store,
+		box:           box,
+		clock:         clock,
+		benched:       make(map[KeyID]time.Time),
+		healthRuntime: make(map[KeyID]*healthRuntime),
+		healthDirty:   make(map[KeyID]Health),
 	}
 	service.loadPolicy.Store(LoadPolicySpread)
 	service.maxAttempts.Store(int32(DefaultMaxAttempts))
@@ -162,6 +175,9 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (Metadata
 	return Metadata{
 		ID: id, Label: label, Prefix: prefix, Weight: weight,
 		Enabled: true, Provider: provider, CreatedAt: now,
+		// Cold-start health so create DTO does not show raw zeros before first List join.
+		HealthScore:    DefaultHealthScore,
+		SelectionScore: SelectionScore(DefaultHealthScore, 0, 0),
 	}, nil
 }
 
@@ -202,7 +218,19 @@ func (service *Service) Update(ctx context.Context, id KeyID, input UpdateInput)
 	}
 	weight := input.Weight
 	if weight <= 0 {
-		weight = 1
+		records, err := service.store.List(ctx)
+		if err != nil {
+			return Metadata{}, err
+		}
+		for _, record := range records {
+			if record.id == id {
+				weight = record.weight
+				break
+			}
+		}
+		if weight <= 0 {
+			weight = 1
+		}
 	}
 	secret := strings.TrimSpace(input.Secret)
 	var ciphertext *string
@@ -339,75 +367,126 @@ func (service *Service) AcquireFor(ctx context.Context, opts AcquireOptions) (Se
 		}
 	}
 	benched := service.BenchedSnapshot(now)
-	candidates := make([]storedKey, 0, len(records))
+	type candidate struct {
+		record storedKey
+		score  int
+	}
+	active := make([]candidate, 0, len(records))
+	probes := make([]candidate, 0, len(records))
 	for _, record := range records {
-		if _, skip := excluded[record.id]; skip {
+		if _, skip := excluded[record.id]; skip || !record.enabled {
 			continue
 		}
-		if !record.enabled || record.weight <= 0 {
+		if until, ok := benched[record.id]; ok && now.Before(until) {
 			continue
-		}
-		if benched != nil {
-			if until, ok := benched[record.id]; ok && now.Before(until) {
-				continue
-			}
 		}
 		cooling, coolErr := isCooling(record.cooldownUntil, now)
-		if coolErr != nil {
-			// Dirty cooldown_until: skip this key rather than failing the whole pool.
+		if coolErr != nil || cooling {
 			continue
 		}
-		if cooling {
+		health := decayHealth(NormalizeHealth(service.overlayDirtyHealth(record.id, record.health)), now)
+		requests, inflight, probeBusy := service.runtimeSnapshot(record.id, now)
+		score := SelectionScore(health.HealthScore, requests, inflight)
+		candidate := candidate{record: record, score: score}
+		// A persisted cooldown reason whose deadline has expired means this key must
+		// prove one request before returning to normal traffic.
+		if health.CooldownReason != "" {
+			if opts.ForAttempt && !probeBusy {
+				probes = append(probes, candidate)
+			}
 			continue
 		}
-		candidates = append(candidates, record)
+		active = append(active, candidate)
 	}
-	if len(candidates) == 0 {
+	if len(active) == 0 && len(probes) == 0 {
 		return Selected{}, ErrNoHealthyKey
+	}
+
+	service.healthMu.Lock()
+	service.probeSequence++
+	probeTurn := len(probes) > 0 && (len(active) == 0 || service.probeSequence%healthProbeEvery == 0)
+	service.healthMu.Unlock()
+	candidates := active
+	probing := false
+	if probeTurn {
+		candidates = probes
+		probing = true
 	}
 
 	policy := opts.Policy
 	if policy == "" {
 		policy = service.LoadPolicy()
 	}
+	// Keep one key from consuming the entire rolling window when alternatives exist.
+	// Sticky sessions retain their healthy binding; the cap applies to spread only.
+	if len(candidates) > 1 && !probing && policy != LoadPolicySticky {
+		capped := make([]candidate, 0, len(candidates))
+		for _, item := range candidates {
+			ids := make([]KeyID, 0, len(candidates))
+			for _, other := range candidates {
+				ids = append(ids, other.record.id)
+			}
+			if !service.shareCapExceeded(item.record.id, ids, now) {
+				capped = append(capped, item)
+			}
+		}
+		if len(capped) > 0 {
+			candidates = capped
+		}
+	}
 
-	// Decrypt failure excludes the row and re-picks among remaining healthy candidates.
 	decryptSkipped := make(map[KeyID]struct{})
 	for len(decryptSkipped) < len(candidates) {
-		usable := make([]storedKey, 0, len(candidates)-len(decryptSkipped))
-		totalWeight := 0
-		for _, candidate := range candidates {
-			if _, skip := decryptSkipped[candidate.id]; skip {
-				continue
+		usable := make([]candidate, 0, len(candidates)-len(decryptSkipped))
+		for _, item := range candidates {
+			if _, skip := decryptSkipped[item.record.id]; !skip {
+				usable = append(usable, item)
 			}
-			usable = append(usable, candidate)
-			totalWeight += candidate.weight
 		}
-		if totalWeight == 0 || len(usable) == 0 {
-			return Selected{}, ErrNoHealthyKey
+		if len(usable) == 0 {
+			break
 		}
-
-		var chosen storedKey
-		if policy == LoadPolicySticky && strings.TrimSpace(opts.AffinityKey) != "" {
-			chosen = weightedRendezvousPick(usable, opts.AffinityKey)
+		chosen := usable[0]
+		if policy == LoadPolicySticky && strings.TrimSpace(opts.AffinityKey) != "" && !probing {
+			// The affinity hash is intentionally unweighted so a health score change
+			// cannot migrate an otherwise healthy sticky conversation.
+			best := -1.0
+			for _, item := range usable {
+				value := rendezvousScore(opts.AffinityKey, string(item.record.id), 1)
+				if value > best {
+					best, chosen = value, item
+				}
+			}
 		} else {
-			// spread: weighted round-robin (also sticky fallback when affinity material is missing)
-			slot := int(service.rr.Add(1) % uint64(totalWeight))
-			cumulative := 0
-			for _, candidate := range usable {
-				cumulative += candidate.weight
-				if slot < cumulative {
-					chosen = candidate
-					break
+			total := 0
+			equalScores := true
+			for index, item := range usable {
+				total += item.score
+				if index > 0 && item.score != usable[0].score {
+					equalScores = false
+				}
+			}
+			rr := service.rr.Add(1)
+			if equalScores {
+				chosen = usable[int(rr%uint64(len(usable)))]
+			} else {
+				slot := int(rr % uint64(total))
+				cumulative := 0
+				for _, item := range usable {
+					cumulative += item.score
+					if slot < cumulative {
+						chosen = item
+						break
+					}
 				}
 			}
 		}
-		secret, openErr := service.box.Open(chosen.ciphertext)
+		secret, openErr := service.box.Open(chosen.record.ciphertext)
 		if openErr != nil {
-			decryptSkipped[chosen.id] = struct{}{}
+			decryptSkipped[chosen.record.id] = struct{}{}
 			continue
 		}
-		return Selected{ID: chosen.id, Secret: secret, Label: chosen.label}, nil
+		return Selected{ID: chosen.record.id, Secret: secret, Label: chosen.record.label, Probing: probing}, nil
 	}
 	return Selected{}, ErrNoHealthyKey
 }
@@ -443,6 +522,24 @@ func (service *Service) toMetadata(record storedKey) Metadata {
 			meta.CooldownUntil = &until
 		}
 	}
+	health := NormalizeHealth(service.overlayDirtyHealth(record.id, record.health))
+	health = decayHealth(health, service.clock.Now().UTC())
+	meta.HealthScore = health.HealthScore
+	meta.SuccessCount = health.SuccessCount
+	meta.FailureCount = health.FailureCount
+	meta.ConsecutiveFailures = health.ConsecutiveFailures
+	meta.LastErrorClass = health.LastErrorClass
+	meta.LastSuccessAt = health.LastSuccessAt
+	meta.LastFailureAt = health.LastFailureAt
+	meta.CooldownReason = health.CooldownReason
+	// NeedsProbe after CooldownUntil is known: reason set and not currently cooling.
+	meta.NeedsProbe = health.CooldownReason != "" && (meta.CooldownUntil == nil || !service.clock.Now().UTC().Before(*meta.CooldownUntil))
+	if !health.ScoreUpdatedAt.IsZero() {
+		updated := health.ScoreUpdatedAt
+		meta.HealthUpdatedAt = &updated
+	}
+	requests, inflight, _ := service.runtimeSnapshot(record.id, service.clock.Now().UTC())
+	meta.SelectionScore = SelectionScore(meta.HealthScore, requests, inflight)
 	return meta
 }
 

@@ -1,9 +1,10 @@
-import { ChartPieSlice, Coins, WarningCircle } from "@phosphor-icons/react";
+import { ChartPieSlice, Heartbeat, WarningCircle } from "@phosphor-icons/react";
 import { Badge, HelpTip, SectionPanel } from "@/components";
 import { formatTrafficPct } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import {
   buildKeyPoolShare,
+  formatHealthScore,
   type KeyPoolShareSlice,
   type KeyPoolShareSummary,
 } from "@/lib/key-pool-share";
@@ -18,8 +19,9 @@ export type KeyPoolSharePanelProps = {
 };
 
 /**
- * In-pool theoretical weighted share for the current provider tab only.
- * Not historical request distribution; not cross-provider routing.
+ * In-pool estimated dynamic share for the current provider tab only.
+ * Based on health/selection scores (or server traffic_pct), not historical hits
+ * and not cross-provider routing.
  */
 export function KeyPoolSharePanel({
   keys,
@@ -30,12 +32,10 @@ export function KeyPoolSharePanel({
   const { t } = useI18n();
   const summary = buildKeyPoolShare(keys, nowMs);
 
-  const title = t("keypool.shareTheoryTitle");
-
   return (
     <SectionPanel
       {...(className ? { className } : {})}
-      title={title}
+      title={t("keypool.shareDynamicTitle")}
       description={t("keypool.shareTip")}
       icon={ChartPieSlice}
       iconTone="teal"
@@ -51,26 +51,36 @@ export function KeyPoolSharePanel({
   );
 }
 
-function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShareSummary; readonly provider: KeyProvider }) {
+function KeyPoolShareBody({
+  summary,
+  provider,
+}: {
+  readonly summary: KeyPoolShareSummary;
+  readonly provider: KeyProvider;
+}) {
   const { t } = useI18n();
-  const { slices, eligibleCount, coolingCount, benchedCount, eligibleWeight } =
-    summary;
+  const {
+    slices,
+    eligibleCount,
+    probingCount,
+    coolingCount,
+    attentionCount,
+  } = summary;
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* Summary chips: eligible weight / schedulable / cooling / benched */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SummaryChip
-          label={t("keypool.railWeightHint")}
-          value={eligibleWeight}
-          hint={t("keypool.weightColTip")}
-          tone="yellow"
-        />
         <SummaryChip
           label={t("keypool.railEnabledHint")}
           value={eligibleCount}
           hint={t("keypool.shareTip")}
           tone="teal"
+        />
+        <SummaryChip
+          label={t("keypool.statusProbing")}
+          value={probingCount}
+          hint={t("keypool.railProbingHint")}
+          tone="yellow"
         />
         <SummaryChip
           label={t("keypool.statusCooling")}
@@ -79,9 +89,9 @@ function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShar
           tone="mint"
         />
         <SummaryChip
-          label={t("keypool.statusBenched")}
-          value={benchedCount}
-          hint={t("keypool.railBenchedHint")}
+          label={t("keypool.attentionLabel")}
+          value={attentionCount}
+          hint={t("keypool.railAttentionHint")}
           tone="accent"
         />
       </div>
@@ -93,7 +103,7 @@ function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShar
             {t("keypool.shareLabel")}: {t("keypool.shareZero")}
           </div>
           <p className="text-[12px] leading-relaxed text-ink-muted">
-            {t("keypool.shareTip")}
+            {t("keypool.shareEmptyHint")}
           </p>
           <div
             className="h-6 w-full border-2 border-border bg-paper-1"
@@ -103,9 +113,7 @@ function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShar
         </div>
       ) : (
         <>
-          <TheoreticalShareBar slices={slices} />
-
-          {/* Legend / detail: label, prefix, weight, status, theoretical share only */}
+          <DynamicShareBar slices={slices} />
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {slices.map((s) => (
               <li
@@ -122,8 +130,10 @@ function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShar
                 </span>
                 <span className="font-mono text-[11px] text-ink-muted">{s.prefix}</span>
                 <span className="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums text-ink">
-                  <Coins size={12} weight="duotone" className="text-accent" />
-                  {s.weight}
+                  <Heartbeat size={12} weight="duotone" className="text-accent" />
+                  {formatHealthScore(s.healthScore)}
+                  <span className="text-ink-faint">/</span>
+                  {formatHealthScore(s.selectionScore)}
                 </span>
                 <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
                 <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-ink">
@@ -135,18 +145,18 @@ function KeyPoolShareBody({ summary, provider }: { readonly summary: KeyPoolShar
         </>
       )}
 
-      {/* Clarify theoretical vs actual routing (reuse existing copy; sticky = spread model). */}
       <div className="flex flex-col gap-1 border-t-2 border-border pt-2.5 text-[11px] leading-relaxed text-ink-faint">
-        <p>{t("keypool.shareTheoryNote")}</p>
+        <p>{t("keypool.shareDynamicNote")}</p>
         <p>{t("keypool.shareStickyNote")}</p>
-        <p className="font-mono">{provider === "ollama" ? t("keypool.barKeyLabelOl") : t("keypool.barKeyLabelOc")}</p>
+        <p className="font-mono">
+          {provider === "ollama" ? t("keypool.barKeyLabelOl") : t("keypool.barKeyLabelOc")}
+        </p>
       </div>
     </div>
   );
 }
 
-/** Hard-edge stacked bar for theoretical share (percent widths). */
-function TheoreticalShareBar({
+function DynamicShareBar({
   slices,
 }: {
   readonly slices: readonly KeyPoolShareSlice[];

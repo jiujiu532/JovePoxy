@@ -31,6 +31,10 @@ func (server server) listZenKeys(writer http.ResponseWriter, request *http.Reque
 }
 
 func (server server) createZenKey(writer http.ResponseWriter, request *http.Request) {
+	if server.pool == nil {
+		writeError(writer, http.StatusServiceUnavailable, "zen pool unavailable")
+		return
+	}
 	var body createZenKeyRequest
 	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 		writeError(writer, http.StatusBadRequest, "invalid JSON")
@@ -40,6 +44,7 @@ func (server server) createZenKey(writer http.ResponseWriter, request *http.Requ
 	if provider == "" {
 		provider = zenpool.ProviderOpenCode
 	}
+	// Weight accepted for backward-compatible clients; P0 scheduling uses health_score, not weight.
 	created, err := server.pool.Create(request.Context(), zenpool.CreateInput{
 		Label: body.Label, Secret: body.Secret, Weight: body.Weight, Provider: provider,
 	})
@@ -47,6 +52,7 @@ func (server server) createZenKey(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	// mapZenKeys returns secret-free DTO including cold-start health fields; never echo body.Secret.
 	writeJSON(writer, http.StatusCreated, mapZenKeys([]zenpool.Metadata{created}).Keys[0])
 }
 
@@ -84,6 +90,7 @@ func (server server) updateZenKey(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, "invalid JSON")
 		return
 	}
+	// Weight accepted for API compatibility only; does not control dynamic health selection.
 	updated, err := server.pool.Update(request.Context(), zenpool.KeyID(request.PathValue("id")), zenpool.UpdateInput{
 		Label: body.Label, Secret: body.Secret, Weight: body.Weight,
 	})
@@ -91,5 +98,6 @@ func (server server) updateZenKey(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Secret never returned after create; health fields are secret-free cold-start until domain lands.
 	writeJSON(writer, http.StatusOK, mapZenKeys([]zenpool.Metadata{updated}).Keys[0])
 }

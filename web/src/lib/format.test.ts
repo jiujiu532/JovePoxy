@@ -117,6 +117,30 @@ describe("zenKeyStatus", () => {
     ).toBe("active");
     expect(zenKeyStatus({ enabled: true, status: "benched" }, now)).toBe("benched");
   });
+
+  it("keeps probing after cooldown expiry when reason remains", () => {
+    expect(
+      zenKeyStatus(
+        {
+          enabled: true,
+          status: "cooling",
+          cooldown_until: "2026-07-30T11:59:00.000Z",
+          cooldown_reason: "rate_limited",
+        },
+        now,
+      ),
+    ).toBe("probing");
+    expect(
+      zenKeyStatus(
+        {
+          enabled: true,
+          status: "probing",
+          cooldown_reason: "upstream_5xx",
+        },
+        now,
+      ),
+    ).toBe("probing");
+  });
 });
 
 describe("formatCooldownRemaining", () => {

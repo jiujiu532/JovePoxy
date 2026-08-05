@@ -67,24 +67,32 @@ export function validatePasswordInput(password: string, t: Translate): string | 
 }
 
 /** Derive zen key status when server field is missing (client fallback). */
-export function zenKeyStatus(key: Pick<ZenKeyDTO, "enabled" | "status" | "cooldown_until">, nowMs = Date.now()): ZenKeyStatus {
+export function zenKeyStatus(
+  key: Pick<ZenKeyDTO, "enabled" | "status" | "cooldown_until" | "cooldown_reason">,
+  nowMs = Date.now(),
+): ZenKeyStatus {
   if (!key.enabled) return "disabled";
   // Process-memory 401 bench is server-authoritative (no client until timestamp).
   if (key.status === "benched") return "benched";
-  if (key.status === "active" || key.status === "cooling" || key.status === "disabled") {
-    // Re-check cooling against client clock for countdown UX.
-    if (key.status === "cooling" || key.cooldown_until) {
-      const until = key.cooldown_until ? Date.parse(key.cooldown_until) : NaN;
-      if (!key.enabled) return "disabled";
-      if (Number.isFinite(until) && until > nowMs) return "cooling";
-      return key.enabled ? "active" : "disabled";
-    }
+  // Controlled single-flight probe after cooldown — server-authoritative.
+  if (key.status === "probing") return "probing";
+
+  const untilMs = key.cooldown_until ? Date.parse(key.cooldown_until) : NaN;
+  const stillCooling = Number.isFinite(untilMs) && untilMs > nowMs;
+  if (stillCooling) return "cooling";
+
+  // Server may still say "cooling" while client clock already passed cooldown_until.
+  // With a remaining cooldown_reason the key is in controlled recovery (probing).
+  const reason = (key.cooldown_reason ?? "").trim();
+  if (key.status === "cooling") {
+    if (reason.length > 0) return "probing";
+    return "active";
+  }
+  if (key.status === "active" || key.status === "disabled") {
     return key.status;
   }
-  if (key.cooldown_until) {
-    const until = Date.parse(key.cooldown_until);
-    if (Number.isFinite(until) && until > nowMs) return "cooling";
-  }
+  // Missing/legacy status: reason after cooldown means probe, else active.
+  if (reason.length > 0) return "probing";
   return "active";
 }
 

@@ -40,6 +40,7 @@ func TestOpen_initializes_versioned_schema_idempotently(t *testing.T) {
 	for _, table := range []string{
 		"local_api_keys", "zen_keys", "opencode_accounts", "usage_records",
 		"usage_sync_state", "request_logs", "settings", "admin_sessions", "local_key_usage",
+		"zen_key_health",
 	} {
 		assertTableExists(t, database, table)
 	}
@@ -47,10 +48,10 @@ func TestOpen_initializes_versioned_schema_idempotently(t *testing.T) {
 	if err := database.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM schema_migrations").Scan(&migrations); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if migrations != 12 {
-		t.Fatalf("migration count = %d, want 12", migrations)
+	if migrations != 13 {
+		t.Fatalf("migration count = %d, want 13", migrations)
 	}
-	t.Logf("migration_version=12 migration_count=%d", migrations)
+	t.Logf("migration_version=13 migration_count=%d", migrations)
 }
 
 func TestOpen_configures_pragmas_on_second_connection(t *testing.T) {
