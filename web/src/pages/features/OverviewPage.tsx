@@ -1,8 +1,8 @@
 import {
+  ArrowClockwise,
   ChartDonut,
   ChartLineUp,
   Lightning,
-  Pulse,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -460,14 +460,13 @@ export function OverviewPage() {
               lang={lang}
             />
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => void load({ soft: true })}
-              className="h-8 min-h-8 px-2.5 text-[12px] shadow-none"
               title={t("common.refresh")}
             >
-              <Pulse size={14} weight="bold" aria-hidden />
-              <span className="sr-only sm:not-sr-only sm:inline">{t("common.refresh")}</span>
+              <ArrowClockwise size={16} weight="bold" className="mr-1.5" aria-hidden />
+              {t("common.refresh")}
             </Button>
           </div>
         }
