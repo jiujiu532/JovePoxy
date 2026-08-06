@@ -34,11 +34,11 @@ export function SegmentedFilter({
       role="group"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-8 flex-wrap items-center gap-0.5 rounded-none border-2 border-border bg-paper-1 p-0.5",
+        "inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-none border-2 border-border bg-paper-0 shadow-[2px_2px_0_var(--border)] select-none",
         className,
       )}
     >
-      {options.map((opt) => {
+      {options.map((opt, index) => {
         const active = value === opt.value;
         return (
           <button
@@ -46,11 +46,12 @@ export function SegmentedFilter({
             type="button"
             aria-pressed={active}
             className={cn(
-              "h-7 shrink-0 rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+              "inline-flex h-full shrink-0 items-center px-2.5 text-[12px] font-semibold transition-[background-color,color] duration-100",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
+              index > 0 && "border-l-2 border-border",
               active
-                ? "bg-ink text-paper-0 shadow-[2px_2px_0_var(--border)]"
-                : "text-ink-muted hover:bg-paper-2 hover:text-ink",
+                ? "bg-ink text-paper-0"
+                : "bg-paper-0 text-ink-muted hover:bg-paper-1 hover:text-ink",
             )}
             onClick={() => onChange(opt.value)}
           >
