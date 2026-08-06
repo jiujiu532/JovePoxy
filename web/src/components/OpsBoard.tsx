@@ -253,7 +253,6 @@ export function OpsBoard({
 
   const ocShare = formatPaidShare(oc.share_of_paid);
   const olShare = formatPaidShare(ol.share_of_paid);
-  const poolTotal = Math.max(total, 1);
 
   return (
     <SectionPanel
@@ -268,7 +267,7 @@ export function OpsBoard({
         </Button>
       }
     >
-      {/* Live key-pool strip — single dense row */}
+      {/* Live key-pool strip — numbers only, no decorative bar */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b-2 border-border bg-paper-2 px-3 py-1.5">
         <span className="font-mono text-[11px] font-extrabold uppercase tracking-wide text-ink">
           {t("overview.zenPool.title")}
@@ -306,46 +305,6 @@ export function OpsBoard({
           />
           {t("overview.zenPool.ollama")} {olPool.healthy}/{olPool.total}
         </span>
-        <div
-          className="ml-auto flex h-3 min-w-[8rem] flex-1 max-w-xs overflow-hidden border border-border bg-paper-0"
-          role="img"
-          aria-label={t("overview.zenPool.title")}
-        >
-          {total === 0 ? (
-            <div className="w-full bg-paper-1" />
-          ) : (
-            <>
-              {healthy > 0 ? (
-                <div
-                  className="h-full bg-accent-teal"
-                  style={{ width: `${(healthy / poolTotal) * 100}%` }}
-                  title={`${t("overview.zenPool.healthy")}: ${healthy}`}
-                />
-              ) : null}
-              {cooled > 0 ? (
-                <div
-                  className="h-full bg-accent-yellow"
-                  style={{ width: `${(cooled / poolTotal) * 100}%` }}
-                  title={`${t("overview.zenPool.cooled")}: ${cooled}`}
-                />
-              ) : null}
-              {benched > 0 ? (
-                <div
-                  className="h-full bg-accent-coral"
-                  style={{ width: `${(benched / poolTotal) * 100}%` }}
-                  title={`${t("overview.zenPool.benched")}: ${benched}`}
-                />
-              ) : null}
-              {disabled > 0 ? (
-                <div
-                  className="h-full bg-border"
-                  style={{ width: `${(disabled / poolTotal) * 100}%` }}
-                  title={`${t("overview.zenPool.disabled")}: ${disabled}`}
-                />
-              ) : null}
-            </>
-          )}
-        </div>
       </div>
 
       {/* Table */}

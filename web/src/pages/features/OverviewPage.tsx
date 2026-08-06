@@ -478,14 +478,6 @@ export function OverviewPage() {
 
       {/* 1. 体量（主信号）：区间请求/Token + 全量 */}
       <section aria-label={t("overview.volume.title")}>
-        <div className="mb-1.5">
-          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
-            {t("overview.volume.title")}
-          </h2>
-          <p className="mt-0.5 text-[11px] text-ink-faint">
-            {t("overview.volume.hint", { range: rangeText })}
-          </p>
-        </div>
         <MetricRail items={volumeRail} />
       </section>
 
