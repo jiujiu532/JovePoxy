@@ -419,13 +419,13 @@ export function DateRangePicker({
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex h-8 max-w-full items-center gap-1.5 border-2 border-border bg-paper-0 px-2",
-          "font-mono text-[12px] text-ink shadow-[2px_2px_0_var(--border)]",
-          "hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+          "inline-flex h-9 min-h-9 max-w-full items-center gap-1.5 border-2 border-border bg-paper-0 px-3",
+          "font-mono text-[13px] text-ink shadow-[var(--shadow-hard)]",
+          "hover:bg-accent-yellow hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
           open && "bg-paper-2",
         )}
       >
-        <CalendarBlank size={13} weight="bold" className="shrink-0" aria-hidden />
+        <CalendarBlank size={16} weight="bold" className="shrink-0" aria-hidden />
         <span className="truncate tabular-nums">{triggerText}</span>
       </button>
 
