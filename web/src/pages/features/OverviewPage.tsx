@@ -1,13 +1,11 @@
 import {
   ChartDonut,
   ChartLineUp,
-  Coins,
   Lightning,
   Pulse,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { cn } from "@/lib/cn";
 import {
   Button,
   DateRangePicker,
@@ -21,8 +19,7 @@ import {
   Skeleton,
   type DateRangeValue,
 } from "@/components";
-import { StatusStackBar } from "@/components/charts";
-import { RoutingChannelsCard } from "@/components/RoutingChannelsCard";
+import { OpsBoard } from "@/components/OpsBoard";
 import {
   ModelCallTrendChart,
   ModelRankBars,
@@ -40,7 +37,6 @@ import {
   type OverviewDTO,
   type RoutingKPIsDTO,
   type UsageRecordDTO,
-  type ZenPoolSummaryDTO,
 } from "@/lib/api";
 import { handleUnauthorized } from "@/lib/api-error";
 import { opsWindowForRange } from "@/lib/overview-ops-window";
@@ -250,316 +246,6 @@ function buildModelAnalytics(
   };
 }
 
-function formatSuccessRate(rate: number | null | undefined, requests: number): string {
-  if (requests <= 0 || rate == null) return "-";
-  return `${(rate * 100).toFixed(1)}%`;
-}
-
-function formatLatencyMs(t: Translate, value: number | null | undefined): string {
-  if (value == null) return "-";
-  return t("overview.opsKpis.ms", { n: value });
-}
-
-function rateToneClass(rate: number | null | undefined, requests: number): string {
-  if (rate == null || requests === 0) return "bg-paper-2 text-ink-muted border-border";
-  if (rate >= 0.95) return "bg-accent-teal text-black border-border";
-  if (rate >= 0.85) return "bg-accent-yellow text-black border-border";
-  return "bg-accent text-black border-border";
-}
-
-function rateLabel(
-  t: Translate,
-  rate: number | null | undefined,
-  requests: number,
-): string {
-  if (rate == null || requests === 0) return "-";
-  if (rate >= 0.95) return t("overview.opsKpis.rateExcellent");
-  if (rate >= 0.85) return t("overview.opsKpis.rateGood");
-  return t("overview.opsKpis.rateLow");
-}
-
-/** 运维 KPI：跟随全局日期范围，无独立时窗切换。贴边分段，少嵌套阴影。 */
-function HealthBlock({
-  kpis,
-  rangeText,
-  t,
-}: {
-  readonly kpis: OpsKPIsDTO;
-  readonly rangeText: string;
-  readonly t: Translate;
-}) {
-  const requests = kpis.requests ?? 0;
-  const s2xx = kpis.status_2xx ?? 0;
-  const s429 = kpis.status_429 ?? 0;
-  const s4xx = kpis.status_4xx ?? 0;
-  const s5xx = kpis.status_5xx ?? 0;
-  const rate = kpis.success_rate;
-
-  return (
-    <SectionPanel
-      title={t("overview.opsKpis.title")}
-      description={t("overview.opsKpis.description", { range: rangeText })}
-      icon={ChartLineUp}
-      iconTone="teal"
-      bodyClassName="!p-3"
-    >
-      {requests === 0 ? (
-        <EmptyState
-          compact
-          icon={ChartLineUp}
-          title={t("overview.opsKpis.noData", { range: rangeText })}
-        />
-      ) : (
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-2 overflow-hidden border-2 border-border bg-paper-2 sm:grid-cols-4">
-            <OpsMetric
-              index={0}
-              label={t("overview.opsKpis.requests")}
-              value={formatCompact(requests)}
-              hint={t("overview.modelAnalytics.totalCalls")}
-            />
-            <OpsMetric
-              index={1}
-              label={t("overview.opsKpis.successRate")}
-              value={formatSuccessRate(rate, requests)}
-            >
-              <span
-                className={cn(
-                  "mt-1 self-start inline-block border px-1.5 py-px font-mono text-[10px] font-bold",
-                  rateToneClass(rate, requests),
-                )}
-              >
-                {rateLabel(t, rate, requests)}
-              </span>
-            </OpsMetric>
-            <OpsMetric
-              index={2}
-              label={t("overview.opsKpis.latencyP50")}
-              value={formatLatencyMs(t, kpis.latency_p50_ms)}
-              hint={t("overview.opsKpis.p50Hint")}
-            />
-            <OpsMetric
-              index={3}
-              label={t("overview.opsKpis.latencyP95")}
-              value={formatLatencyMs(t, kpis.latency_p95_ms)}
-              hint={t("overview.opsKpis.p95Hint")}
-            />
-          </div>
-
-          <div>
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-1 font-mono text-[11px]">
-              <span className="font-bold uppercase tracking-wide text-ink-muted">
-                {t("overview.opsKpis.statusDist")}
-              </span>
-              <span className="tabular-nums text-[10px] text-ink-faint">
-                {t("overview.opsKpis.status2xx")} {s2xx}
-                {" · "}
-                {t("overview.opsKpis.status429")} {s429}
-                {" · "}
-                {t("overview.opsKpis.status4xx")} {s4xx}
-                {" · "}
-                {t("overview.opsKpis.status5xx")} {s5xx}
-              </span>
-            </div>
-            <StatusStackBar
-              ariaLabel={t("overview.opsKpis.statusDist")}
-              segments={[
-                {
-                  label: t("overview.opsKpis.status2xx"),
-                  value: s2xx,
-                  color: "var(--accent-teal)",
-                },
-                {
-                  label: t("overview.opsKpis.status429"),
-                  value: s429,
-                  color: "var(--accent-yellow)",
-                },
-                {
-                  label: t("overview.opsKpis.status4xx"),
-                  value: s4xx,
-                  color: "var(--accent-coral)",
-                },
-                {
-                  label: t("overview.opsKpis.status5xx"),
-                  value: s5xx,
-                  color: "var(--accent)",
-                },
-              ]}
-            />
-          </div>
-        </div>
-      )}
-    </SectionPanel>
-  );
-}
-
-function OpsMetric({
-  index,
-  label,
-  value,
-  hint,
-  children,
-}: {
-  readonly index: number;
-  readonly label: string;
-  readonly value: string;
-  readonly hint?: string;
-  readonly children?: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col justify-between px-2.5 py-2",
-        // desktop 1x4: left divider after first cell
-        index > 0 && "sm:border-l-2 sm:border-border",
-        // mobile 2x2: left on odd cells, top on second row
-        index % 2 === 1 && "max-sm:border-l-2 max-sm:border-border",
-        index >= 2 && "max-sm:border-t-2 max-sm:border-border",
-      )}
-    >
-      <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-        {label}
-      </span>
-      <span className="mt-1 font-mono text-[1.25rem] font-extrabold tabular-nums leading-none text-ink">
-        {value}
-      </span>
-      {children}
-      {hint && !children ? (
-        <span className="mt-1 font-mono text-[10px] text-ink-faint">{hint}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function ZenPoolStrip({
-  pool,
-  t,
-  onOpen,
-}: {
-  readonly pool?: ZenPoolSummaryDTO | undefined;
-  readonly t: Translate;
-  readonly onOpen: () => void;
-}) {
-  // Always render: empty pool still fills the right column so the health row stays balanced.
-  const total = pool?.total ?? 0;
-  const healthy = pool?.healthy ?? 0;
-  const cooled = pool?.cooled ?? 0;
-  const disabled = pool?.disabled ?? 0;
-  const benched = pool?.benched ?? 0;
-  const abnormal = cooled + benched + disabled;
-  const by = pool?.by_provider;
-  const oc = by?.["opencode"] ?? { total: 0, healthy: 0, enabled: 0, cooled: 0, disabled: 0 };
-  const ol = by?.["ollama"] ?? { total: 0, healthy: 0, enabled: 0, cooled: 0, disabled: 0 };
-
-  return (
-    <SectionPanel
-      title={t("overview.zenPool.title")}
-      description={t("overview.zenPool.liveHint")}
-      icon={Coins}
-      iconTone="yellow"
-      bodyClassName="!p-3"
-      actions={
-        <Button variant="ghost" size="sm" onClick={onOpen}>
-          {t("overview.zenPool.openPool")}
-        </Button>
-      }
-    >
-      <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-3 overflow-hidden border-2 border-border bg-paper-2">
-          <div className="px-2.5 py-2">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-              {t("overview.zenPool.totalKeys")}
-            </p>
-            <p className="mt-0.5 font-mono text-[1.2rem] font-extrabold tabular-nums leading-none text-ink">
-              {total}
-            </p>
-          </div>
-          <div className="border-l-2 border-border px-2.5 py-2">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-              {t("overview.zenPool.healthy")}
-            </p>
-            <p className="mt-0.5 font-mono text-[1.2rem] font-extrabold tabular-nums leading-none text-accent-teal">
-              {healthy}
-            </p>
-          </div>
-          <div className="border-l-2 border-border px-2.5 py-2">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-              {t("overview.zenPool.abnormal")}
-            </p>
-            <p
-              className={cn(
-                "mt-0.5 font-mono text-[1.2rem] font-extrabold tabular-nums leading-none",
-                abnormal > 0 ? "text-accent-coral" : "text-ink-muted",
-              )}
-            >
-              {abnormal}
-            </p>
-          </div>
-        </div>
-
-        <StatusStackBar
-          ariaLabel={t("overview.zenPool.title")}
-          emptyLabel={t("overview.zenPool.empty")}
-          segments={[
-            {
-              label: t("overview.zenPool.healthy"),
-              value: healthy,
-              color: "var(--accent-teal)",
-            },
-            {
-              label: t("overview.zenPool.cooled"),
-              value: cooled,
-              color: "var(--accent-yellow)",
-            },
-            {
-              label: t("overview.zenPool.benched"),
-              value: benched,
-              color: "var(--accent-coral)",
-            },
-            {
-              label: t("overview.zenPool.disabled"),
-              value: disabled,
-              color: "var(--border)",
-            },
-          ]}
-        />
-
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
-          <span className="font-bold text-ink-muted">
-            {t("overview.zenPool.channelAvailability")}
-          </span>
-          <span className="inline-flex items-center gap-1 border border-border bg-paper-2 px-1.5 py-0.5">
-            <span
-              className={cn(
-                "h-2 w-2",
-                oc.healthy > 0 ? "bg-accent-teal" : "bg-ink-faint",
-              )}
-              aria-hidden
-            />
-            <span className="font-semibold">{t("overview.zenPool.opencode")}</span>
-            <span className="font-bold tabular-nums">
-              {oc.healthy}/{oc.total}
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-1 border border-border bg-paper-2 px-1.5 py-0.5">
-            <span
-              className={cn(
-                "h-2 w-2",
-                ol.healthy > 0 ? "bg-accent-teal" : "bg-ink-faint",
-              )}
-              aria-hidden
-            />
-            <span className="font-semibold">{t("overview.zenPool.ollama")}</span>
-            <span className="font-bold tabular-nums">
-              {ol.healthy}/{ol.total}
-            </span>
-          </span>
-        </div>
-      </div>
-    </SectionPanel>
-  );
-}
-
 export function OverviewPage() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
@@ -713,7 +399,7 @@ export function OverviewPage() {
       <div className="flex flex-col gap-4">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-56 w-full" />
         <Skeleton className="h-72 w-full" />
         <div className="grid gap-3 lg:grid-cols-2">
           <Skeleton className="h-56 w-full" />
@@ -852,22 +538,16 @@ export function OverviewPage() {
         <MetricRail items={volumeRail} />
       </section>
 
-      {/* 2. 健康（次信号）：区间 KPI + 实时密钥池 */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <HealthBlock kpis={opsKpis} rangeText={rangeText} t={t} />
-        <ZenPoolStrip
-          pool={data.zen_pool}
-          t={t}
-          onOpen={() => void navigate("/app/key-pool")}
-        />
-      </div>
-
-      {/* 3. 付费通道对比（紧凑条，独立时窗） */}
-      <RoutingChannelsCard
-        kpis={routingKpis}
-        window={routingWindow}
-        onWindowChange={setRoutingWindow}
-        loading={routingLoading}
+      {/* 2. 运维总表：密钥池 + 全局 KPI + 最终付费通道 */}
+      <OpsBoard
+        opsKpis={opsKpis}
+        rangeText={rangeText}
+        pool={data.zen_pool}
+        routingKpis={routingKpis}
+        routingWindow={routingWindow}
+        onRoutingWindowChange={setRoutingWindow}
+        routingLoading={routingLoading}
+        onOpenPool={() => void navigate("/app/key-pool")}
         t={t}
       />
 
@@ -880,7 +560,7 @@ export function OverviewPage() {
         </p>
       ) : null}
 
-      {/* 4. 模型分析（下钻） */}
+      {/* 3. 模型分析（下钻） */}
       <SectionPanel
         title={t("overview.modelAnalytics.trendTitle")}
         description={t("overview.modelAnalytics.trendDesc", {
