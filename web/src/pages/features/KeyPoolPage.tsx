@@ -286,8 +286,8 @@ export function KeyPoolPage() {
             value={provider}
             onChange={(id) => setProvider(id as ProviderTab)}
             items={[
-              { id: "opencode", label: "OpenCode" },
-              { id: "ollama", label: "Ollama" },
+              { id: "opencode", label: "OpenCode", count: ocKeys.length },
+              { id: "ollama", label: "Ollama", count: olKeys.length },
             ]}
           />
         }
