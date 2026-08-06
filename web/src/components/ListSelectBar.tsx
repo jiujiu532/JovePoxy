@@ -330,7 +330,10 @@ export function ListToolbar({
   );
 }
 
-/** Hard full-width bar: left meta/links · right bulk actions. */
+/**
+ * Selection meta + selection actions as ONE flush segment strip
+ * (same grammar as provider Tabs / SegmentedFilter), bulk CTAs on the right.
+ */
 export function SelectionStrip({
   selectedCount,
   totalVisible,
@@ -356,40 +359,35 @@ export function SelectionStrip({
       role="status"
       aria-live="polite"
       className={cn(
-        "flex flex-col gap-2 rounded-none border-2 border-border bg-paper-0 sm:flex-row sm:items-center sm:justify-between",
-        "px-2.5 py-2 shadow-[3px_3px_0_var(--border)]",
+        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 border-2 border-border bg-ink px-2 py-1 text-[12px] font-semibold text-paper-0">
-          <span
-            className="inline-flex h-5 min-w-5 items-center justify-center border border-paper-0/30 bg-paper-0/15 px-1 font-mono text-[11px] font-black tabular-nums"
-            aria-hidden
-          >
+      <div
+        role="group"
+        aria-label={t("listselect.selected")}
+        className="inline-flex h-9 max-w-full items-stretch overflow-hidden border-2 border-border bg-paper-0 shadow-[2px_2px_0_var(--border)]"
+      >
+        <div className="inline-flex items-center gap-2 bg-ink px-3 text-paper-0">
+          <span className="font-mono text-[15px] font-black tabular-nums leading-none">
             {selectedCount}
           </span>
-          <span>{t("listselect.selected")}</span>
-          <span className="font-mono text-[11px] font-medium text-paper-0/70">
+          <span className="text-[12px] font-semibold leading-none">
+            {t("listselect.selected")}
+          </span>
+          <span className="hidden font-mono text-[11px] font-medium leading-none text-paper-0/65 sm:inline">
             {t("listselect.ofPage", { total: totalVisible })}
           </span>
-        </span>
-
-        <div
-          role="group"
-          aria-label={t("listselect.selected")}
-          className="inline-flex h-8 items-stretch overflow-hidden border-2 border-border bg-paper-0"
-        >
-          <SelectionAction onClick={onSelectAll}>
-            {allSelected ? t("listselect.deselectAll") : t("listselect.selectAll")}
-          </SelectionAction>
-          <SelectionAction onClick={onInvert} bordered>
-            {t("listselect.invert")}
-          </SelectionAction>
-          <SelectionAction onClick={onClear} bordered muted>
-            {t("listselect.clear")}
-          </SelectionAction>
         </div>
+        <SelectionAction onClick={onSelectAll} bordered>
+          {allSelected ? t("listselect.deselectAll") : t("listselect.selectAll")}
+        </SelectionAction>
+        <SelectionAction onClick={onInvert} bordered>
+          {t("listselect.invert")}
+        </SelectionAction>
+        <SelectionAction onClick={onClear} bordered muted>
+          {t("listselect.clear")}
+        </SelectionAction>
       </div>
 
       {bulkActions ? (
@@ -416,12 +414,12 @@ function SelectionAction({
     <button
       type="button"
       className={cn(
-        "inline-flex h-full items-center px-2.5 text-[12px] font-semibold transition-colors",
+        "inline-flex h-full items-center px-3 text-[12px] font-semibold transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
         bordered && "border-l-2 border-border",
         muted
-          ? "text-ink-faint hover:bg-paper-2 hover:text-ink"
-          : "text-ink-muted hover:bg-paper-2 hover:text-ink",
+          ? "bg-paper-0 text-ink-faint hover:bg-paper-2 hover:text-ink"
+          : "bg-paper-0 text-ink-muted hover:bg-paper-2 hover:text-ink",
       )}
       onClick={onClick}
     >
