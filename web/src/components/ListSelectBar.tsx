@@ -166,7 +166,7 @@ export function FilterSelect({
                     className={cn(
                       "flex w-full items-center px-3 py-1.5 text-left text-[12px] transition-colors",
                       active
-                        ? "bg-accent font-medium text-accent-fg"
+                        ? "bg-ink font-semibold text-paper-0"
                         : "text-ink-muted hover:bg-paper-0 hover:text-ink",
                     )}
                     onClick={() => {
@@ -356,55 +356,77 @@ export function SelectionStrip({
       role="status"
       aria-live="polite"
       className={cn(
-        "flex flex-col gap-2 rounded-none border-2 border-border sm:flex-row sm:items-center sm:justify-between",
-        "bg-accent-soft px-3 py-2 shadow-[3px_3px_0_var(--border)]",
+        "flex flex-col gap-2 rounded-none border-2 border-border bg-paper-0 sm:flex-row sm:items-center sm:justify-between",
+        "px-2.5 py-2 shadow-[3px_3px_0_var(--border)]",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 border-2 border-border bg-ink px-2 py-1 text-[12px] font-semibold text-paper-0">
           <span
-            className="inline-flex h-5 min-w-5 items-center justify-center rounded-none border-2 border-border bg-accent px-1.5 text-[11px] font-semibold tabular-nums text-accent-fg"
+            className="inline-flex h-5 min-w-5 items-center justify-center border border-paper-0/30 bg-paper-0/15 px-1 font-mono text-[11px] font-black tabular-nums"
             aria-hidden
           >
             {selectedCount}
           </span>
-          {t("listselect.selected")}
-          <span className="font-normal text-ink-faint">
+          <span>{t("listselect.selected")}</span>
+          <span className="font-mono text-[11px] font-medium text-paper-0/70">
             {t("listselect.ofPage", { total: totalVisible })}
           </span>
         </span>
-        <span className="hidden h-3.5 w-px bg-ink sm:inline-block" aria-hidden />
-        <div className="flex flex-wrap items-center gap-x-2.5 text-[12px]">
-          <button
-            type="button"
-            className="font-medium text-ink-muted transition-colors hover:text-ink"
-            onClick={onSelectAll}
-          >
+
+        <div
+          role="group"
+          aria-label={t("listselect.selected")}
+          className="inline-flex h-8 items-stretch overflow-hidden border-2 border-border bg-paper-0"
+        >
+          <SelectionAction onClick={onSelectAll}>
             {allSelected ? t("listselect.deselectAll") : t("listselect.selectAll")}
-          </button>
-          <button
-            type="button"
-            className="font-medium text-ink-muted transition-colors hover:text-ink"
-            onClick={onInvert}
-          >
+          </SelectionAction>
+          <SelectionAction onClick={onInvert} bordered>
             {t("listselect.invert")}
-          </button>
-          <button
-            type="button"
-            className="font-medium text-ink-faint transition-colors hover:text-ink"
-            onClick={onClear}
-          >
+          </SelectionAction>
+          <SelectionAction onClick={onClear} bordered muted>
             {t("listselect.clear")}
-          </button>
+          </SelectionAction>
         </div>
       </div>
+
       {bulkActions ? (
         <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
           {bulkActions}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function SelectionAction({
+  children,
+  onClick,
+  bordered = false,
+  muted = false,
+}: {
+  readonly children: ReactNode;
+  readonly onClick: () => void;
+  readonly bordered?: boolean;
+  readonly muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex h-full items-center px-2.5 text-[12px] font-semibold transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
+        bordered && "border-l-2 border-border",
+        muted
+          ? "text-ink-faint hover:bg-paper-2 hover:text-ink"
+          : "text-ink-muted hover:bg-paper-2 hover:text-ink",
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 
