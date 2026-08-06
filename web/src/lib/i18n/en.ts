@@ -366,7 +366,7 @@ export const en: Record<MessageKey, string> = {
   "overview.routing.unknownHint": "historic/unknown {n}",
   "overview.routing.shareOfPaid": "Share of paid",
   "overview.opsBoard.title": "Ops board",
-  "overview.opsBoard.description": "Global {range} · paid channels {routing}",
+  "overview.opsBoard.description": "{range}",
   "overview.opsBoard.global": "Global",
   "overview.opsBoard.col.channel": "Channel",
   "overview.opsBoard.empty": "No ops samples yet",

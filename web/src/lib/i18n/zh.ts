@@ -365,7 +365,7 @@ export const zh = {
   "overview.routing.unknownHint": "历史/未知 {n}",
   "overview.routing.shareOfPaid": "付费占比",
   "overview.opsBoard.title": "运维总表",
-  "overview.opsBoard.description": "全局 {range} · 付费通道 {routing}",
+  "overview.opsBoard.description": "{range}",
   "overview.opsBoard.global": "全局",
   "overview.opsBoard.col.channel": "通道",
   "overview.opsBoard.empty": "暂无运维样本",
