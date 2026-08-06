@@ -1,11 +1,8 @@
 import {
   ArrowsClockwise,
   ArrowRight,
-  GearSix,
   Key,
   Lock,
-  Stack,
-  TerminalWindow,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -27,14 +24,6 @@ import { useI18n, type Translate } from "@/lib/i18n";
 
 type LoadPolicy = "spread" | "sticky";
 type AttemptCount = 2 | 3 | 4;
-
-type InfoRow = {
-  readonly label: string;
-  readonly value: string;
-  readonly tip: string;
-  readonly badge?: boolean;
-  readonly on?: boolean;
-};
 
 function clampAttempts(value: number | undefined | null): AttemptCount {
   const n = value ?? 2;
@@ -63,104 +52,6 @@ function policyLabel(t: Translate, policy: LoadPolicy): string {
   return policy === "sticky"
     ? t("settings.loadPolicyStickyLabel")
     : t("settings.loadPolicySpreadLabel");
-}
-
-function serviceRows(t: Translate, s: SettingsDTO): InfoRow[] {
-  return [
-    {
-      label: t("settings.listen"),
-      value: s.listen,
-      tip: t("settings.listenTip"),
-    },
-    {
-      label: t("settings.dataDir"),
-      value: s.data_dir,
-      tip: t("settings.dataDirTip"),
-    },
-    {
-      label: t("settings.zenBase"),
-      value: s.zen_base,
-      tip: t("settings.zenBaseTip"),
-    },
-    {
-      label: t("settings.upstreamTimeout"),
-      value: t("settings.upstreamTimeoutValue", { seconds: s.upstream_timeout_seconds }),
-      tip: t("settings.upstreamTimeoutTip"),
-    },
-    {
-      label: t("settings.httpProxy"),
-      value: s.http_proxy_configured ? t("settings.configured") : t("settings.notConfigured"),
-      tip: t("settings.httpProxyTip"),
-      badge: true,
-      on: s.http_proxy_configured,
-    },
-    {
-      label: t("settings.httpsProxy"),
-      value: s.https_proxy_configured ? t("settings.configured") : t("settings.notConfigured"),
-      tip: t("settings.httpsProxyTip"),
-      badge: true,
-      on: s.https_proxy_configured,
-    },
-  ];
-}
-
-function modelRows(t: Translate, s: SettingsDTO): InfoRow[] {
-  return [
-    {
-      label: t("settings.showAllModels"),
-      value: s.show_all_models ? t("settings.on") : t("settings.off"),
-      tip: t("settings.showAllModelsTip"),
-      badge: true,
-      on: s.show_all_models,
-    },
-    {
-      label: t("settings.modelCacheTtl"),
-      value: t("settings.modelCacheTtlValue", { seconds: s.model_cache_ttl_seconds }),
-      tip: t("settings.modelCacheTtlTip"),
-    },
-    {
-      label: t("settings.ocVersion"),
-      value: s.oc_version,
-      tip: t("settings.ocVersionTip"),
-    },
-    {
-      label: t("settings.cookieSecure"),
-      value: s.cookie_secure ? t("settings.on") : t("settings.off"),
-      tip: t("settings.cookieSecureTip"),
-      badge: true,
-      on: s.cookie_secure,
-    },
-    {
-      label: t("settings.sessionTtl"),
-      value: t("settings.sessionTtlValue", { hours: s.session_ttl_hours }),
-      tip: t("settings.sessionTtlTip"),
-    },
-  ];
-}
-
-function InfoGrid({ rows }: { readonly rows: readonly InfoRow[] }) {
-  return (
-    <div className="grid gap-px bg-border sm:grid-cols-2">
-      {rows.map((row) => (
-        <div
-          key={row.label}
-          className="flex min-h-10 items-center justify-between gap-3 bg-paper-1 px-3 py-2"
-        >
-          <div className="flex min-w-0 items-center gap-1">
-            <span className="truncate text-[12px] font-medium text-ink-muted">{row.label}</span>
-            <HelpTip content={row.tip} label={row.label} />
-          </div>
-          {row.badge ? (
-            <Badge kind={row.on ? "healthy" : "neutral"}>{row.value}</Badge>
-          ) : (
-            <span className="max-w-[58%] truncate text-right font-mono text-[12px] text-ink">
-              {row.value}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /** Compact hard-edge segment control for dense settings. */
@@ -265,7 +156,6 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
-  const [envOpen, setEnvOpen] = useState(false);
 
   // Snapshot = last known server/runtime values; draft = editable form.
   const [livePolicy, setLivePolicy] = useState<LoadPolicy>("spread");
@@ -640,99 +530,6 @@ export function SettingsPage() {
                 </div>
               </div>
             </form>
-          </SectionPanel>
-
-          <div className="grid gap-3 xl:grid-cols-2">
-            <SectionPanel
-              title={t("settings.serviceTitle")}
-              description={t("settings.serviceDescription")}
-              icon={GearSix}
-              iconTone="yellow"
-              bodyClassName="p-0"
-            >
-              <InfoGrid rows={serviceRows(t, settings)} />
-            </SectionPanel>
-
-            <SectionPanel
-              title={t("settings.modelTitle")}
-              description={t("settings.modelDescription")}
-              icon={Stack}
-              iconTone="teal"
-              bodyClassName="p-0"
-            >
-              <InfoGrid rows={modelRows(t, settings)} />
-            </SectionPanel>
-          </div>
-
-          <SectionPanel
-            title={t("settings.envTitle")}
-            description={t("settings.envDescription")}
-            icon={TerminalWindow}
-            iconTone="mint"
-            bodyClassName={envOpen ? "!p-3" : "!p-0"}
-            actions={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setEnvOpen((open) => !open)}
-              >
-                {envOpen ? t("settings.envCollapse") : t("settings.envExpand")}
-              </Button>
-            }
-          >
-            {envOpen ? (
-              <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                {(
-                  [
-                    ["ADMIN_PASSWORD", t("settings.envAdminPassword")],
-                    ["ADMIN_SECRET", t("settings.envAdminSecret")],
-                    ["LISTEN", t("settings.listen")],
-                    ["DATA_DIR", t("settings.dataDir")],
-                    ["ZEN_BASE", t("settings.envZenBase")],
-                    ["SHOW_ALL_MODELS", t("settings.envShowAllModels")],
-                    ["COOKIE_SECURE", t("settings.envCookieSecure")],
-                    ["MODEL_CACHE_TTL", t("settings.envModelCacheTtl")],
-                    ["ZEN_LOAD_POLICY", t("settings.envZenLoadPolicy")],
-                    ["ZEN_MAX_ATTEMPTS", t("settings.envZenMaxAttempts")],
-                    ["ZEN_BENCH_MINUTES", t("settings.envZenBenchMinutes")],
-                  ] as const
-                ).map(([env, tip]) => (
-                  <div
-                    key={env}
-                    className="flex min-h-9 items-center justify-between gap-2 border border-border bg-paper-2 px-2.5 py-1.5"
-                  >
-                    <code className="truncate font-mono text-[11px] text-ink">{env}</code>
-                    <HelpTip content={tip} label={env} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-1.5 border-t-2 border-border px-3 py-2.5">
-                {(
-                  [
-                    "ADMIN_PASSWORD",
-                    "ADMIN_SECRET",
-                    "LISTEN",
-                    "DATA_DIR",
-                    "ZEN_BASE",
-                    "SHOW_ALL_MODELS",
-                    "COOKIE_SECURE",
-                    "MODEL_CACHE_TTL",
-                    "ZEN_LOAD_POLICY",
-                    "ZEN_MAX_ATTEMPTS",
-                    "ZEN_BENCH_MINUTES",
-                  ] as const
-                ).map((env) => (
-                  <code
-                    key={env}
-                    className="border border-border bg-paper-2 px-1.5 py-0.5 font-mono text-[10px] text-ink-muted"
-                  >
-                    {env}
-                  </code>
-                ))}
-              </div>
-            )}
           </SectionPanel>
         </>
       ) : null}
