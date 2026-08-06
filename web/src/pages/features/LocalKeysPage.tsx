@@ -34,6 +34,7 @@ import {
 } from "@/components";
 import { api, type LocalKeyDTO } from "@/lib/api";
 import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
+import { gatewayOpenAIBaseURL } from "@/lib/gateway-url";
 import { useI18n, type Translate } from "@/lib/i18n";
 import {
   compareBySort,
@@ -180,6 +181,8 @@ export function LocalKeysPage() {
     }
   }
 
+  const baseURL = useMemo(() => gatewayOpenAIBaseURL(), []);
+
   // 吊销为软删：后台仍记 revoked_at，管理台列表不再展示墓碑
   const liveKeys = keys.filter((k) => !k.revoked);
   const active = liveKeys.filter((k) => k.enabled).length;
@@ -303,7 +306,7 @@ export function LocalKeysPage() {
             <>
               <p className="text-[12px] text-ink-muted">
                 Base URL{" "}
-                <span className="font-mono text-ink">http://127.0.0.1:6446/v1</span>
+                <span className="font-mono text-ink break-all">{baseURL}</span>
               </p>
               <Button size="sm" onClick={() => void onCopy()}>
                 <Copy size={14} className="mr-1" weight="bold" />
