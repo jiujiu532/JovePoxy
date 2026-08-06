@@ -2,7 +2,6 @@ import {
   ArrowClockwise,
   ChartDonut,
   ChartLineUp,
-  Lightning,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -403,18 +402,6 @@ export function OverviewPage() {
 
   if (!data) return null;
 
-  const quotaHint = (() => {
-    const n = data.quota_narrative;
-    if (!n) return t("overview.card.quotaRemainingHint");
-    if (n.note === "sample_insufficient" || n.worst_used_pct == null) {
-      return t("overview.card.quotaNarrativeSample");
-    }
-    return t("overview.card.quotaNarrativeHint", {
-      pct: Number(n.worst_used_pct).toFixed(1),
-      headroom: Number(n.headroom_pct ?? Math.max(0, 100 - n.worst_used_pct)).toFixed(1),
-    });
-  })();
-
   const volumeRail = [
     {
       label: t("overview.card.requestsPeriod", { range: rangeText }),
@@ -491,25 +478,13 @@ export function OverviewPage() {
 
       {/* 1. 体量（主信号）：区间请求/Token + 全量 */}
       <section aria-label={t("overview.volume.title")}>
-        <div className="mb-1.5 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
-              {t("overview.volume.title")}
-            </h2>
-            <p className="mt-0.5 text-[11px] text-ink-faint">
-              {t("overview.volume.hint", { range: rangeText })}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-[12px] text-ink-muted">
-            <Lightning size={14} weight="fill" className="text-accent-yellow" aria-hidden />
-            <span>
-              {t("overview.card.quotaRemaining")}{" "}
-              <span className="font-mono font-semibold tabular-nums text-ink">
-                {Number(data.quota_effective_remaining ?? 0).toFixed(1)}%
-              </span>
-            </span>
-            <span className="hidden text-ink-faint sm:inline">· {quotaHint}</span>
-          </div>
+        <div className="mb-1.5">
+          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+            {t("overview.volume.title")}
+          </h2>
+          <p className="mt-0.5 text-[11px] text-ink-faint">
+            {t("overview.volume.hint", { range: rangeText })}
+          </p>
         </div>
         <MetricRail items={volumeRail} />
       </section>
