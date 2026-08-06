@@ -61,9 +61,11 @@ function HeaderIconButton({
     "inline-flex h-9 w-9 shrink-0 items-center justify-center",
     "border-2 border-border bg-paper-0 text-ink-muted",
     "shadow-[2px_2px_0_var(--border)]",
-    "transition-[transform,background-color,color] duration-150",
-    /* paper-2 抬升，避免 dark 顶栏 paper-1 上 hover 无感 */
-    "hover:bg-paper-2 hover:text-ink active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+    "transition-[transform,box-shadow,background-color,color] duration-200",
+    "[transition-timing-function:var(--ease-toy-spring)]",
+    /* 与 secondary 按钮一致：黄底 + 轻微放大 */
+    "hover:scale-[1.02] hover:bg-accent-yellow hover:text-black",
+    "active:translate-x-[2px] active:translate-y-[2px] active:scale-95 active:shadow-none",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
   );
 
@@ -120,8 +122,10 @@ export function TopBar({
           "inline-flex h-10 w-10 shrink-0 items-center justify-center md:hidden",
           "border-2 border-border bg-paper-0 text-ink",
           "shadow-[2px_2px_0_var(--border)]",
-          "transition-[transform,background-color] duration-150",
-          "hover:bg-paper-2 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+          "transition-[transform,box-shadow,background-color,color] duration-200",
+          "[transition-timing-function:var(--ease-toy-spring)]",
+          "hover:scale-[1.02] hover:bg-accent-yellow hover:text-black",
+          "active:translate-x-[2px] active:translate-y-[2px] active:scale-95 active:shadow-none",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
         )}
         aria-label={t("shell.openNav")}

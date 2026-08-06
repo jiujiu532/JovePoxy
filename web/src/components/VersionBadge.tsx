@@ -72,7 +72,11 @@ export function VersionBadge({ className }: { readonly className?: string }) {
         className={cn(
           "flex h-8 w-full items-center justify-center rounded-none border-2 border-border bg-paper-0",
           "font-mono text-[11px] tabular-nums tracking-wide text-ink-muted",
-          "transition-colors hover:bg-paper-1 hover:text-ink",
+          "shadow-[2px_2px_0_var(--border)]",
+          "transition-[transform,box-shadow,background-color,color] duration-200",
+          "[transition-timing-function:var(--ease-toy-spring)]",
+          "hover:scale-[1.02] hover:bg-accent-yellow hover:text-black",
+          "active:translate-x-[2px] active:translate-y-[2px] active:scale-95 active:shadow-none",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
           className,
         )}
