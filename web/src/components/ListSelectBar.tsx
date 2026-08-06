@@ -49,7 +49,7 @@ export function SegmentedFilter({
               "h-7 shrink-0 rounded-none px-2.5 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
               active
-                ? "bg-accent text-accent-fg shadow-[2px_2px_0_var(--border)]"
+                ? "bg-ink text-paper-0 shadow-[2px_2px_0_var(--border)]"
                 : "text-ink-muted hover:bg-paper-2 hover:text-ink",
             )}
             onClick={() => onChange(opt.value)}
