@@ -34,7 +34,6 @@ import {
   useToast,
 } from "@/components";
 import { useProviderTab } from "@/hooks/useProviderTab";
-import { KeyPoolSharePanel } from "@/components/KeyPoolSharePanel";
 import { api, type KeyProvider, type ZenKeyDTO } from "@/lib/api";
 import { bindFriendlyError, handleUnauthorized } from "@/lib/api-error";
 import {
@@ -457,12 +456,6 @@ export function KeyPoolPage() {
             ]}
           />
 
-          <KeyPoolSharePanel
-            keys={keys}
-            nowMs={nowMs}
-            provider={provider}
-          />
-
           <SectionPanel
             title={t("keypool.listTitle")}
             icon={Key}
@@ -687,7 +680,9 @@ export function KeyPoolPage() {
                         <th className="whitespace-nowrap px-3 py-2 font-medium">
                           <span className="inline-flex items-center gap-1">
                             {t("keypool.colShare")}
-                            <HelpTip content={t("keypool.shareTip")} />
+                            <HelpTip
+                              content={`${t("keypool.shareTip")} ${t("keypool.shareStickyNote")}`}
+                            />
                           </span>
                         </th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">{t("keypool.colStatus")}</th>
