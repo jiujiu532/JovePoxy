@@ -848,6 +848,7 @@ export const zh = {
   "keypool.metaCooling": "冷却 {n}",
   "keypool.metaWeight": "权重 {n}",
   "keypool.collapse": "收起",
+  "keypool.expand": "展开",
   "keypool.addDialogTitle": "添加 {provider} 密钥",
   "keypool.addDialogDesc": "完整 secret 入库后不可回显，仅保存掩码前缀。",
   "keypool.weightHint": "权重越大，被轮询选中概率越高",

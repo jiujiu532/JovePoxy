@@ -849,6 +849,7 @@ export const en: Record<MessageKey, string> = {
   "keypool.metaCooling": "Cooling {n}",
   "keypool.metaWeight": "Weight {n}",
   "keypool.collapse": "Collapse",
+  "keypool.expand": "Expand",
   "keypool.addDialogTitle": "Add {provider} key",
   "keypool.addDialogDesc": "The full secret cannot be shown again after being stored; only a masked prefix is kept.",
   "keypool.weightHint": "Higher weight means a higher chance of being selected",

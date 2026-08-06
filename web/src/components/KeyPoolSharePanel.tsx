@@ -1,5 +1,11 @@
-import { ChartPieSlice, Heartbeat, WarningCircle } from "@phosphor-icons/react";
-import { Badge, HelpTip, SectionPanel } from "@/components";
+import {
+  CaretDown,
+  ChartPieSlice,
+  Heartbeat,
+  WarningCircle,
+} from "@phosphor-icons/react";
+import { useState } from "react";
+import { Badge, HelpTip } from "@/components";
 import { formatTrafficPct } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -20,8 +26,7 @@ export type KeyPoolSharePanelProps = {
 
 /**
  * In-pool estimated dynamic share for the current provider tab only.
- * Based on health/selection scores (or server traffic_pct), not historical hits
- * and not cross-provider routing.
+ * Collapsed by default to keep the key-pool page dense.
  */
 export function KeyPoolSharePanel({
   keys,
@@ -31,23 +36,124 @@ export function KeyPoolSharePanel({
 }: KeyPoolSharePanelProps) {
   const { t } = useI18n();
   const summary = buildKeyPoolShare(keys, nowMs);
+  const [open, setOpen] = useState(false);
+  const {
+    eligibleCount,
+    probingCount,
+    coolingCount,
+    attentionCount,
+  } = summary;
 
   return (
-    <SectionPanel
-      {...(className ? { className } : {})}
-      title={t("keypool.shareDynamicTitle")}
-      description={t("keypool.shareTip")}
-      icon={ChartPieSlice}
-      iconTone="teal"
-      actions={
-        <span className="inline-flex items-center gap-1 text-[12px] text-ink-muted">
-          <HelpTip content={t("keypool.pollTip")} />
-          <span className="hidden sm:inline">{t("keypool.pollTipLabel")}</span>
-        </span>
-      }
+    <section
+      className={cn(
+        "overflow-hidden rounded-none border-2 border-border bg-paper-1 shadow-[var(--shadow-hard)]",
+        className,
+      )}
     >
-      <KeyPoolShareBody summary={summary} provider={provider} />
-    </SectionPanel>
+      <button
+        type="button"
+        className={cn(
+          "flex w-full items-center gap-2 border-0 bg-transparent px-3 py-2 text-left",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring",
+          open && "border-b-2 border-border",
+        )}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center border-2 border-border bg-accent-teal text-black shadow-[2px_2px_0_var(--border)]"
+          aria-hidden
+        >
+          <ChartPieSlice size={14} weight="duotone" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[13px] font-semibold tracking-tight text-ink">
+              {t("keypool.shareDynamicTitle")}
+            </span>
+            <span
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <HelpTip
+                content={`${t("keypool.shareDynamicNote")} ${t("keypool.shareStickyNote")} ${t("keypool.pollTip")}`}
+                label={t("keypool.shareDynamicTitle")}
+              />
+            </span>
+          </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] tabular-nums text-ink-muted">
+            <MiniStat
+              label={t("keypool.railEnabledHint")}
+              value={eligibleCount}
+              tone="teal"
+            />
+            <MiniStat
+              label={t("keypool.statusProbing")}
+              value={probingCount}
+              tone="yellow"
+            />
+            <MiniStat
+              label={t("keypool.statusCooling")}
+              value={coolingCount}
+              tone="mint"
+            />
+            <MiniStat
+              label={t("keypool.attentionLabel")}
+              value={attentionCount}
+              tone="accent"
+            />
+          </span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-ink-muted">
+          <span className="hidden sm:inline">
+            {open ? t("keypool.collapse") : t("keypool.expand")}
+          </span>
+          <CaretDown
+            size={14}
+            weight="bold"
+            className={cn(
+              "text-ink transition-transform duration-150",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </span>
+      </button>
+
+      {open ? (
+        <div className="flex flex-col gap-2.5 px-3 py-2.5">
+          <KeyPoolShareBody summary={summary} provider={provider} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly tone: "yellow" | "teal" | "mint" | "accent";
+}) {
+  const dot = {
+    yellow: "bg-accent-yellow",
+    teal: "bg-accent-teal",
+    mint: "bg-accent-mint",
+    accent: "bg-accent",
+  }[tone];
+  return (
+    <span className="inline-flex items-center gap-1" title={label}>
+      <span
+        className={cn("inline-block h-1.5 w-1.5 border border-border", dot)}
+        aria-hidden
+      />
+      <span className="text-ink-faint">{label}</span>
+      <span className="font-semibold text-ink">{value}</span>
+    </span>
   );
 }
 
@@ -59,54 +165,21 @@ function KeyPoolShareBody({
   readonly provider: KeyProvider;
 }) {
   const { t } = useI18n();
-  const {
-    slices,
-    eligibleCount,
-    probingCount,
-    coolingCount,
-    attentionCount,
-  } = summary;
+  const { slices, eligibleCount } = summary;
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SummaryChip
-          label={t("keypool.railEnabledHint")}
-          value={eligibleCount}
-          hint={t("keypool.shareTip")}
-          tone="teal"
-        />
-        <SummaryChip
-          label={t("keypool.statusProbing")}
-          value={probingCount}
-          hint={t("keypool.railProbingHint")}
-          tone="yellow"
-        />
-        <SummaryChip
-          label={t("keypool.statusCooling")}
-          value={coolingCount}
-          hint={t("keypool.railCoolingHint")}
-          tone="mint"
-        />
-        <SummaryChip
-          label={t("keypool.attentionLabel")}
-          value={attentionCount}
-          hint={t("keypool.railAttentionHint")}
-          tone="accent"
-        />
-      </div>
-
+    <>
       {eligibleCount === 0 ? (
-        <div className="flex flex-col items-start gap-2 border-2 border-border bg-paper-2 p-3">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-            <WarningCircle size={16} weight="duotone" className="text-accent" />
+        <div className="flex flex-col gap-1.5 border-2 border-border bg-paper-2 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
+            <WarningCircle size={14} weight="duotone" className="text-accent" />
             {t("keypool.shareLabel")}: {t("keypool.shareZero")}
           </div>
-          <p className="text-[12px] leading-relaxed text-ink-muted">
+          <p className="text-[11px] leading-snug text-ink-muted">
             {t("keypool.shareEmptyHint")}
           </p>
           <div
-            className="h-6 w-full border-2 border-border bg-paper-1"
+            className="h-4 w-full border-2 border-border bg-paper-1"
             role="img"
             aria-label={`${t("keypool.colShare")}: ${t("keypool.shareZero")}`}
           />
@@ -114,29 +187,35 @@ function KeyPoolShareBody({
       ) : (
         <>
           <DynamicShareBar slices={slices} />
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {slices.map((s) => (
               <li
                 key={s.id}
-                className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-2 border-border bg-paper-2 px-2.5 py-2"
+                className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 border-2 border-border bg-paper-2 px-2 py-1.5"
               >
                 <span
-                  className="inline-block h-3 w-3 shrink-0 border-2 border-border"
+                  className="inline-block h-2.5 w-2.5 shrink-0 border-2 border-border"
                   style={{ backgroundColor: s.color }}
                   aria-hidden
                 />
-                <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
+                <span className="min-w-0 truncate text-[12px] font-semibold text-ink">
                   {s.label}
                 </span>
-                <span className="font-mono text-[11px] text-ink-muted">{s.prefix}</span>
-                <span className="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums text-ink">
-                  <Heartbeat size={12} weight="duotone" className="text-accent" />
+                <span className="font-mono text-[10px] text-ink-muted">
+                  {s.prefix}
+                </span>
+                <span className="inline-flex items-center gap-0.5 font-mono text-[11px] tabular-nums text-ink">
+                  <Heartbeat
+                    size={11}
+                    weight="duotone"
+                    className="text-accent"
+                  />
                   {formatHealthScore(s.healthScore)}
                   <span className="text-ink-faint">/</span>
                   {formatHealthScore(s.selectionScore)}
                 </span>
                 <Badge kind="healthy">{t("keypool.statusActive")}</Badge>
-                <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-ink">
+                <span className="ml-auto font-mono text-[12px] font-bold tabular-nums text-ink">
                   {formatTrafficPct(s.sharePct)}
                 </span>
               </li>
@@ -145,14 +224,12 @@ function KeyPoolShareBody({
         </>
       )}
 
-      <div className="flex flex-col gap-1 border-t-2 border-border pt-2.5 text-[11px] leading-relaxed text-ink-faint">
-        <p>{t("keypool.shareDynamicNote")}</p>
-        <p>{t("keypool.shareStickyNote")}</p>
-        <p className="font-mono">
-          {provider === "ollama" ? t("keypool.barKeyLabelOl") : t("keypool.barKeyLabelOc")}
-        </p>
-      </div>
-    </div>
+      <p className="font-mono text-[10px] text-ink-faint">
+        {provider === "ollama"
+          ? t("keypool.barKeyLabelOl")
+          : t("keypool.barKeyLabelOc")}
+      </p>
+    </>
   );
 }
 
@@ -173,9 +250,9 @@ function DynamicShareBar({
       role="img"
       aria-label={`${t("keypool.colShare")}: ${aria}`}
     >
-      <div className="flex h-7 w-full overflow-hidden border-2 border-border bg-paper-2">
+      <div className="flex h-5 w-full overflow-hidden border-2 border-border bg-paper-2">
         {total <= 0 ? (
-          <div className="flex w-full items-center justify-center text-[11px] text-ink-faint">
+          <div className="flex w-full items-center justify-center text-[10px] text-ink-faint">
             {t("keypool.shareZero")}
           </div>
         ) : (
@@ -188,64 +265,13 @@ function DynamicShareBar({
                 style={{
                   width: `${(s.sharePct / total) * 100}%`,
                   backgroundColor: s.color,
-                  minWidth: 6,
+                  minWidth: 4,
                 }}
                 title={`${s.label} · ${s.prefix} · ${formatTrafficPct(s.sharePct)}`}
               />
             ))
         )}
       </div>
-      <figcaption className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
-        {slices.map((s) => (
-          <span key={s.id} className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block h-2.5 w-2.5 border-2 border-border"
-              style={{ backgroundColor: s.color }}
-              aria-hidden
-            />
-            <span className="max-w-[8rem] truncate">{s.label}</span>
-            <span className="font-medium tabular-nums text-ink">
-              {formatTrafficPct(s.sharePct)}
-            </span>
-          </span>
-        ))}
-      </figcaption>
     </figure>
-  );
-}
-
-function SummaryChip({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  readonly label: string;
-  readonly value: number;
-  readonly hint: string;
-  readonly tone: "yellow" | "teal" | "mint" | "accent";
-}) {
-  const toneClass = {
-    yellow: "bg-accent-yellow text-black",
-    teal: "bg-accent-teal text-black",
-    mint: "bg-accent-mint text-black",
-    accent: "bg-accent text-black",
-  }[tone];
-
-  return (
-    <div
-      className={cn(
-        "min-w-0 border-2 border-border p-2 shadow-[2px_2px_0_var(--border)]",
-        toneClass,
-      )}
-      title={hint}
-    >
-      <p className="truncate text-[10px] font-bold uppercase tracking-wide text-black/70">
-        {label}
-      </p>
-      <p className="mt-0.5 font-mono text-[1.25rem] font-extrabold tabular-nums leading-none text-black">
-        {value}
-      </p>
-    </div>
   );
 }
