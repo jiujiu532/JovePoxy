@@ -819,6 +819,8 @@ export const en: Record<MessageKey, string> = {
   "localkeys.selectAllPage": "Select all on page",
   "localkeys.selectRowAria": "Select {label}",
   "localkeys.editAria": "Edit",
+  "localkeys.copyPrefixAria": "Copy prefix",
+  "localkeys.prefixCopied": "Prefix copied",
   "localkeys.rpmDailyLabel": "RPM / Daily",
   "localkeys.colLabel": "Label",
   "localkeys.colPrefix": "Prefix",

@@ -818,6 +818,8 @@ export const zh = {
   "localkeys.selectAllPage": "全选本页",
   "localkeys.selectRowAria": "选择 {label}",
   "localkeys.editAria": "编辑",
+  "localkeys.copyPrefixAria": "复制前缀",
+  "localkeys.prefixCopied": "已复制前缀",
   "localkeys.rpmDailyLabel": "RPM / 日",
   "localkeys.colLabel": "标签",
   "localkeys.colPrefix": "前缀",

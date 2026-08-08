@@ -13,8 +13,8 @@ import (
 )
 
 // Current is the product release version for this binary / UI build.
-// Override at build time: -ldflags "-X jovepoxy/internal/version.Current=1.0.0"
-var Current = "1.0.0"
+// Override at build time: -ldflags "-X jovepoxy/internal/version.Current=1.5.0"
+var Current = "1.5.0"
 
 // DefaultRepo is the GitHub repo used for release checks when VERSION_REPO is unset.
 const DefaultRepo = "jiujiu532/JovePoxy"

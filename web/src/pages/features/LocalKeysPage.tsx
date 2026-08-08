@@ -181,6 +181,16 @@ export function LocalKeysPage() {
     }
   }
 
+  /** 列表仅存前缀；完整密钥仅创建时返回一次。 */
+  async function onCopyPrefix(prefix: string) {
+    try {
+      await navigator.clipboard.writeText(prefix);
+      push(t("localkeys.prefixCopied"), "success");
+    } catch {
+      push(t("localkeys.copyFailed"), "error");
+    }
+  }
+
   const baseURL = useMemo(() => gatewayOpenAIBaseURL(), []);
 
   // 吊销为软删：后台仍记 revoked_at，管理台列表不再展示墓碑
@@ -609,6 +619,15 @@ export function LocalKeysPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                aria-label={t("localkeys.copyPrefixAria")}
+                                title={t("localkeys.copyPrefixAria")}
+                                onClick={() => void onCopyPrefix(key.prefix)}
+                              >
+                                <Copy size={14} />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 aria-label={t("localkeys.editAria")}
                                 onClick={() => openEdit(key)}
                               >
@@ -720,6 +739,15 @@ export function LocalKeysPage() {
                                   <span className="text-[12px] text-ink-faint">-</span>
                                 ) : (
                                   <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      aria-label={t("localkeys.copyPrefixAria")}
+                                      title={t("localkeys.copyPrefixAria")}
+                                      onClick={() => void onCopyPrefix(key.prefix)}
+                                    >
+                                      <Copy size={14} />
+                                    </Button>
                                     <Button
                                       variant="ghost"
                                       size="sm"
