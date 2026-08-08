@@ -46,11 +46,11 @@ JovePoxy（`module jovepoxy`）是一个**单二进制**网关：
 - **三端点兼容**：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，一套本地密钥即可调用。
 - **套餐对齐目录**：public Zen 只保留 free；有健康 `provider=opencode` 密钥时合并 **Go** `/zen/go/v1/models`；有健康 `provider=ollama` 密钥时合并 Ollama Cloud `/v1/models`。不暴露 public 上的 Claude/Gemini 等 Go 套餐不可用模型。
 - **按 provider 路由**：OpenCode free → `/zen/v1` + `Bearer public`；OpenCode paid → `/zen/go/v1` + Key 池；Ollama paid → Ollama Cloud + Key 池。
-- **本地密钥 `sk-oc-...`**：客户端只认网关密钥；支持 RPM / 日限额与并发会话；库内仅存 SHA-256。
+- **本地密钥 `sk-oc-...`**：客户端只认网关密钥；支持 RPM / 日限额与并发会话；校验用 SHA-256，完整密钥以 `ADMIN_SECRET` AES-GCM 加密落库，管理台可复制完整密钥（升级前仅哈希的旧密钥无法还原，需重建）。
 - **密钥池 + 出口代理池**：Key = 身份，Proxy = 出口 IP，彼此独立；free 遇 429/5xx 可轮换出口重试；paid 支持 spread / sticky 与故障转移。
 - **额度与用量**：OpenCode / Ollama **账号 Cookie 仅用于控制面刮取**，绝不进入聊天链路。
 - **Neo-Brutalist 管理台**：概览、模型目录（来源筛选）、密钥池、账号、额度、本地密钥、代理、日志、设置；深色模式。
-- **安全默认**：Zen/Ollama Key、Cookie、代理 URL 经 `ADMIN_SECRET` AES-GCM 加密；请求日志不落 prompt/response 正文。
+- **安全默认**：本地密钥完整串、Zen/Ollama Key、Cookie、代理 URL 经 `ADMIN_SECRET` AES-GCM 加密；列表接口不返回完整密钥；请求日志不落 prompt/response 正文。
 
 ## 请求流程
 

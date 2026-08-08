@@ -46,11 +46,11 @@ Version: `internal/version.Current` (default **1.5.0**); `--version` and `/healt
 - **Triple endpoints**: OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages behind one local API key.
 - **Plan-scoped catalog**: public Zen keeps free only; merge **Go** `/zen/go/v1/models` when a healthy `provider=opencode` key exists; merge Ollama Cloud `/v1/models` when a healthy `provider=ollama` key exists. Public Claude/Gemini (etc.) not on Go are not advertised.
 - **Provider-aware routing**: OpenCode free → `/zen/v1` + `Bearer public`; OpenCode paid → `/zen/go/v1` + key pool; Ollama paid → Ollama Cloud + key pool (plain Bearer, no OpenCode compatibility headers).
-- **Local keys `sk-oc-...`**: clients only talk to the gateway; optional RPM / daily limits and concurrent sessions; only SHA-256 is stored.
+- **Local keys `sk-oc-...`**: clients only talk to the gateway; optional RPM / daily limits and concurrent sessions; verify with SHA-256; the full secret is sealed at rest with `ADMIN_SECRET` (AES-GCM) so admins can copy it later (pre-upgrade hash-only rows cannot be recovered—create a new key).
 - **Key pool + egress proxy pool**: key = identity, proxy = egress IP; free path can rotate proxies on 429/5xx; paid supports spread / sticky and failover.
 - **Quota & usage**: OpenCode / Ollama **account cookies are control-plane only** and never enter the chat path.
 - **Neo-Brutalist admin UI**: overview, model catalog (provider filter), key pool, accounts, quotas, local keys, proxies, logs, settings; dark mode.
-- **Safe defaults**: pool keys, cookies, and proxy URLs encrypted with `ADMIN_SECRET` (AES-GCM); request logs omit prompt/response bodies.
+- **Safe defaults**: full local secrets, pool keys, cookies, and proxy URLs encrypted with `ADMIN_SECRET` (AES-GCM); list APIs never return full secrets; request logs omit prompt/response bodies.
 
 ## Request flow
 
