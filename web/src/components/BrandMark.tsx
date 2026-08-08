@@ -1,4 +1,3 @@
-import { Swap } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 
 export type BrandMarkProps = {
@@ -9,9 +8,13 @@ export type BrandMarkProps = {
   readonly title?: string;
 };
 
+/** 四芒星路径（viewBox 0 0 40 40，与品牌画廊 35-spark 同源） */
+const SPARK_D =
+  "M20 4l3.5 12.5L36 20l-12.5 3.5L20 36l-3.5-12.5L4 20l12.5-3.5z";
+
 /**
- * JovePoxy mark: Phosphor Swap = 协议双向转换网关。
- * DESIGN.md 规则：Phosphor only，不手绘装饰 SVG。
+ * JovePoxy mark：Neo-Brutalist 四芒星（spark）。
+ * tile 变体由外层提供红底 + 硬影；plain 仅描符号。
  */
 export function BrandMark({
   size = 40,
@@ -23,13 +26,16 @@ export function BrandMark({
     variant === "tile" ? Math.round(size * 0.58) : size;
 
   const icon = (
-    <Swap
-      size={iconSize}
-      weight="bold"
+    <svg
+      width={iconSize}
+      height={iconSize}
+      viewBox="0 0 40 40"
       aria-hidden={title ? undefined : true}
       role={title ? "img" : undefined}
       aria-label={title || undefined}
-    />
+    >
+      <path d={SPARK_D} fill="currentColor" />
+    </svg>
   );
 
   if (variant === "plain") {

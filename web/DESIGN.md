@@ -255,6 +255,7 @@ Joyful Press 目标态示例：`active: translate(4px, 4px) shadow-none scale-95
 - 默认尺寸 18–20px
 - **禁止** Lucide、手绘装饰 SVG 充当第二图标库
 - 规范示例中的 Lucide 名必须映射为 Phosphor 等价图标
+- **例外 · 品牌标**：`BrandMark` + `public/favicon.svg` 使用固定四芒星（spark）几何路径，非图标库；不得再引入其它自定义装饰 SVG
 
 ---
 
