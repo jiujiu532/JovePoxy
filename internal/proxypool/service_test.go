@@ -308,3 +308,24 @@ func newPoolWithDB(t *testing.T) (*sql.DB, *proxypool.Service) {
 	}
 	return database, proxypool.NewService(database, box, fixedClock{now: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)})
 }
+
+func TestPaidUseProxyPool_default_false_and_settable(t *testing.T) {
+	service := newPool(t)
+	if service.PaidUseProxyPool() {
+		t.Fatal("default PaidUseProxyPool = true, want false")
+	}
+	service.SetPaidUseProxyPool(true)
+	if !service.PaidUseProxyPool() {
+		t.Fatal("after Set(true) = false")
+	}
+	service.SetPaidUseProxyPool(false)
+	if service.PaidUseProxyPool() {
+		t.Fatal("after Set(false) = true")
+	}
+	// nil-safe
+	var nilSvc *proxypool.Service
+	if nilSvc.PaidUseProxyPool() {
+		t.Fatal("nil service should report false")
+	}
+	nilSvc.SetPaidUseProxyPool(true) // must not panic
+}

@@ -278,6 +278,10 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 		maxAttempts = server.pool.MaxAttempts()
 		benchMinutes = server.pool.BenchMinutes()
 	}
+	paidUseProxyPool := false
+	if server.proxies != nil {
+		paidUseProxyPool = server.proxies.PaidUseProxyPool()
+	}
 	writeJSON(writer, http.StatusOK, settingsResponse{
 		ModelCacheTTLSeconds: int(server.cfg.ModelCacheTTL.Seconds()),
 		ShowAllModels:        server.cfg.ShowAllModels,
@@ -294,46 +298,58 @@ func (server server) getSettings(writer http.ResponseWriter, request *http.Reque
 		LoadPolicy:           loadPolicy,
 		MaxFailoverAttempts:  maxAttempts,
 		BenchDurationMinutes: benchMinutes,
+		PaidUseProxyPool:     paidUseProxyPool,
 	})
 }
 
 func (server server) patchSettings(writer http.ResponseWriter, request *http.Request) {
-	if server.pool == nil {
-		writeError(writer, http.StatusServiceUnavailable, "zen pool unavailable")
-		return
-	}
 	var body patchSettingsRequest
 	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 		writeError(writer, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if body.LoadPolicy == nil && body.MaxFailoverAttempts == nil && body.BenchDurationMinutes == nil {
+	hasPoolFields := body.LoadPolicy != nil || body.MaxFailoverAttempts != nil || body.BenchDurationMinutes != nil
+	hasProxyFields := body.PaidUseProxyPool != nil
+	if !hasPoolFields && !hasProxyFields {
 		writeError(writer, http.StatusBadRequest, "no settings fields to update")
 		return
 	}
-	if body.LoadPolicy != nil {
-		policy := zenpool.LoadPolicy(strings.TrimSpace(*body.LoadPolicy))
-		if policy != zenpool.LoadPolicySpread && policy != zenpool.LoadPolicySticky {
-			writeError(writer, http.StatusBadRequest, "load_policy must be spread or sticky")
+	if hasPoolFields {
+		if server.pool == nil {
+			writeError(writer, http.StatusServiceUnavailable, "zen pool unavailable")
 			return
 		}
-		server.pool.SetLoadPolicy(policy)
+		if body.LoadPolicy != nil {
+			policy := zenpool.LoadPolicy(strings.TrimSpace(*body.LoadPolicy))
+			if policy != zenpool.LoadPolicySpread && policy != zenpool.LoadPolicySticky {
+				writeError(writer, http.StatusBadRequest, "load_policy must be spread or sticky")
+				return
+			}
+			server.pool.SetLoadPolicy(policy)
+		}
+		if body.MaxFailoverAttempts != nil {
+			n := *body.MaxFailoverAttempts
+			if n < zenpool.MinMaxAttempts || n > zenpool.MaxMaxAttempts {
+				writeError(writer, http.StatusBadRequest, "max_failover_attempts must be 2..4")
+				return
+			}
+			server.pool.SetMaxAttempts(n)
+		}
+		if body.BenchDurationMinutes != nil {
+			n := *body.BenchDurationMinutes
+			if n < zenpool.MinBenchMinutes || n > zenpool.MaxBenchMinutes {
+				writeError(writer, http.StatusBadRequest, "bench_duration_minutes must be 1..60")
+				return
+			}
+			server.pool.SetBenchMinutes(n)
+		}
 	}
-	if body.MaxFailoverAttempts != nil {
-		n := *body.MaxFailoverAttempts
-		if n < zenpool.MinMaxAttempts || n > zenpool.MaxMaxAttempts {
-			writeError(writer, http.StatusBadRequest, "max_failover_attempts must be 2..4")
+	if body.PaidUseProxyPool != nil {
+		if server.proxies == nil {
+			writeError(writer, http.StatusServiceUnavailable, "proxy pool unavailable")
 			return
 		}
-		server.pool.SetMaxAttempts(n)
-	}
-	if body.BenchDurationMinutes != nil {
-		n := *body.BenchDurationMinutes
-		if n < zenpool.MinBenchMinutes || n > zenpool.MaxBenchMinutes {
-			writeError(writer, http.StatusBadRequest, "bench_duration_minutes must be 1..60")
-			return
-		}
-		server.pool.SetBenchMinutes(n)
+		server.proxies.SetPaidUseProxyPool(*body.PaidUseProxyPool)
 	}
 	// Return updated snapshot (same shape as GET).
 	server.getSettings(writer, request)

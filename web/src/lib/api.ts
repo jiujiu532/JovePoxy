@@ -216,6 +216,11 @@ export type SettingsDTO = {
   readonly max_failover_attempts?: number;
   /** process-memory 401 isolation minutes (1..60) */
   readonly bench_duration_minutes?: number;
+  /**
+   * When true, paid OpenCode/Ollama dials may use the egress proxy pool
+   * (fallback to direct). Process memory only; missing → treat as false.
+   */
+  readonly paid_use_proxy_pool?: boolean;
 };
 export type OverviewQuotaNarrativeDTO = {
   readonly effective_remaining: number;
@@ -552,6 +557,7 @@ export const api = {
     load_policy?: "spread" | "sticky";
     max_failover_attempts?: number;
     bench_duration_minutes?: number;
+    paid_use_proxy_pool?: boolean;
   }) =>
     request<SettingsDTO>("/api/admin/settings", {
       method: "PATCH",

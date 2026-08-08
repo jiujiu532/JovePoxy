@@ -28,6 +28,9 @@ type Service struct {
 	box   *crypto.Box
 	clock Clock
 	rr    atomic.Uint64
+	// paidUseProxyPool: when true, paid OpenCode/Ollama dials may use this egress pool.
+	// Process memory only (optional env seed); default false = paid direct.
+	paidUseProxyPool atomic.Bool
 }
 
 // NewService constructs a SQLite-backed proxy pool.
@@ -36,6 +39,23 @@ func NewService(database *sql.DB, box *crypto.Box, clock Clock) *Service {
 		clock = systemClock{}
 	}
 	return &Service{db: database, box: box, clock: clock}
+}
+
+// PaidUseProxyPool reports whether paid traffic should try the egress proxy pool.
+// Default is false (paid direct, matching historical behavior).
+func (service *Service) PaidUseProxyPool() bool {
+	if service == nil {
+		return false
+	}
+	return service.paidUseProxyPool.Load()
+}
+
+// SetPaidUseProxyPool updates the paid-egress flag in process memory.
+func (service *Service) SetPaidUseProxyPool(enabled bool) {
+	if service == nil {
+		return
+	}
+	service.paidUseProxyPool.Store(enabled)
 }
 
 // Create stores an encrypted proxy URL.
@@ -330,4 +350,3 @@ func RedactURL(raw string) string {
 	}
 	return parsed.Scheme + "://" + parsed.Host
 }
-

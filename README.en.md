@@ -48,7 +48,7 @@ Version: `internal/version.Current` (default **1.5.0**); `--version` and `/healt
 - **Plan-scoped catalog**: public Zen keeps free only; merge **Go** `/zen/go/v1/models` when a healthy `provider=opencode` key exists; merge Ollama Cloud `/v1/models` when a healthy `provider=ollama` key exists. Public Claude/Gemini (etc.) not on Go are not advertised.
 - **Provider-aware routing**: OpenCode free → `/zen/v1` + `Bearer public`; OpenCode paid → `/zen/go/v1` + key pool; Ollama paid → Ollama Cloud + key pool (plain Bearer, no OpenCode compatibility headers).
 - **Local keys `sk-oc-...`**: clients only talk to the gateway; optional RPM / daily limits and concurrent sessions; verify with SHA-256; the full secret is sealed at rest with `ADMIN_SECRET` (AES-GCM) so admins can copy it later (pre-upgrade hash-only rows cannot be recovered—create a new key).
-- **Key pool + egress proxy pool**: key = identity, proxy = egress IP; free path can rotate proxies on 429/5xx; paid supports spread / sticky and failover.
+- **Key pool + egress proxy pool**: key = identity, proxy = egress IP; free path can rotate proxies on 429/5xx; paid is direct by default, with an optional settings toggle to use the egress proxy pool (falls back to direct on failure); paid also supports spread / sticky and key failover.
 - **Quota & usage**: OpenCode / Ollama **account cookies are control-plane only** and never enter the chat path.
 - **Neo-Brutalist admin UI**: overview, model catalog (provider filter), key pool, accounts, quotas, local keys, proxies, logs, settings; dark mode.
 - **Safe defaults**: full local secrets, pool keys, cookies, and proxy URLs encrypted with `ADMIN_SECRET` (AES-GCM); list APIs never return full secrets; request logs omit prompt/response bodies.
@@ -197,6 +197,7 @@ Public `GET /v1/models`: free only by default; `SHOW_ALL_MODELS=true` includes p
 | `HTTP_PROXY` / `HTTPS_PROXY` | no | - | Process-level upstream proxy (distinct from the admin egress pool) |
 | `ZEN_LOAD_POLICY` | no | `spread` | Paid pool policy: `spread` \| `sticky` (also mutable in settings) |
 | `ZEN_MAX_ATTEMPTS` | no | `2` | Paid failover attempts (2–4) |
+| `PAID_USE_PROXY_POOL` | no | `false` | `true`/`1`/`yes` seeds “paid uses egress proxy pool” at boot (still mutable in Settings; not DB-persisted) |
 
 ## Credential model (do not mix)
 

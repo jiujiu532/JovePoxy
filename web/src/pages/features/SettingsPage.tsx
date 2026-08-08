@@ -161,15 +161,18 @@ export function SettingsPage() {
   const [livePolicy, setLivePolicy] = useState<LoadPolicy>("spread");
   const [liveAttempts, setLiveAttempts] = useState<AttemptCount>(2);
   const [liveBenchMinutes, setLiveBenchMinutes] = useState(DEFAULT_BENCH_MINUTES);
+  const [livePaidUseProxy, setLivePaidUseProxy] = useState(false);
   const [draftPolicy, setDraftPolicy] = useState<LoadPolicy>("spread");
   const [draftAttempts, setDraftAttempts] = useState<AttemptCount>(2);
   const [draftBenchMinutes, setDraftBenchMinutes] = useState(DEFAULT_BENCH_MINUTES);
+  const [draftPaidUseProxy, setDraftPaidUseProxy] = useState(false);
   const [savingPool, setSavingPool] = useState(false);
 
   const poolDirty =
     draftPolicy !== livePolicy ||
     draftAttempts !== liveAttempts ||
-    draftBenchMinutes !== liveBenchMinutes;
+    draftBenchMinutes !== liveBenchMinutes ||
+    draftPaidUseProxy !== livePaidUseProxy;
 
   const effectiveSummary = useMemo(
     () =>
@@ -177,31 +180,37 @@ export function SettingsPage() {
         policy: `${livePolicy} · ${policyLabel(t, livePolicy)}`,
         attempts: liveAttempts,
         bench: liveBenchMinutes,
+        proxy: livePaidUseProxy ? t("settings.on") : t("settings.off"),
       }),
-    [livePolicy, liveAttempts, liveBenchMinutes, t],
+    [livePolicy, liveAttempts, liveBenchMinutes, livePaidUseProxy, t],
   );
 
   const runtimeChip = useMemo(
-    () => `${livePolicy} · ${liveAttempts} · ${liveBenchMinutes}m`,
-    [livePolicy, liveAttempts, liveBenchMinutes],
+    () =>
+      `${livePolicy} · ${liveAttempts} · ${liveBenchMinutes}m · proxy:${livePaidUseProxy ? "on" : "off"}`,
+    [livePolicy, liveAttempts, liveBenchMinutes, livePaidUseProxy],
   );
 
   function applyPoolSnapshot(next: SettingsDTO) {
     const policy = normalizePolicy(next.load_policy);
     const attempts = clampAttempts(next.max_failover_attempts);
     const bench = clampBenchMinutes(next.bench_duration_minutes);
+    const paidProxy = next.paid_use_proxy_pool === true;
     setLivePolicy(policy);
     setLiveAttempts(attempts);
     setLiveBenchMinutes(bench);
+    setLivePaidUseProxy(paidProxy);
     setDraftPolicy(policy);
     setDraftAttempts(attempts);
     setDraftBenchMinutes(bench);
+    setDraftPaidUseProxy(paidProxy);
   }
 
   function discardPoolDraft() {
     setDraftPolicy(livePolicy);
     setDraftAttempts(liveAttempts);
     setDraftBenchMinutes(liveBenchMinutes);
+    setDraftPaidUseProxy(livePaidUseProxy);
   }
 
   async function load() {
@@ -264,6 +273,7 @@ export function SettingsPage() {
         load_policy: draftPolicy,
         max_failover_attempts: draftAttempts,
         bench_duration_minutes: draftBenchMinutes,
+        paid_use_proxy_pool: draftPaidUseProxy,
       });
       setSettings(next);
       applyPoolSnapshot(next);
@@ -380,12 +390,12 @@ export function SettingsPage() {
                 {poolDirty ? (
                   <span className="shrink-0 font-mono text-[11px] text-ink-muted">
                     {t("settings.poolDraftDirty")}: {draftPolicy} · {draftAttempts} ·{" "}
-                    {draftBenchMinutes}m
+                    {draftBenchMinutes}m · proxy:{draftPaidUseProxy ? "on" : "off"}
                   </span>
                 ) : null}
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
                 <div className="grid gap-1.5">
                   <div className="inline-flex items-center gap-1">
                     <span className="text-[12px] font-medium text-ink">
@@ -491,6 +501,31 @@ export function SettingsPage() {
                   </div>
                   <p className="text-[11px] leading-snug text-ink-muted">
                     {t("settings.benchDurationPath")}
+                  </p>
+                </div>
+
+                <div className="grid gap-1.5">
+                  <div className="inline-flex items-center gap-1">
+                    <span className="text-[12px] font-medium text-ink">
+                      {t("settings.paidUseProxyPool")}
+                    </span>
+                    <HelpTip
+                      content={t("settings.paidUseProxyPoolTip")}
+                      label={t("settings.paidUseProxyPool")}
+                    />
+                  </div>
+                  <SettingSegmented
+                    size="sm"
+                    aria-label={t("settings.paidUseProxyPool")}
+                    value={draftPaidUseProxy ? "on" : "off"}
+                    onChange={(v) => setDraftPaidUseProxy(v === "on")}
+                    options={[
+                      { value: "off", label: t("settings.off") },
+                      { value: "on", label: t("settings.on") },
+                    ]}
+                  />
+                  <p className="text-[11px] leading-snug text-ink-muted">
+                    {t("settings.paidUseProxyPoolPath")}
                   </p>
                 </div>
               </div>

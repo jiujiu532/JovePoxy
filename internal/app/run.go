@@ -108,6 +108,10 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 	keyService := keys.NewService(database, box, nil)
 	proxies := proxypool.NewService(database, box, nil)
+	// Optional process env seed for paid egress via proxy pool (runtime still mutable via PATCH /settings).
+	if envTruthy(os.Getenv("PAID_USE_PROXY_POOL")) {
+		proxies.SetPaidUseProxyPool(true)
+	}
 	logs := reqlog.NewService(database, nil)
 	authService, err := auth.NewService(auth.Config{Database: database, Password: cfg.AdminPassword})
 	if err != nil {
@@ -218,6 +222,16 @@ func Run(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+}
+
+// envTruthy accepts true/1/yes (case-insensitive) for optional boolean env seeds.
+func envTruthy(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
 	}
 }
 

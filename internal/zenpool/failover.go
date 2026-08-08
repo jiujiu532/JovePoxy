@@ -55,9 +55,39 @@ type ChatDialer interface {
 	ChatCompletions(ctx context.Context, auth zen.Auth, body json.RawMessage, stream bool) (*http.Response, error)
 }
 
+// errEgressAttributed is recorded instead of 429/403/5xx when dialing through an
+// egress proxy so key health is not punished for IP/proxy limits. Callers still
+// see the original StatusError for failover decisions.
+var errEgressAttributed = errors.New("zenpool: egress-attributed upstream failure")
+
+// isEgressAttributableStatus reports status codes that usually reflect the
+// egress IP/proxy rather than key identity (401 remains a key fault).
+func isEgressAttributableStatus(err error) bool {
+	var status *zen.StatusError
+	if !errors.As(err, &status) {
+		return false
+	}
+	code := status.StatusCode
+	return code == http.StatusTooManyRequests ||
+		code == http.StatusForbidden ||
+		code >= http.StatusInternalServerError
+}
+
 // ProxyPaid sends a chat request with up to MaxAttempts keys. Each completed
 // dial records only secret-free health metadata for the selected key.
 func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string, provider Provider) (*http.Response, error) {
+	return proxyPaid(ctx, service, dialer, body, stream, affinityKey, provider, false)
+}
+
+// ProxyPaidEgress is like ProxyPaid but attributes 429/403/5xx to the egress path:
+// those outcomes do not cool or score-punish keys (401 still does). Used when
+// paid traffic is dialed through the admin proxy pool so direct fallback can still
+// acquire the same keys.
+func ProxyPaidEgress(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string, provider Provider) (*http.Response, error) {
+	return proxyPaid(ctx, service, dialer, body, stream, affinityKey, provider, true)
+}
+
+func proxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body json.RawMessage, stream bool, affinityKey string, provider Provider, egressAttribution bool) (*http.Response, error) {
 	if service == nil {
 		return nil, ErrNoHealthyKey
 	}
@@ -81,7 +111,12 @@ func ProxyPaid(ctx context.Context, service *Service, dialer ChatDialer, body js
 		started := service.clock.Now()
 		service.noteAcquire(selected.ID, selected.Probing, started)
 		response, err := dialWithKey(ctx, dialer, selected, body, stream)
-		service.RecordPaidOutcome(ctx, selected, err, service.clock.Now().Sub(started))
+		recordErr := err
+		if err != nil && egressAttribution && isEgressAttributableStatus(err) {
+			// Keep original err for caller failover; do not punish key identity.
+			recordErr = errEgressAttributed
+		}
+		service.RecordPaidOutcome(ctx, selected, recordErr, service.clock.Now().Sub(started))
 		if err == nil {
 			return response, nil
 		}

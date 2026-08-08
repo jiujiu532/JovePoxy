@@ -18,6 +18,7 @@ import (
 	"jovepoxy/internal/db"
 	"jovepoxy/internal/keys"
 	"jovepoxy/internal/models"
+	"jovepoxy/internal/proxypool"
 	"jovepoxy/internal/reqlog"
 	"jovepoxy/internal/usage"
 	"jovepoxy/internal/zen"
@@ -538,5 +539,77 @@ func TestAdminAPI_reveal_local_key_secret(t *testing.T) {
 	handler.ServeHTTP(goneRec, goneReq)
 	if goneRec.Code != http.StatusGone {
 		t.Fatalf("legacy reveal status = %d body=%s, want 410", goneRec.Code, goneRec.Body.String())
+	}
+}
+
+func TestAdminAPI_settings_paid_use_proxy_pool(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	box, err := crypto.NewBox(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	pool := zenpool.NewService(database, box, nil)
+	proxies := proxypool.NewService(database, box, nil)
+	handler := adminapi.New(adminapi.Dependencies{
+		Auth: authService, Pool: pool, Proxies: proxies,
+		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false, ModelCacheTTL: time.Minute, UpstreamTimeout: time.Second},
+	})
+	cookie := loginCookie(t, handler, "secret-admin")
+
+	// GET default false
+	getReq := httptest.NewRequest(http.MethodGet, "/api/admin/settings", nil)
+	getReq.AddCookie(cookie)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d body=%s", getRec.Code, getRec.Body.String())
+	}
+	var snap struct {
+		PaidUseProxyPool bool `json:"paid_use_proxy_pool"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if snap.PaidUseProxyPool {
+		t.Fatal("default paid_use_proxy_pool = true, want false")
+	}
+
+	// PATCH true
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/admin/settings", bytes.NewBufferString(`{"paid_use_proxy_pool":true}`))
+	patchReq.AddCookie(cookie)
+	patchRec := httptest.NewRecorder()
+	handler.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("PATCH status = %d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+	if err := json.Unmarshal(patchRec.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("decode patch: %v", err)
+	}
+	if !snap.PaidUseProxyPool {
+		t.Fatal("after PATCH paid_use_proxy_pool = false, want true")
+	}
+	if !proxies.PaidUseProxyPool() {
+		t.Fatal("service flag not updated")
+	}
+
+	// GET still true (process memory)
+	get2 := httptest.NewRecorder()
+	getReq2 := httptest.NewRequest(http.MethodGet, "/api/admin/settings", nil)
+	getReq2.AddCookie(cookie)
+	handler.ServeHTTP(get2, getReq2)
+	if err := json.Unmarshal(get2.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("decode get2: %v", err)
+	}
+	if !snap.PaidUseProxyPool {
+		t.Fatal("GET after PATCH lost paid_use_proxy_pool")
 	}
 }

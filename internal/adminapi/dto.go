@@ -307,12 +307,15 @@ type settingsResponse struct {
 	MaxFailoverAttempts int `json:"max_failover_attempts"`
 	// BenchDurationMinutes is process-memory 401 isolation window (1..60, default 10).
 	BenchDurationMinutes int `json:"bench_duration_minutes"`
+	// PaidUseProxyPool: when true, paid OpenCode/Ollama may use egress proxy pool (default false).
+	PaidUseProxyPool bool `json:"paid_use_proxy_pool"`
 }
 
 type patchSettingsRequest struct {
 	LoadPolicy           *string `json:"load_policy"`
 	MaxFailoverAttempts  *int    `json:"max_failover_attempts"`
 	BenchDurationMinutes *int    `json:"bench_duration_minutes"`
+	PaidUseProxyPool     *bool   `json:"paid_use_proxy_pool"`
 }
 
 type overviewResponse struct {
@@ -610,7 +613,7 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 		out = append(out, logDTO{
 			ID: entry.ID, KeyID: entry.KeyID, Model: entry.Model, Route: entry.Route,
 			Upstream: entry.Upstream,
-			ProxyID: entry.ProxyID, ProxyLabel: entry.ProxyLabel, ProxyHost: entry.ProxyHost,
+			ProxyID:  entry.ProxyID, ProxyLabel: entry.ProxyLabel, ProxyHost: entry.ProxyHost,
 			Status: entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
 			Stream: entry.Stream, ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,

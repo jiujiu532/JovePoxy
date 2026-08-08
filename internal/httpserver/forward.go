@@ -38,14 +38,17 @@ func (server server) forwardChat(ctx context.Context, request *http.Request, bod
 			lastErr = zenpool.ErrNoHealthyKey
 			continue
 		}
-		response, err := zenpool.ProxyPaid(ctx, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider))
+		// Optional paid egress via proxy pool (flag on proxypool.Service); always falls back to direct.
+		response, selected, err := dialPaidWithOptionalProxy(
+			ctx, server.proxies, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider),
+		)
 		if err == nil {
-			return response, provider, proxypool.Selected{}, nil
+			return response, provider, selected, nil
 		}
 		lastErr = err
 		// Client gone → stop; do not burn the next pool.
 		if ctx.Err() != nil {
-			return nil, provider, proxypool.Selected{}, err
+			return nil, provider, selected, err
 		}
 		// Cross-provider: always try the next dual source. ProxyPaid already
 		// exhausted in-pool key failover. Intra-pool ShouldFailover is intentionally
