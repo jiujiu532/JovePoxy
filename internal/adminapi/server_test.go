@@ -40,7 +40,7 @@ func TestAdminAPI_login_and_protect_routes(t *testing.T) {
 	client, _ := zen.NewClient(config.Config{ZenBase: "http://127.0.0.1:9", OCVersion: "t", UpstreamTimeout: time.Second})
 	catalog, _ := models.NewCatalog(client, models.Settings{TTL: time.Hour})
 	handler := adminapi.New(adminapi.Dependencies{
-		Auth: authService, Keys: keys.NewService(database, nil), Pool: zenpool.NewService(database, box, nil), Catalog: catalog,
+		Auth: authService, Keys: keys.NewService(database, box, nil), Pool: zenpool.NewService(database, box, nil), Catalog: catalog,
 		Config: config.Config{Listen: "127.0.0.1:6446", ModelCacheTTL: 5 * time.Minute, OCVersion: "t", CookieSecure: false},
 	})
 
@@ -324,12 +324,16 @@ func TestAdminAPI_local_key_missing_returns_404(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
+	box, err := crypto.NewBox(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
 	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
 	if err != nil {
 		t.Fatalf("auth: %v", err)
 	}
 	handler := adminapi.New(adminapi.Dependencies{
-		Auth: authService, Keys: keys.NewService(database, nil),
+		Auth: authService, Keys: keys.NewService(database, box, nil),
 		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false},
 	})
 	cookie := loginCookie(t, handler, "secret-admin")
@@ -345,6 +349,7 @@ func TestAdminAPI_local_key_missing_returns_404(t *testing.T) {
 		{method: http.MethodPatch, path: "/api/admin/local-keys/" + missingID, body: `{"label":"x"}`},
 		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/enable"},
 		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/disable"},
+		{method: http.MethodPost, path: "/api/admin/local-keys/" + missingID + "/reveal"},
 	} {
 		var bodyReader *bytes.Buffer
 		if tc.body != "" {
@@ -454,5 +459,84 @@ func TestAdminAPI_overview_routing_kpis(t *testing.T) {
 	}
 	if _, exists := by[""]; exists {
 		t.Fatalf("legacy empty upstream must normalize to unknown: %#v", by)
+	}
+}
+
+func TestAdminAPI_reveal_local_key_secret(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	box, err := crypto.NewBox(strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatalf("box: %v", err)
+	}
+	authService, err := auth.NewService(auth.Config{Database: database, Password: "secret-admin"})
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	handler := adminapi.New(adminapi.Dependencies{
+		Auth: authService, Keys: keyService,
+		Config: config.Config{Listen: "127.0.0.1:6446", CookieSecure: false},
+	})
+	cookie := loginCookie(t, handler, "secret-admin")
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/admin/local-keys", bytes.NewBufferString(`{"label":"reveal-demo"}`))
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil || created.ID == "" || created.Secret == "" {
+		t.Fatalf("created dto = %+v err=%v body=%s", created, err, createRec.Body.String())
+	}
+
+	// Unauthenticated reveal is blocked.
+	unauthReq := httptest.NewRequest(http.MethodPost, "/api/admin/local-keys/"+created.ID+"/reveal", nil)
+	unauthRec := httptest.NewRecorder()
+	handler.ServeHTTP(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth reveal status = %d", unauthRec.Code)
+	}
+
+	// Authenticated reveal returns full secret (not just prefix).
+	revealReq := httptest.NewRequest(http.MethodPost, "/api/admin/local-keys/"+created.ID+"/reveal", nil)
+	revealReq.AddCookie(cookie)
+	revealRec := httptest.NewRecorder()
+	handler.ServeHTTP(revealRec, revealReq)
+	if revealRec.Code != http.StatusOK {
+		t.Fatalf("reveal status = %d body=%s", revealRec.Code, revealRec.Body.String())
+	}
+	var revealed struct {
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(revealRec.Body.Bytes(), &revealed); err != nil {
+		t.Fatalf("decode reveal: %v body=%s", err, revealRec.Body.String())
+	}
+	if revealed.Secret != created.Secret {
+		t.Fatalf("revealed secret mismatch")
+	}
+	if !strings.HasPrefix(revealed.Secret, "sk-oc-") {
+		t.Fatalf("unexpected secret format")
+	}
+
+	// Legacy hash-only rows cannot be revealed.
+	if _, err := database.ExecContext(ctx, "UPDATE local_api_keys SET secret_ciphertext = '' WHERE id = ?", created.ID); err != nil {
+		t.Fatalf("clear ciphertext: %v", err)
+	}
+	goneReq := httptest.NewRequest(http.MethodPost, "/api/admin/local-keys/"+created.ID+"/reveal", nil)
+	goneReq.AddCookie(cookie)
+	goneRec := httptest.NewRecorder()
+	handler.ServeHTTP(goneRec, goneReq)
+	if goneRec.Code != http.StatusGone {
+		t.Fatalf("legacy reveal status = %d body=%s, want 410", goneRec.Code, goneRec.Body.String())
 	}
 }

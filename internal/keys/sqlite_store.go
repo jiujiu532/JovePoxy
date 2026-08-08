@@ -16,8 +16,9 @@ func NewSQLiteStore(database *sql.DB) *SQLiteStore { return &SQLiteStore{databas
 
 func (s *SQLiteStore) Create(ctx context.Context, key storedKey) error {
 	_, err := s.database.ExecContext(ctx, `
-		INSERT INTO local_api_keys (id, name, key_hash, prefix, rpm_limit, daily_limit)
-		VALUES (?, ?, ?, ?, ?, ?)`, key.id, key.label, key.hash, key.prefix, key.rpmLimit, key.dailyLimit)
+		INSERT INTO local_api_keys (id, name, key_hash, prefix, rpm_limit, daily_limit, secret_ciphertext)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		key.id, key.label, key.hash, key.prefix, key.rpmLimit, key.dailyLimit, key.ciphertext)
 	if err != nil {
 		return fmt.Errorf("insert local API key: %w", err)
 	}

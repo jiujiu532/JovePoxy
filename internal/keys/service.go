@@ -10,6 +10,7 @@ import (
 	"io"
 	"time"
 
+	"jovepoxy/internal/crypto"
 	"jovepoxy/internal/idgen"
 )
 
@@ -23,6 +24,7 @@ func (systemClock) Now() time.Time { return time.Now() }
 
 type Service struct {
 	store Store
+	box   *crypto.Box
 	clock Clock
 }
 
@@ -33,6 +35,7 @@ type Store interface {
 	SetEnabled(context.Context, KeyID, bool) error
 	Update(context.Context, KeyID, UpdateInput) error
 	List(context.Context) ([]KeyMetadata, error)
+	SecretCiphertext(context.Context, KeyID) (string, error)
 }
 
 type storedKey struct {
@@ -40,19 +43,22 @@ type storedKey struct {
 	label      string
 	prefix     string
 	hash       string
+	ciphertext string
 	rpmLimit   int
 	dailyLimit int
 }
 
-func NewService(database *sql.DB, clock Clock) *Service {
-	return NewServiceWithStore(NewSQLiteStore(database), clock)
+// NewService builds a local-key service. box encrypts secrets at rest for admin reveal;
+// when nil, Create still works (hash only) but Reveal is unavailable.
+func NewService(database *sql.DB, box *crypto.Box, clock Clock) *Service {
+	return NewServiceWithStore(NewSQLiteStore(database), box, clock)
 }
 
-func NewServiceWithStore(store Store, clock Clock) *Service {
+func NewServiceWithStore(store Store, box *crypto.Box, clock Clock) *Service {
 	if clock == nil {
 		clock = systemClock{}
 	}
-	return &Service{store: store, clock: clock}
+	return &Service{store: store, box: box, clock: clock}
 }
 
 func (s *Service) Create(ctx context.Context, rawInput CreateInput) (Creation, error) {
@@ -69,14 +75,45 @@ func (s *Service) Create(ctx context.Context, rawInput CreateInput) (Creation, e
 		return Creation{}, fmt.Errorf("generate local API key identifier: %w", err)
 	}
 	hash := sha256.Sum256([]byte(secret))
+	ciphertext := ""
+	if s.box != nil {
+		sealed, sealErr := s.box.Seal(secret)
+		if sealErr != nil {
+			return Creation{}, fmt.Errorf("encrypt local API key: %w", sealErr)
+		}
+		ciphertext = sealed
+	}
 	record := storedKey{
 		id: id, label: input.Label, prefix: secret[:14], hash: hex.EncodeToString(hash[:]),
-		rpmLimit: input.RPMLimit, dailyLimit: input.DailyLimit,
+		ciphertext: ciphertext, rpmLimit: input.RPMLimit, dailyLimit: input.DailyLimit,
 	}
 	if err := s.store.Create(ctx, record); err != nil {
 		return Creation{}, fmt.Errorf("store local API key: %w", err)
 	}
 	return Creation{ID: id, Prefix: record.prefix, Secret: secret}, nil
+}
+
+// Reveal returns the plaintext secret for an existing key (admin only).
+// Legacy hash-only rows and missing ciphertext return ErrSecretUnavailable.
+func (s *Service) Reveal(ctx context.Context, id KeyID) (string, error) {
+	if id == "" {
+		return "", ErrInvalidInput
+	}
+	if s.box == nil {
+		return "", ErrSecretUnavailable
+	}
+	ciphertext, err := s.store.SecretCiphertext(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if ciphertext == "" {
+		return "", ErrSecretUnavailable
+	}
+	secret, err := s.box.Open(ciphertext)
+	if err != nil {
+		return "", fmt.Errorf("decrypt local API key: %w", err)
+	}
+	return secret, nil
 }
 
 func (s *Service) Verify(ctx context.Context, input Credentials) (VerifiedKey, error) {

@@ -52,14 +52,14 @@ func TestServer_routes_ollama_model_to_ollama_pool_and_base(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -166,14 +166,14 @@ func TestServer_ollama_model_without_keys_returns_clear_error(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 
@@ -228,14 +228,14 @@ func TestServer_missing_ollama_dialer_does_not_hit_zen(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -305,14 +305,14 @@ func TestServer_routes_opencode_paid_model_to_zen_go_not_public(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -408,14 +408,14 @@ func TestServer_dual_provider_round_robin_across_pools(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -495,14 +495,14 @@ func TestServer_dual_provider_failover_when_primary_pool_empty(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -576,14 +576,14 @@ func TestServer_dual_provider_failover_on_upstream_5xx(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{
@@ -668,14 +668,14 @@ func TestServer_dual_provider_failover_on_upstream_4xx(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	keyService := keys.NewService(database, nil)
-	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
-	if err != nil {
-		t.Fatalf("create local key: %v", err)
-	}
 	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
 	if err != nil {
 		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
+	created, err := keyService.Create(ctx, keys.CreateInput{Label: "local"})
+	if err != nil {
+		t.Fatalf("create local key: %v", err)
 	}
 	pool := zenpool.NewService(database, box, nil)
 	if _, err := pool.Create(ctx, zenpool.CreateInput{

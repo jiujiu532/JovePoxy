@@ -99,3 +99,26 @@ func (server server) disableLocalKey(writer http.ResponseWriter, request *http.R
 	}
 	writeJSON(writer, http.StatusOK, okResponse{OK: true})
 }
+
+// revealLocalKey returns the full secret once for clipboard copy (admin session required).
+func (server server) revealLocalKey(writer http.ResponseWriter, request *http.Request) {
+	if server.keys == nil {
+		writeError(writer, http.StatusServiceUnavailable, "keys unavailable")
+		return
+	}
+	secret, err := server.keys.Reveal(request.Context(), keys.KeyID(request.PathValue("id")))
+	if err != nil {
+		switch {
+		case errors.Is(err, keys.ErrNotFound):
+			writeError(writer, http.StatusNotFound, "key not found")
+		case errors.Is(err, keys.ErrSecretUnavailable):
+			writeError(writer, http.StatusGone, "secret unavailable for this key; create a new key")
+		case errors.Is(err, keys.ErrInvalidInput):
+			writeError(writer, http.StatusBadRequest, err.Error())
+		default:
+			writeError(writer, http.StatusInternalServerError, "reveal key failed")
+		}
+		return
+	}
+	writeJSON(writer, http.StatusOK, localKeyRevealDTO{Secret: secret})
+}

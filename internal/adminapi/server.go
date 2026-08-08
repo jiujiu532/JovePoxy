@@ -85,6 +85,7 @@ func New(dependencies Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/admin/local-keys/{id}/enable", server.requireAuth(server.enableLocalKey))
 	mux.HandleFunc("POST /api/admin/local-keys/{id}/disable", server.requireAuth(server.disableLocalKey))
 	mux.HandleFunc("POST /api/admin/local-keys/{id}/revoke", server.requireAuth(server.revokeLocalKey))
+	mux.HandleFunc("POST /api/admin/local-keys/{id}/reveal", server.requireAuth(server.revealLocalKey))
 	mux.HandleFunc("GET /api/admin/zen-keys", server.requireAuth(server.listZenKeys))
 	mux.HandleFunc("POST /api/admin/zen-keys", server.requireAuth(server.createZenKey))
 	mux.HandleFunc("PATCH /api/admin/zen-keys/{id}", server.requireAuth(server.updateZenKey))

@@ -213,3 +213,9 @@ var zenKeyHealthColumns = []string{
 	"score_updated_at",
 	"cooldown_reason",
 }
+
+// local_api_keys: AES-GCM ciphertext so admins can reveal full secret after create.
+// Empty string = legacy hash-only rows (reveal unavailable).
+const localKeyCiphertextSchema = `
+ALTER TABLE local_api_keys ADD COLUMN secret_ciphertext TEXT NOT NULL DEFAULT '';
+`

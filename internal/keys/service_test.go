@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"jovepoxy/internal/crypto"
 	"jovepoxy/internal/db"
 	"jovepoxy/internal/keys"
 )
@@ -171,7 +172,11 @@ func newServiceWithClock(t *testing.T, clock *fakeClock) (*keys.Service, *sql.DB
 			t.Errorf("close database: %v", closeErr)
 		}
 	})
-	return keys.NewService(database, clock), database
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	return keys.NewService(database, box, clock), database
 }
 
 type fakeClock struct{ now time.Time }
@@ -196,4 +201,42 @@ func containsDisabledKey(metadata []keys.KeyMetadata, id keys.KeyID) bool {
 		}
 	}
 	return false
+}
+
+func TestService_reveals_encrypted_secret(t *testing.T) {
+	ctx := context.Background()
+	service, database := newService(t)
+	created, err := service.Create(ctx, keys.CreateInput{Label: "reveal-me"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	var ciphertext string
+	if err := database.QueryRowContext(ctx, "SELECT secret_ciphertext FROM local_api_keys WHERE id = ?", created.ID).Scan(&ciphertext); err != nil {
+		t.Fatalf("read ciphertext: %v", err)
+	}
+	if ciphertext == "" || ciphertext == created.Secret {
+		t.Fatalf("ciphertext not sealed: %q", ciphertext)
+	}
+	secret, err := service.Reveal(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("Reveal() error = %v", err)
+	}
+	if secret != created.Secret {
+		t.Fatalf("Reveal() = %q, want %q", secret, created.Secret)
+	}
+}
+
+func TestService_reveal_legacy_hash_only_unavailable(t *testing.T) {
+	ctx := context.Background()
+	service, database := newService(t)
+	created, err := service.Create(ctx, keys.CreateInput{Label: "legacy"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := database.ExecContext(ctx, "UPDATE local_api_keys SET secret_ciphertext = '' WHERE id = ?", created.ID); err != nil {
+		t.Fatalf("clear ciphertext: %v", err)
+	}
+	if _, err := service.Reveal(ctx, created.ID); !errors.Is(err, keys.ErrSecretUnavailable) {
+		t.Fatalf("Reveal() error = %v, want ErrSecretUnavailable", err)
+	}
 }

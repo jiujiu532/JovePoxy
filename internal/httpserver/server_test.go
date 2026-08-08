@@ -70,7 +70,11 @@ func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) test
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-	keyService := keys.NewService(database, nil)
+	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
+	if err != nil {
+		t.Fatalf("new box: %v", err)
+	}
+	keyService := keys.NewService(database, box, nil)
 	created, err := keyService.Create(ctx, keys.CreateInput{Label: "proxy-test"})
 	if err != nil {
 		t.Fatalf("create local key: %v", err)
@@ -96,10 +100,6 @@ func newServer(t *testing.T, upstreamURL string, catalogModels []zen.Model) test
 	catalog, err := models.NewCatalog(testModelSource{models: catalogModels}, settings)
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
-	}
-	box, err := crypto.NewBox("test-admin-secret-32-bytes-minimum!!")
-	if err != nil {
-		t.Fatalf("new box: %v", err)
 	}
 	logsService := reqlog.NewService(database, nil)
 	return testServer{

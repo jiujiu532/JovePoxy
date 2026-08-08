@@ -79,6 +79,10 @@ type localKeyCreatedDTO struct {
 	Secret string `json:"secret"`
 }
 
+type localKeyRevealDTO struct {
+	Secret string `json:"secret"`
+}
+
 type localKeysResponse struct {
 	Keys []localKeyDTO `json:"keys"`
 }

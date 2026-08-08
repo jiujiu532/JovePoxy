@@ -63,6 +63,22 @@ func (s *SQLiteStore) List(ctx context.Context) (metadata []KeyMetadata, err err
 	return metadata, nil
 }
 
+// SecretCiphertext returns the sealed secret for admin reveal (empty = legacy hash-only).
+func (s *SQLiteStore) SecretCiphertext(ctx context.Context, id KeyID) (string, error) {
+	var ciphertext string
+	err := s.database.QueryRowContext(ctx, `
+		SELECT COALESCE(secret_ciphertext, '')
+		FROM local_api_keys
+		WHERE id = ? AND revoked_at IS NULL`, id).Scan(&ciphertext)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("read local API key ciphertext: %w", err)
+	}
+	return ciphertext, nil
+}
+
 func (s *SQLiteStore) purgeSoftRevoked(ctx context.Context) error {
 	if _, err := s.database.ExecContext(ctx, `
 		UPDATE request_logs SET key_id = NULL

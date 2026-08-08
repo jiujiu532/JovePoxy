@@ -181,13 +181,15 @@ export function LocalKeysPage() {
     }
   }
 
-  /** 列表仅存前缀；完整密钥仅创建时返回一次。 */
-  async function onCopyPrefix(prefix: string) {
+  /** 通过 reveal 接口取出完整密钥后写入剪贴板（升级前的哈希-only 密钥不可用）。 */
+  async function onCopySecret(id: string) {
     try {
-      await navigator.clipboard.writeText(prefix);
-      push(t("localkeys.prefixCopied"), "success");
-    } catch {
-      push(t("localkeys.copyFailed"), "error");
+      const { secret } = await api.revealLocalKey(id);
+      await navigator.clipboard.writeText(secret);
+      push(t("localkeys.copiedToClipboard"), "success");
+    } catch (err) {
+      if (handleUnauthorized(err, (to) => void navigate(to))) return;
+      push(friendlyError(err, t("localkeys.secretUnavailable"), t), "error");
     }
   }
 
@@ -619,9 +621,9 @@ export function LocalKeysPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                aria-label={t("localkeys.copyPrefixAria")}
-                                title={t("localkeys.copyPrefixAria")}
-                                onClick={() => void onCopyPrefix(key.prefix)}
+                                aria-label={t("localkeys.copySecretAria")}
+                                title={t("localkeys.copySecretAria")}
+                                onClick={() => void onCopySecret(key.id)}
                               >
                                 <Copy size={14} />
                               </Button>
@@ -742,9 +744,9 @@ export function LocalKeysPage() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      aria-label={t("localkeys.copyPrefixAria")}
-                                      title={t("localkeys.copyPrefixAria")}
-                                      onClick={() => void onCopyPrefix(key.prefix)}
+                                      aria-label={t("localkeys.copySecretAria")}
+                                      title={t("localkeys.copySecretAria")}
+                                      onClick={() => void onCopySecret(key.id)}
                                     >
                                       <Copy size={14} />
                                     </Button>

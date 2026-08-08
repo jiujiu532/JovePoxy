@@ -106,7 +106,7 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		_ = database.Close()
 		return nil, fmt.Errorf("create model catalog: %w", err)
 	}
-	keyService := keys.NewService(database, nil)
+	keyService := keys.NewService(database, box, nil)
 	proxies := proxypool.NewService(database, box, nil)
 	logs := reqlog.NewService(database, nil)
 	authService, err := auth.NewService(auth.Config{Database: database, Password: cfg.AdminPassword})

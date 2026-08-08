@@ -365,6 +365,8 @@ export const api = {
     ),
   revokeLocalKey: (id: string) =>
     request<{ ok: boolean }>(`/api/admin/local-keys/${id}/revoke`, { method: "POST" }),
+  revealLocalKey: (id: string) =>
+    request<{ secret: string }>(`/api/admin/local-keys/${id}/reveal`, { method: "POST" }),
   zenKeys: (provider?: KeyProvider) =>
     request<{ keys: ZenKeyDTO[]; summary?: ZenPoolSummaryDTO }>(
       provider

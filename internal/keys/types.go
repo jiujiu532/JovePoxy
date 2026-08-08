@@ -11,6 +11,8 @@ var (
 	ErrRateLimited  = errors.New("local API key rate limited")
 	// ErrNotFound is returned when a lifecycle mutation targets a missing key id.
 	ErrNotFound = errors.New("local API key not found")
+	// ErrSecretUnavailable: legacy hash-only keys or missing encryption box — cannot reveal.
+	ErrSecretUnavailable = errors.New("local API key secret unavailable")
 )
 
 type KeyID string
