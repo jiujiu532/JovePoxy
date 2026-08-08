@@ -182,6 +182,14 @@ const requestLogUpstreamSchema = `
 ALTER TABLE request_logs ADD COLUMN upstream TEXT NOT NULL DEFAULT '';
 `
 
+// request_logs free-path egress proxy (secret-safe: id + label + host only).
+// Empty values mean direct (no pool proxy used).
+const requestLogProxySchema = `
+ALTER TABLE request_logs ADD COLUMN proxy_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_logs ADD COLUMN proxy_label TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_logs ADD COLUMN proxy_host TEXT NOT NULL DEFAULT '';
+`
+
 // zen_key_health persists secret-free dynamic health scores for paid pool keys.
 // Missing rows are treated as cold-start defaults (score 70) by the zenpool store.
 const zenKeyHealthSchema = `

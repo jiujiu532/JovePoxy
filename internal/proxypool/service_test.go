@@ -80,13 +80,16 @@ func TestProxyFree_failsover_on_429(t *testing.T) {
 		{err: &zen.StatusError{StatusCode: http.StatusTooManyRequests}},
 		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
 	}}
-	resp, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	resp, selected, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
 	if err != nil {
 		t.Fatalf("ProxyFree: %v", err)
 	}
 	defer resp.Body.Close()
 	if dialer.calls != 2 {
 		t.Fatalf("calls = %d", dialer.calls)
+	}
+	if selected.ID == "" || selected.Host == "" {
+		t.Fatalf("selected = %+v, want proxy metadata", selected)
 	}
 }
 
@@ -96,13 +99,16 @@ func TestProxyFree_direct_when_pool_empty(t *testing.T) {
 	dialer := &scriptedFreeDialer{responses: []dialResult{
 		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`))}},
 	}}
-	resp, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	resp, selected, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
 	if err != nil {
 		t.Fatalf("ProxyFree: %v", err)
 	}
 	defer resp.Body.Close()
 	if dialer.directCalls != 1 {
 		t.Fatalf("directCalls = %d", dialer.directCalls)
+	}
+	if selected.ID != "" {
+		t.Fatalf("selected = %+v, want direct (empty)", selected)
 	}
 }
 
@@ -126,7 +132,7 @@ func TestProxyFree_network_failover_without_cooldown(t *testing.T) {
 		{err: errors.New("dial tcp: connection refused")},
 		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
 	}}
-	resp, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	resp, _, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
 	if err != nil {
 		t.Fatalf("ProxyFree: %v", err)
 	}
@@ -158,7 +164,7 @@ func TestProxyFree_no_failover_on_deadline(t *testing.T) {
 		{err: context.DeadlineExceeded},
 		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
 	}}
-	_, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
+	_, _, err := proxypool.ProxyFree(ctx, service, dialer, json.RawMessage(`{}`), false)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}

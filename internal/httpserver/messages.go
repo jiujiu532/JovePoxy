@@ -55,8 +55,11 @@ func (server server) messages(writer http.ResponseWriter, request *http.Request)
 		writeAnthropicError(writer, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
-	response, provider, err := server.forwardChat(request.Context(), request, openAIBody, parsed.Stream, free, providers)
+	response, provider, selected, err := server.forwardChat(request.Context(), request, openAIBody, parsed.Stream, free, providers)
 	meta.upstream = upstreamChannel(free, provider)
+	meta.proxyID = string(selected.ID)
+	meta.proxyLabel = selected.Label
+	meta.proxyHost = selected.Host
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	if err != nil {
 		if writePaidRouteAnthropicError(writer, request.Context(), server.pool, err, provider) {

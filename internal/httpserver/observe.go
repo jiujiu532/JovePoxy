@@ -76,7 +76,7 @@ func (server server) observe(route string, handler http.HandlerFunc) http.Handle
 			latencyMS = ttftMS
 		}
 		server.logs.Record(request.Context(), reqlog.Entry{
-			KeyID: meta.keyID, Model: meta.model, Route: route, Upstream: meta.upstream, Status: recorder.status,
+			KeyID: meta.keyID, Model: meta.model, Route: route, Upstream: meta.upstream, ProxyID: meta.proxyID, ProxyLabel: meta.proxyLabel, ProxyHost: meta.proxyHost, Status: recorder.status,
 			LatencyMS: latencyMS, TTFTMS: ttftMS,
 			Stream: meta.stream, ErrorClass: errorClass,
 			MaxTokens: meta.maxTokens, ReasoningEffort: meta.reasoningEffort,

@@ -51,7 +51,10 @@ type Metadata struct {
 }
 
 // Selected is a decrypted proxy chosen for one upstream attempt.
+// Label/Host are secret-safe display fields for request logs (no credentials).
 type Selected struct {
-	ID  ProxyID
-	URL *url.URL
+	ID    ProxyID
+	Label string
+	Host  string
+	URL   *url.URL
 }

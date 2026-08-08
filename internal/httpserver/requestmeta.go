@@ -5,13 +5,17 @@ import "context"
 type metaKey struct{}
 
 type requestMeta struct {
-	model               string
-	keyID               string
+	model  string
+	keyID  string
 	// upstream channel: opencode_free | opencode_paid | ollama_paid
-	upstream            string
-	stream              bool
-	errorClass          string
-	maxTokens           int
+	upstream string
+	// free-path egress proxy (secret-safe). Empty = direct / paid path.
+	proxyID    string
+	proxyLabel string
+	proxyHost  string
+	stream     bool
+	errorClass string
+	maxTokens  int
 	reasoningEffort     string
 	thinkingType        string
 	budgetTokens        int

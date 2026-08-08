@@ -80,6 +80,17 @@ function upstreamBadgeKind(
   }
 }
 
+
+function proxyDisplay(row: LogDTO, t: Translate): string {
+  const host = (row.proxy_host ?? "").trim();
+  const label = (row.proxy_label ?? "").trim();
+  if (!host && !label && !(row.proxy_id ?? "").trim()) {
+    return t("logs.proxyDirect");
+  }
+  if (label && host) return `${label} · ${host}`;
+  return host || label || (row.proxy_id ?? "");
+}
+
 function formatLatency(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(ms >= 10000 ? 1 : 2)} s`;
   return `${ms} ms`;
@@ -279,6 +290,9 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
       return (
         channelText.includes(q) ||
         (row.upstream ?? "").toLowerCase().includes(q) ||
+        (row.proxy_host ?? "").toLowerCase().includes(q) ||
+        (row.proxy_label ?? "").toLowerCase().includes(q) ||
+        (row.proxy_id ?? "").toLowerCase().includes(q) ||
         row.route.toLowerCase().includes(q) ||
         row.model.toLowerCase().includes(q) ||
         String(row.status).includes(q) ||
@@ -413,13 +427,14 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[36rem] md:min-w-[64rem] text-left text-sm">
+                <table className="w-full min-w-[40rem] md:min-w-[72rem] text-left text-sm">
                   <thead>
                     <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colTime")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colModel")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colEffort")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.routeLabel")}</th>
+                      <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colProxy")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.statusAria")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.streamAria")}</th>
                       <th className="px-4 py-2.5 font-medium whitespace-nowrap">{t("logs.colTokens")}</th>
@@ -470,6 +485,12 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                                 {upstreamLabel(row.upstream, t)}
                               </Badge>
                             </td>
+                            <td
+                              className="max-w-[12rem] truncate px-4 py-3 font-mono text-[12px] text-ink whitespace-nowrap"
+                              {...(row.proxy_id ? { title: row.proxy_id } : {})}
+                            >
+                              {proxyDisplay(row, t)}
+                            </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <Badge kind={statusKind(row.status)}>{row.status}</Badge>
                             </td>
@@ -509,7 +530,7 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                           </tr>
                           {expanded ? (
                             <tr className="border-b-2 border-border bg-paper-2/40">
-                              <td colSpan={9} className="px-3 py-3 sm:px-4">
+                              <td colSpan={10} className="px-3 py-3 sm:px-4">
                                 <div className="overflow-hidden border-2 border-border bg-paper-1 shadow-[4px_4px_0_0_var(--border)]">
                                   {/* Header strip */}
                                   <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-paper-2 px-3 py-2">
@@ -611,6 +632,19 @@ function GatewayLogsPanel({ t }: { readonly t: Translate }) {
                                       label={t("logs.detailUpstream")}
                                       value={upstreamLabel(row.upstream, t)}
                                     />
+                                    <DetailField
+                                      label={t("logs.detailProxy")}
+                                      value={proxyDisplay(row, t)}
+                                      mono
+                                      {...(row.proxy_id ? { title: row.proxy_id } : {})}
+                                    />
+                                    {(row.proxy_id ?? "").trim() ? (
+                                      <DetailField
+                                        label={t("logs.detailProxyId")}
+                                        value={row.proxy_id ?? ""}
+                                        mono
+                                      />
+                                    ) : null}
                                     <DetailField
                                       label={t("logs.detailRoute")}
                                       value={row.route}
@@ -1151,7 +1185,7 @@ function OllamaUsagePanel({ t }: { readonly t: Translate }) {
           ) : (
             <div className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[28rem] md:min-w-[36rem] text-left text-sm">
+                <table className="w-full min-w-[28rem] md:min-w-[40rem] text-left text-sm">
                   <thead>
                     <tr className="border-b-2 border-border bg-paper-2 text-caption text-ink-muted">
                       <th className="px-4 py-2.5 font-medium">{t("logs.accountLabel")}</th>

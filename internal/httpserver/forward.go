@@ -17,14 +17,14 @@ import (
 // Dual-provider IDs are rotated request-by-request; on pool/upstream failure the next
 // provider is tried. The returned provider is the one that produced the response
 // (or the last attempted provider when all fail).
-func (server server) forwardChat(ctx context.Context, request *http.Request, body json.RawMessage, stream bool, free bool, providers []models.Provider) (*http.Response, models.Provider, error) {
+func (server server) forwardChat(ctx context.Context, request *http.Request, body json.RawMessage, stream bool, free bool, providers []models.Provider) (*http.Response, models.Provider, proxypool.Selected, error) {
 	if free {
 		// Free models are IP-limited; rotate egress proxies when configured.
-		resp, err := proxypool.ProxyFree(ctx, server.proxies, server.zen, body, stream)
-		return resp, models.ProviderOpenCode, err
+		resp, selected, err := proxypool.ProxyFree(ctx, server.proxies, server.zen, body, stream)
+		return resp, models.ProviderOpenCode, selected, err
 	}
 	if server.pool == nil {
-		return nil, firstProvider(providers), zenpool.ErrNoHealthyKey
+		return nil, firstProvider(providers), proxypool.Selected{}, zenpool.ErrNoHealthyKey
 	}
 	order := server.rotateProviders(providers)
 	affinity := zenpool.ConversationAffinityKey(request.Header, body)
@@ -40,12 +40,12 @@ func (server server) forwardChat(ctx context.Context, request *http.Request, bod
 		}
 		response, err := zenpool.ProxyPaid(ctx, server.pool, dialer, body, stream, affinity, zenpool.Provider(provider))
 		if err == nil {
-			return response, provider, nil
+			return response, provider, proxypool.Selected{}, nil
 		}
 		lastErr = err
 		// Client gone → stop; do not burn the next pool.
 		if ctx.Err() != nil {
-			return nil, provider, err
+			return nil, provider, proxypool.Selected{}, err
 		}
 		// Cross-provider: always try the next dual source. ProxyPaid already
 		// exhausted in-pool key failover. Intra-pool ShouldFailover is intentionally
@@ -56,7 +56,7 @@ func (server server) forwardChat(ctx context.Context, request *http.Request, bod
 	if lastErr == nil {
 		lastErr = zenpool.ErrNoHealthyKey
 	}
-	return nil, lastProvider, lastErr
+	return nil, lastProvider, proxypool.Selected{}, lastErr
 }
 
 func firstProvider(providers []models.Provider) models.Provider {

@@ -54,31 +54,34 @@ func CooldownFor(err error) time.Duration {
 }
 
 // ProxyFree sends a free (public auth) chat request via egress proxy pool.
-// If the pool is empty, it falls back to a direct Zen call.
+// If the pool is empty or all proxies are cooling, it falls back to a direct Zen call.
 // At most one failover to a different proxy is attempted.
+// Selected is zero when the successful (or final failing) attempt was direct.
 //
 // Failover policy:
 //   - parent ctx cancel/deadline → stop, never cool the proxy
 //   - StatusError 429/403/5xx → MarkCooldown + try one other proxy
 //   - pure network/timeout → try one other proxy without MarkCooldown
-func ProxyFree(ctx context.Context, pool *Service, dialer FreeDialer, body json.RawMessage, stream bool) (*http.Response, error) {
+func ProxyFree(ctx context.Context, pool *Service, dialer FreeDialer, body json.RawMessage, stream bool) (*http.Response, Selected, error) {
 	if pool == nil {
-		return dialer.ChatCompletions(ctx, zen.PublicAuth(), body, stream)
+		resp, err := dialer.ChatCompletions(ctx, zen.PublicAuth(), body, stream)
+		return resp, Selected{}, err
 	}
 	first, err := pool.Acquire(ctx)
 	if errors.Is(err, ErrNoHealthyProxy) {
-		return dialer.ChatCompletions(ctx, zen.PublicAuth(), body, stream)
+		resp, dialErr := dialer.ChatCompletions(ctx, zen.PublicAuth(), body, stream)
+		return resp, Selected{}, dialErr
 	}
 	if err != nil {
-		return nil, err
+		return nil, Selected{}, err
 	}
 	response, err := dialer.ChatCompletionsWithProxy(ctx, zen.PublicAuth(), body, stream, first.URL)
 	if err == nil {
-		return response, nil
+		return response, first, nil
 	}
 	// Parent cancel/deadline or non-failover errors: stop without cooling.
 	if ctx.Err() != nil || !ShouldFailover(err) {
-		return response, err
+		return response, first, err
 	}
 	// Status failures cool the proxy; network-only failures just try another egress.
 	if shouldMarkCooldown(err) {
@@ -86,7 +89,9 @@ func ProxyFree(ctx context.Context, pool *Service, dialer FreeDialer, body json.
 	}
 	second, acquireErr := pool.AcquireExcluding(ctx, first.ID)
 	if acquireErr != nil {
-		return nil, err
+		// No alternate proxy: surface the first attempt's error; egress was the first proxy.
+		return nil, first, err
 	}
-	return dialer.ChatCompletionsWithProxy(ctx, zen.PublicAuth(), body, stream, second.URL)
+	response, err = dialer.ChatCompletionsWithProxy(ctx, zen.PublicAuth(), body, stream, second.URL)
+	return response, second, err
 }

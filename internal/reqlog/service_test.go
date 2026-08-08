@@ -20,7 +20,7 @@ func TestService_record_persists_and_counts(t *testing.T) {
 
 	// When
 	service.Record(context.Background(), reqlog.Entry{
-		Model: "demo-free", Route: "/v1/chat/completions", Upstream: "opencode_free", Status: 200, LatencyMS: 12, TTFTMS: 5, Stream: true,
+		Model: "demo-free", Route: "/v1/chat/completions", Upstream: "opencode_free", ProxyID: "px_demo", ProxyLabel: "edge-a", ProxyHost: "1.2.3.4:2260", Status: 200, LatencyMS: 12, TTFTMS: 5, Stream: true,
 	})
 	service.Record(context.Background(), reqlog.Entry{
 		Model: "demo-free", Route: "/v1/messages", Status: 429, LatencyMS: 3,
@@ -49,6 +49,9 @@ func TestService_record_persists_and_counts(t *testing.T) {
 			}
 			if item.Upstream != "opencode_free" {
 				t.Fatalf("upstream = %q, want opencode_free", item.Upstream)
+			}
+			if item.ProxyID != "px_demo" || item.ProxyLabel != "edge-a" || item.ProxyHost != "1.2.3.4:2260" {
+				t.Fatalf("proxy fields = id=%q label=%q host=%q", item.ProxyID, item.ProxyLabel, item.ProxyHost)
 			}
 			foundTTFT = true
 		}

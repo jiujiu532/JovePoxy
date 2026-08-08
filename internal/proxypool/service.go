@@ -205,7 +205,7 @@ func (service *Service) Acquire(ctx context.Context) (Selected, error) {
 // Decrypt / URL parse failures exclude that row and re-pick; one bad row never fails the whole pool.
 func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) (Selected, error) {
 	rows, err := service.db.QueryContext(ctx, `
-		SELECT id, url_ciphertext, weight, enabled, cooldown_until
+		SELECT id, label, host, url_ciphertext, weight, enabled, cooldown_until
 		FROM egress_proxies ORDER BY created_at ASC, id ASC
 	`)
 	if err != nil {
@@ -214,6 +214,8 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 	defer rows.Close()
 	type candidate struct {
 		id         ProxyID
+		label      string
+		host       string
 		ciphertext string
 		weight     int
 	}
@@ -221,10 +223,10 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 	candidates := make([]candidate, 0)
 	for rows.Next() {
 		var id ProxyID
-		var ciphertext string
+		var label, host, ciphertext string
 		var weight, enabled int
 		var cooldown sql.NullString
-		if err := rows.Scan(&id, &ciphertext, &weight, &enabled, &cooldown); err != nil {
+		if err := rows.Scan(&id, &label, &host, &ciphertext, &weight, &enabled, &cooldown); err != nil {
 			return Selected{}, err
 		}
 		if id == excluded || enabled != 1 || weight <= 0 {
@@ -240,7 +242,7 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 				continue
 			}
 		}
-		candidates = append(candidates, candidate{id: id, ciphertext: ciphertext, weight: weight})
+		candidates = append(candidates, candidate{id: id, label: label, host: host, ciphertext: ciphertext, weight: weight})
 	}
 	if len(candidates) == 0 {
 		return Selected{}, ErrNoHealthyProxy
@@ -281,7 +283,7 @@ func (service *Service) AcquireExcluding(ctx context.Context, excluded ProxyID) 
 			skipped[chosen.id] = struct{}{}
 			continue
 		}
-		return Selected{ID: chosen.id, URL: parsed}, nil
+		return Selected{ID: chosen.id, Label: chosen.label, Host: chosen.host, URL: parsed}, nil
 	}
 	return Selected{}, ErrNoHealthyProxy
 }

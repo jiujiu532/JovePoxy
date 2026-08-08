@@ -123,8 +123,11 @@ func (server server) chatCompletions(writer http.ResponseWriter, request *http.R
 	meta.reasoningEffort = mappedEffort
 	// Stream usage is often omitted unless the client opts in; inject for logging.
 	body = ensureStreamIncludeUsage(body, parsed.Stream)
-	response, provider, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, providers)
+	response, provider, selected, err := server.forwardChat(request.Context(), request, body, parsed.Stream, free, providers)
 	meta.upstream = upstreamChannel(free, provider)
+	meta.proxyID = string(selected.ID)
+	meta.proxyLabel = selected.Label
+	meta.proxyHost = selected.Host
 	*request = *request.WithContext(withRequestMeta(request.Context(), meta))
 	if err != nil {
 		if writePaidRouteOpenAIError(writer, request.Context(), server.pool, err, provider) {

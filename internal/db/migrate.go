@@ -29,6 +29,7 @@ var migrations = []migration{
 	{version: 12, sql: requestLogUpstreamSchema},
 	{version: 13, sql: zenKeyHealthSchema},
 	{version: 14, sql: localKeyCiphertextSchema},
+	{version: 15, sql: requestLogProxySchema},
 }
 
 // Migrate records and applies each pending schema migration transactionally.
@@ -118,6 +119,8 @@ func validateRecordedMigration(ctx context.Context, tx *sql.Tx, item migration) 
 		return validateZenKeyHealthTable(ctx, tx)
 	case 14:
 		return validateLocalKeyCiphertextColumn(ctx, tx)
+	case 15:
+		return validateRequestLogProxyColumns(ctx, tx)
 	default:
 		return nil
 	}
@@ -219,6 +222,19 @@ func validateLocalKeyCiphertextColumn(ctx context.Context, tx *sql.Tx) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("migration 14 missing secret_ciphertext column: %w", ErrMigrationState)
+	}
+	return nil
+}
+
+func validateRequestLogProxyColumns(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []string{"proxy_id", "proxy_label", "proxy_host"} {
+		var count int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name = ?", column).Scan(&count); err != nil {
+			return fmt.Errorf("validate migration 15 column %s: %w", column, err)
+		}
+		if count != 1 {
+			return fmt.Errorf("migration 15 missing column %s: %w", column, ErrMigrationState)
+		}
 	}
 	return nil
 }

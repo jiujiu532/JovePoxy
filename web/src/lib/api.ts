@@ -168,6 +168,10 @@ export type LogDTO = {
   readonly route: string;
   /** Data-plane channel: opencode_free | opencode_paid | ollama_paid. */
   readonly upstream?: string;
+  /** Free-path egress proxy (secret-safe). Empty = direct / paid. */
+  readonly proxy_id?: string;
+  readonly proxy_label?: string;
+  readonly proxy_host?: string;
   readonly status: number;
   readonly latency_ms: number;
   readonly ttft_ms?: number;

@@ -263,6 +263,9 @@ type logDTO struct {
 	Route string `json:"route"`
 	// Upstream is the data-plane channel: opencode_free | opencode_paid | ollama_paid.
 	Upstream            string    `json:"upstream,omitempty"`
+	ProxyID             string    `json:"proxy_id,omitempty"`
+	ProxyLabel          string    `json:"proxy_label,omitempty"`
+	ProxyHost           string    `json:"proxy_host,omitempty"`
 	Status              int       `json:"status"`
 	LatencyMS           int64     `json:"latency_ms"`
 	TTFTMS              int64     `json:"ttft_ms"`
@@ -607,7 +610,8 @@ func mapLogs(entries []reqlog.Entry) logsResponse {
 		out = append(out, logDTO{
 			ID: entry.ID, KeyID: entry.KeyID, Model: entry.Model, Route: entry.Route,
 			Upstream: entry.Upstream,
-			Status:   entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
+			ProxyID: entry.ProxyID, ProxyLabel: entry.ProxyLabel, ProxyHost: entry.ProxyHost,
+			Status: entry.Status, LatencyMS: entry.LatencyMS, TTFTMS: entry.TTFTMS,
 			Stream: entry.Stream, ErrorClass: entry.ErrorClass, MaxTokens: entry.MaxTokens,
 			ReasoningEffort: entry.ReasoningEffort, ThinkingType: entry.ThinkingType,
 			BudgetTokens: entry.BudgetTokens,
