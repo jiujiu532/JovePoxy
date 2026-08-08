@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Does **not** require a local OpenCode process
 - Data plane `/v1/*` + control plane `/api/admin/*` + embedded SPA on one listener
-- Product version: `internal/version.Current` (default `1.5.0`); `--version` / `/health` report `jovepoxy <version>`
+- Product version: `internal/version.Current` (default `1.5.1`); `--version` / `/health` report `jovepoxy <version>`
 
 ## Commands
 

@@ -22,7 +22,7 @@ func Test_Server_prints_version_when_version_flag_provided(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run server with version flag: %v\n%s", err, output)
 	}
-	if got, want := strings.TrimSpace(string(output)), "jovepoxy 1.5.0"; got != want {
+	if got, want := strings.TrimSpace(string(output)), "jovepoxy 1.5.1"; got != want {
 		t.Fatalf("version output = %q, want %q", got, want)
 	}
 }

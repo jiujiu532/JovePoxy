@@ -14,7 +14,7 @@
   <a href="https://github.com/jiujiu532/JovePoxy/pkgs/container/jovepoxy"><img src="https://img.shields.io/badge/GHCR-jovepoxy-4ecdc4?style=flat-square&logo=docker&logoColor=white" alt="GHCR"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
-  <img src="https://img.shields.io/badge/version-1.5.0-ff6b6b?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.5.1-ff6b6b?style=flat-square" alt="Version">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License: MIT"></a>
 </p>
 
@@ -40,7 +40,7 @@ JovePoxy (`module jovepoxy`) is a **single binary** gateway:
 | Control plane | `/api/admin/*` cookie session + embedded SPA on the same listener |
 | Storage | Single SQLite file; **no** local OpenCode or local Ollama runtime required |
 
-Version: `internal/version.Current` (default **1.5.0**); `--version` and `/health` report `jovepoxy 1.5.0`.
+Version: `internal/version.Current` (default **1.5.1**); `--version` and `/health` report `jovepoxy 1.5.1`.
 
 ## Features
 
@@ -108,7 +108,7 @@ docker run -d --name jovepoxy \
   -e ADMIN_PASSWORD=your-password \
   -e ADMIN_SECRET=please-use-a-32-plus-char-secret \
   -v jovepoxy-data:/data \
-  ghcr.io/jiujiu532/jovepoxy:1.5.0
+  ghcr.io/jiujiu532/jovepoxy:1.5.1
 # or :latest
 ```
 
@@ -119,7 +119,7 @@ Open `http://127.0.0.1:6446/`, sign in with `ADMIN_PASSWORD` → create a local 
 ```yaml
 services:
   jovepoxy:
-    image: ghcr.io/jiujiu532/jovepoxy:1.5.0
+    image: ghcr.io/jiujiu532/jovepoxy:1.5.1
     ports:
       - "6446:6446"
     environment:
@@ -141,7 +141,7 @@ cd web && pnpm install --frozen-lockfile && pnpm build && cd ..
 
 # embed and compile (Windows: make embed-web-win)
 mkdir -p internal/webui/dist && cp -R web/dist/. internal/webui/dist/
-go build -ldflags "-X jovepoxy/internal/version.Current=1.5.0" -o bin/jovepoxy ./cmd/server
+go build -ldflags "-X jovepoxy/internal/version.Current=1.5.1" -o bin/jovepoxy ./cmd/server
 
 # run (ADMIN_SECRET ≥ 32 chars)
 export ADMIN_PASSWORD=...
