@@ -15,6 +15,7 @@
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
   <img src="https://img.shields.io/badge/version-1.5.0-ff6b6b?style=flat-square" alt="Version">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <p align="center">
@@ -233,4 +234,6 @@ pnpm test && pnpm typecheck
 
 ## 许可
 
-暂未指定许可证。使用前请遵守 OpenCode Zen 与 Ollama Cloud 的服务条款。
+本项目采用 [MIT License](LICENSE)。
+
+使用本网关访问 OpenCode Zen / Ollama Cloud 时，仍须遵守对应上游服务条款。

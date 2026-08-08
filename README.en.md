@@ -15,6 +15,7 @@
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go" alt="Go"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
   <img src="https://img.shields.io/badge/version-1.5.0-ff6b6b?style=flat-square" alt="Version">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License: MIT"></a>
 </p>
 
 <p align="center">
@@ -233,4 +234,6 @@ Pushes to `main` (non-docs-only) and `v*` tags build **linux/amd64 + arm64** ima
 
 ## License
 
-No license specified yet. Follow OpenCode Zen and Ollama Cloud terms of service when using this gateway.
+This project is licensed under the [MIT License](LICENSE).
+
+When using this gateway against OpenCode Zen / Ollama Cloud, you must still follow the upstream providers' terms of service.
