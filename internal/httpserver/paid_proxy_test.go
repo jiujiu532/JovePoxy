@@ -207,6 +207,65 @@ func TestDialPaid_flag_on_proxy_status_cools_and_falls_back_direct(t *testing.T)
 	}
 }
 
+func TestDialPaid_flag_on_proxy_429_cools_proxy_not_key(t *testing.T) {
+	ctx := context.Background()
+	proxies, keys := newPaidTestPools(t)
+	proxies.SetPaidUseProxyPool(true)
+	proxyMeta, err := proxies.Create(ctx, proxypool.CreateInput{Label: "rate-px", URL: "http://127.0.0.1:18092"})
+	if err != nil {
+		t.Fatalf("create proxy: %v", err)
+	}
+	keyMeta, err := keys.Create(ctx, zenpool.CreateInput{Label: "k", Secret: "paid-secret-value"})
+	if err != nil {
+		t.Fatalf("create zen key: %v", err)
+	}
+	// 429 via egress: cool proxy, do not cool key identity (ProxyPaidEgress), then direct succeeds.
+	dialer := &scriptedPaidDialer{
+		proxyResponses:  []paidDialResult{{err: &zen.StatusError{StatusCode: http.StatusTooManyRequests}}},
+		directResponses: []paidDialResult{{response: okBody()}},
+	}
+
+	resp, selected, err := dialPaidWithOptionalProxy(ctx, proxies, keys, dialer, json.RawMessage(`{}`), false, "", zenpool.ProviderOpenCode)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer resp.Body.Close()
+	if dialer.proxyCalls != 1 || dialer.directCalls != 1 {
+		t.Fatalf("proxyCalls=%d directCalls=%d, want 1/1", dialer.proxyCalls, dialer.directCalls)
+	}
+	if selected.ID != "" {
+		t.Fatalf("selected after direct = %+v, want empty", selected)
+	}
+	proxyList, listErr := proxies.List(ctx)
+	if listErr != nil {
+		t.Fatalf("list proxies: %v", listErr)
+	}
+	var proxyCooled bool
+	for _, item := range proxyList {
+		if item.ID == proxyMeta.ID && item.CooldownUntil != nil {
+			proxyCooled = true
+		}
+	}
+	if !proxyCooled {
+		t.Fatalf("proxy should cool after 429; list=%+v", proxyList)
+	}
+	keyList, keyErr := keys.List(ctx)
+	if keyErr != nil {
+		t.Fatalf("list keys: %v", keyErr)
+	}
+	for _, item := range keyList {
+		if item.ID != keyMeta.ID {
+			continue
+		}
+		if item.CooldownUntil != nil {
+			t.Fatalf("key should not cool after proxy-path 429; got until=%v", item.CooldownUntil)
+		}
+		if item.FailureCount != 0 || item.LastErrorClass != "" {
+			t.Fatalf("key identity punished after proxy 429: failures=%d class=%q", item.FailureCount, item.LastErrorClass)
+		}
+	}
+}
+
 func TestDialPaid_flag_on_proxy_status_switches_to_second_proxy(t *testing.T) {
 	ctx := context.Background()
 	proxies, keys := newPaidTestPools(t)

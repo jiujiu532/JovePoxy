@@ -9,7 +9,9 @@ type requestMeta struct {
 	keyID  string
 	// upstream channel: opencode_free | opencode_paid | ollama_paid
 	upstream string
-	// free-path egress proxy (secret-safe). Empty = direct / paid path.
+	// Egress proxy for this request (secret-safe host/label only).
+	// Free path may always set these; paid only when paid_use_proxy_pool is on
+	// and the attempt used a pool proxy. Empty = direct.
 	proxyID    string
 	proxyLabel string
 	proxyHost  string

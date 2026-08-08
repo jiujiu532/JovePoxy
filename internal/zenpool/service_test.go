@@ -108,6 +108,61 @@ func TestProxyPaid_failsover_once_on_429(t *testing.T) {
 	}
 }
 
+func TestProxyPaidEgress_429_does_not_cool_key(t *testing.T) {
+	// Egress-attributed 429 must still failover keys for the caller, but must not
+	// persist key cooldown / failure class (IP/proxy limit, not key identity).
+	service := newPool(t)
+	ctx := context.Background()
+	first, err := service.Create(ctx, zenpool.CreateInput{Label: "a", Secret: "a-secret"})
+	if err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	if _, err := service.Create(ctx, zenpool.CreateInput{Label: "b", Secret: "b-secret"}); err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	dialer := &scriptedDialer{responses: []dialResult{
+		{err: &zen.StatusError{StatusCode: http.StatusTooManyRequests}},
+		{response: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}},
+	}}
+
+	response, err := zenpool.ProxyPaidEgress(ctx, service, dialer, json.RawMessage(`{"model":"paid"}`), false, "", zenpool.ProviderOpenCode)
+	if err != nil {
+		t.Fatalf("ProxyPaidEgress: %v", err)
+	}
+	defer response.Body.Close()
+	if dialer.calls != 2 {
+		t.Fatalf("calls = %d, want 2 (key failover still runs)", dialer.calls)
+	}
+
+	list, listErr := service.List(ctx)
+	if listErr != nil {
+		t.Fatalf("list: %v", listErr)
+	}
+	var sawFirst bool
+	for _, item := range list {
+		if item.CooldownUntil != nil {
+			t.Fatalf("key %s cooled after egress 429; want no key cooldown", item.ID)
+		}
+		if item.LastErrorClass != "" || item.FailureCount != 0 {
+			t.Fatalf("key %s identity punished: class=%q failures=%d", item.ID, item.LastErrorClass, item.FailureCount)
+		}
+		if item.ID == first.ID {
+			sawFirst = true
+		}
+	}
+	if !sawFirst {
+		t.Fatalf("missing first key in list")
+	}
+	// Both keys remain selectable (no cooldown/bench from egress 429).
+	for range 4 {
+		selected, acqErr := service.Acquire(ctx)
+		if acqErr != nil {
+			t.Fatalf("acquire after egress 429: %v", acqErr)
+		}
+		_ = selected
+	}
+}
+
 func TestProxyPaid_returns_no_healthy_key(t *testing.T) {
 	// Given
 	service := newPool(t)
@@ -308,7 +363,6 @@ func TestService_bench_expires(t *testing.T) {
 		t.Fatalf("after expire selected=%+v err=%v", selected, err)
 	}
 }
-
 
 func TestSetBenchMinutes_ClampsAndMarkBenchDefault(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)}
